@@ -379,7 +379,7 @@ app.MapDelete("/api/catalog/products/{pid:guid}/images/{imgId:guid}", async (Gui
     return Results.NoContent();
 });
 app.MapGet("/api/catalog/admin/products", async (
-    HttpResponse response,                // 👈 این را اضافه کن
+    HttpResponse response,
     int page,
     int pageSize,
     string? search,
