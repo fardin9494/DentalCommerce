@@ -7,9 +7,9 @@ import { swalToastSuccess, swalToastError } from '../../../shared/utils/swal'
 import type { BrandStatusValue } from '../../products/api'
 
 const brandStatusOptions = [
-  { value: '1', label: 'Active' },
-  { value: '2', label: 'Inactive' },
-  { value: '3', label: 'Deprecated' },
+  { value: '1', label: 'فعال' },
+  { value: '2', label: 'غیر فعال' },
+  { value: '3', label: 'منسوخ شده' },
 ] as const
 
 type BrandStatusOptionValue = (typeof brandStatusOptions)[number]['value']
@@ -39,7 +39,7 @@ export function BrandsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Brands">Brands</PageHeader>
+      <PageHeader title="Brands">برند ها</PageHeader>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 card p-4">
           {isLoading ? <Spinner /> : (
@@ -47,10 +47,10 @@ export function BrandsPage() {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="bg-gray-100 text-left">
-                    <th className="p-2">Name</th>
-                    <th className="p-2">Status</th>
-                    <th className="p-2">Products</th>
-                    <th className="p-2">Actions</th>
+                    <th className="p-2">نام</th>
+                    <th className="p-2">وضعیت</th>
+                    <th className="p-2">تعداد محصولات</th>
+                    <th className="p-2">تغییرات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -60,15 +60,15 @@ export function BrandsPage() {
                       <td className="p-2">{String(b.status)}</td>
                       <td className="p-2">{b.productsCount}</td>
                       <td className="p-2 flex gap-2">
-                        <button className="btn-secondary px-3 py-1.5 rounded" onClick={() => navigate(`/brands/${b.id}`)}>Edit</button>
+                        <button className="btn-secondary px-3 py-1.5 rounded" onClick={() => navigate(`/brands/${b.id}`)}>ویرایش</button>
                         <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
                           try {
                             await del.mutateAsync(b.id)
-                            swalToastSuccess('Brand deleted')
+                            swalToastSuccess('برند حذف شد')
                           } catch (e:any) {
-                            swalToastError(e?.message || 'Delete failed')
+                            swalToastError(e?.message || 'خطا در حذف برند')
                           }
-                        }}>Delete</button>
+                        }}>حذف</button>
                       </td>
                     </tr>
                   ))}
@@ -78,7 +78,7 @@ export function BrandsPage() {
           )}
         </div>
         <div className="card p-4">
-          <h3 className="font-semibold mb-3">Create brand</h3>
+          <h3 className="font-semibold mb-3">ایجاد برند</h3>
           <form className="space-y-3" onSubmit={async (e) => {
             e.preventDefault()
             const rawYear = form.establishedYear.trim()
@@ -86,7 +86,7 @@ export function BrandsPage() {
             if (rawYear) {
               const parsedYear = Number.parseInt(rawYear, 10)
               if (Number.isNaN(parsedYear)) {
-                swalToastError('Established year is invalid')
+                swalToastError('سالت ساخت نامعتبر')
                 return
               }
               establishedYear = parsedYear
@@ -101,38 +101,38 @@ export function BrandsPage() {
             try {
               await create.mutateAsync(payload)
               setForm(makeInitialForm())
-              swalToastSuccess('Brand created successfully')
+              swalToastSuccess('برند ایجاد شد')
             } catch (err:any) {
-              swalToastError(err?.message || 'Failed to create brand')
+              swalToastError(err?.message || 'خطا در ایجاد برند')
             }
           }}>
             <div>
-              <label className="label">Name</label>
+              <label className="label">نام</label>
               <input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
             </div>
             <div>
-              <label className="label">Website</label>
+              <label className="label">وب سایت</label>
               <input className="input" value={form.website} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} />
             </div>
             <div>
-              <label className="label">Description</label>
+              <label className="label">توضیحات</label>
               <textarea className="input min-h-[96px]" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="label">Established year</label>
+                <label className="label">سال تاسیس</label>
                 <input className="input" type="number" min="1800" max="3000" value={form.establishedYear} onChange={e => setForm(f => ({ ...f, establishedYear: e.target.value }))} />
               </div>
             </div>
             <div>
-              <label className="label">Status</label>
+              <label className="label">وضعیت</label>
               <select className="input" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as BrandStatusOptionValue }))}>
                 {brandStatusOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
             </div>
-            <button type="submit" className="btn w-full">Create</button>
+            <button type="submit" className="btn w-full">ایجاد</button>
           </form>
         </div>
       </div>

@@ -8,9 +8,9 @@ import type { BrandStatusValue } from '../../products/api'
 import { toPublicMediaUrl } from '../../../lib/api/client'
 
 const brandStatusOptions = [
-  { value: '1', label: 'Active' },
-  { value: '2', label: 'Inactive' },
-  { value: '3', label: 'Deprecated' },
+  { value: '1', label: 'فعال ' },
+  { value: '2', label: 'غیرفعال' },
+  { value: '3', label: 'منسوخ شده' },
 ] as const
 
 type BrandStatusOptionValue = (typeof brandStatusOptions)[number]['value']
@@ -56,7 +56,7 @@ export function BrandDetailPage() {
     return (
       <div className="space-y-4">
         <PageHeader title="Brand details">
-          <span className="text-red-600">Invalid brand id</span>
+          <span className="text-red-600">برند مورد نظر یافت نشد</span>
         </PageHeader>
       </div>
     )
@@ -75,7 +75,7 @@ export function BrandDetailPage() {
     if (rawYear) {
       const parsed = Number.parseInt(rawYear, 10)
       if (Number.isNaN(parsed)) {
-        swalToastError('Established year is invalid')
+        swalToastError('سال ساخت معتبر نیست')
         return
       }
       establishedYear = parsed
@@ -88,9 +88,9 @@ export function BrandDetailPage() {
         establishedYear,
         status: Number(form.status) as BrandStatusValue,
       })
-      swalToastSuccess('Brand updated')
+      swalToastSuccess('برند به روزرسانی شد')
     } catch (err: any) {
-      swalToastError(err?.message || 'Failed to update brand')
+      swalToastError(err?.message || 'بروزرسانی ناموفق بود')
     }
   }
 
@@ -100,9 +100,9 @@ export function BrandDetailPage() {
     if (!file) return
     try {
       await uploadLogo.mutateAsync(file)
-      swalToastSuccess('Logo updated')
+      swalToastSuccess('لوگو بروزرسانی شد')
     } catch (err: any) {
-      swalToastError(err?.message || 'Logo upload failed')
+      swalToastError(err?.message || 'اپلود لوگو با خطا مواجه شد')
     } finally {
       e.target.value = ''
     }
@@ -112,7 +112,7 @@ export function BrandDetailPage() {
     <div className="space-y-4">
       <PageHeader
         title={brand ? `Edit brand: ${brand.name}` : 'Edit brand'}
-        actions={<Link to="/brands" className="btn-secondary px-4 py-2 rounded">Back to list</Link>}
+        actions={<Link to="/brands" className="btn-secondary px-4 py-2 rounded">بازگشت به لیست</Link>}
       />
 
       {isLoading && (
@@ -122,33 +122,33 @@ export function BrandDetailPage() {
       )}
 
       {!isLoading && !brand && (
-        <div className="card p-6 text-sm text-red-600">Brand not found.</div>
+        <div className="card p-6 text-sm text-red-600">برند یافت نشد</div>
       )}
 
       {brand && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 card p-4 space-y-4">
-            <h2 className="font-semibold text-base">Basic information</h2>
+            <h2 className="font-semibold text-base">اطلاعات اصلی</h2>
             <form className="space-y-3" onSubmit={handleSubmit}>
               <div>
-                <label className="label">Name</label>
+                <label className="label">نام</label>
                 <input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Website</label>
+                <label className="label">وب سایت</label>
                 <input className="input" value={form.website} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Description</label>
+                <label className="label">توضیحات</label>
                 <textarea className="input min-h-[120px]" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="label">Established year</label>
+                  <label className="label">سال ایجاد برند</label>
                   <input className="input" type="number" min="1800" max="3000" value={form.establishedYear} onChange={e => setForm(f => ({ ...f, establishedYear: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="label">Status</label>
+                  <label className="label">وضعیت</label>
                   <select className="input" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as BrandStatusOptionValue }))}>
                     {brandStatusOptions.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -158,30 +158,30 @@ export function BrandDetailPage() {
               </div>
               <div className="flex gap-2">
                 <button type="submit" className="btn px-4 py-2" disabled={update.isPending}>
-                  {update.isPending ? 'Saving...' : 'Save changes'}
+                  {update.isPending ? 'در حال ذخیره کردن' : 'ذخیره تغییرات'}
                 </button>
                 <button type="button" className="btn-secondary px-4 py-2 rounded" onClick={() => navigate('/brands')}>
-                  Cancel
+                  لغو
                 </button>
               </div>
             </form>
           </div>
           <div className="card p-4 space-y-3">
-            <h2 className="font-semibold text-base">Logo</h2>
+            <h2 className="font-semibold text-base">لوگو</h2>
             {logoUrl ? (
               <img src={logoUrl} alt={`${brand.name} logo`} className="w-48 h-48 object-contain border rounded bg-white" />
             ) : (
               <div className="w-48 h-48 flex items-center justify-center border rounded bg-gray-50 text-xs text-gray-500">
-                No logo uploaded
+                لوگو را وارد کنید
               </div>
             )}
             <div>
-              <label className="label">Upload new logo</label>
+              <label className="label">آپلود لوگو</label>
               <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadLogo.isPending} />
             </div>
             {uploadLogo.isPending && (
               <div className="text-xs text-gray-500 flex items-center gap-2">
-                <Spinner /> <span>Uploading...</span>
+                <Spinner /> <span>در حال آپلود</span>
               </div>
             )}
           </div>

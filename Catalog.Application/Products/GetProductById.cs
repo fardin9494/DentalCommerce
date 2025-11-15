@@ -14,77 +14,131 @@ public sealed class GetProductByIdHandler : IRequestHandler<GetProductByIdQuery,
 
     public async Task<ProductDetailDto?> Handle(GetProductByIdQuery req, CancellationToken ct)
     {
-        var q = _db.Set<Product>().AsNoTracking()
+        var product = await _db.Set<Product>()
+            .AsNoTracking()
             .Where(p => p.Id == req.ProductId)
-            .Select(p => new ProductDetailDto
+            .Select(p => new
             {
-                Id = p.Id,
-                Name = p.Name,
-                Code = p.Code,
-                WarehouseCode = p.WarehouseCode,
-                DefaultSlug = p.DefaultSlug,
-                BrandId = p.BrandId,
-                BrandName = _db.Set<Brand>().Where(b => b.Id == p.BrandId).Select(b => b.Name).First(),
-                CountryCode = p.CountryCode,
-                Status = p.Status.ToString(),
-                PrimaryCategoryId = p.PrimaryCategoryId,
-                Description = p.Description,
-				VariationKey = p.VariationKey,
+                p.Id,
+                p.Name,
+                p.Code,
+                p.WarehouseCode,
+                p.DefaultSlug,
+                p.BrandId,
+                BrandName = _db.Set<Brand>()
+                    .Where(b => b.Id == p.BrandId)
+                    .Select(b => b.Name)
+                    .FirstOrDefault(),
+                p.CountryCode,
+                p.Status,
+                p.PrimaryCategoryId,
+                p.Description,
+                p.VariationKey,
+                p.MainImageId
+            })
+            .FirstOrDefaultAsync(ct);
 
-                Variants = p.Variants
-                    .OrderBy(v => v.Value)
-                    .Select(v => new VariantDto { Id = v.Id, Value = v.Value, Sku = v.Sku, IsActive = v.IsActive })
-                    .ToList(),
+        if (product is null) return null;
 
-                Properties = p.Properties
-                    .OrderBy(pp => pp.Key)
-                    .Select(pp => new PropertyDto
-                    {
-                        Id = pp.Id,
-                        Key = pp.Key,
-                        ValueString = pp.ValueString,
-                        ValueDecimal = pp.ValueDecimal,
-                        ValueBool = pp.ValueBool,
-                        ValueJson = pp.ValueJson
-                    }).ToList(),
+        var variants = await _db.Set<ProductVariant>()
+            .AsNoTracking()
+            .Where(v => v.ProductId == req.ProductId)
+            .OrderBy(v => v.Value)
+            .Select(v => new VariantDto
+            {
+                Id = v.Id,
+                Value = v.Value,
+                Sku = v.Sku,
+                IsActive = v.IsActive
+            })
+            .ToListAsync(ct);
 
-                Images = p.Images
-                    .OrderBy(i => i.SortOrder)
-                    .Select(i => new ImageDto
-                    {
-                        Id = i.Id,
-                        Url = i.Url,
-                        Alt = i.Alt,
-                        SortOrder = i.SortOrder,
-                        IsMain = p.MainImageId != null && p.MainImageId == i.Id
-                    }).ToList(),
+        var properties = await _db.Set<ProductProperty>()
+            .AsNoTracking()
+            .Where(pp => pp.ProductId == req.ProductId)
+            .OrderBy(pp => pp.Key)
+            .Select(pp => new PropertyDto
+            {
+                Id = pp.Id,
+                Key = pp.Key,
+                ValueString = pp.ValueString,
+                ValueDecimal = pp.ValueDecimal,
+                ValueBool = pp.ValueBool,
+                ValueJson = pp.ValueJson
+            })
+            .ToListAsync(ct);
 
-                Categories = p.Categories
-                    .Select(c => new CategoryLinkDto { CategoryId = c.CategoryId, IsPrimary = c.IsPrimary })
-                    .ToList(),
+        var images = await _db.Set<ProductImage>()
+            .AsNoTracking()
+            .Where(i => i.ProductId == req.ProductId)
+            .OrderBy(i => i.SortOrder)
+            .Select(i => new ImageDto
+            {
+                Id = i.Id,
+                Url = i.Url,
+                Alt = i.Alt,
+                SortOrder = i.SortOrder,
+                IsMain = product.MainImageId != null && product.MainImageId == i.Id
+            })
+            .ToListAsync(ct);
 
-                Stores = p.Stores
-                    .Select(s => new ProductStoreDto
-                    {
-                        StoreId = s.StoreId,
-                        IsVisible = s.IsVisible,
-                        Slug = s.Slug,
-                        TitleOverride = s.TitleOverride,
-                        DescriptionOverride = s.DescriptionOverride
-                    }).ToList(),
+        var categories = await _db.Set<ProductCategory>()
+            .AsNoTracking()
+            .Where(c => c.ProductId == req.ProductId)
+            .Select(c => new CategoryLinkDto
+            {
+                CategoryId = c.CategoryId,
+                IsPrimary = c.IsPrimary
+            })
+            .ToListAsync(ct);
 
-                Seos = p.Seos
-                    .Select(s => new ProductSeoDto
-                    {
-                        StoreId = s.StoreId,
-                        MetaTitle = s.MetaTitle,
-                        MetaDescription = s.MetaDescription,
-                        CanonicalUrl = s.CanonicalUrl,
-                        Robots = s.Robots,
-                        JsonLd = s.JsonLd
-                    }).ToList(),
-            });
+        var stores = await _db.Set<ProductStore>()
+            .AsNoTracking()
+            .Where(s => s.ProductId == req.ProductId)
+            .Select(s => new ProductStoreDto
+            {
+                StoreId = s.StoreId,
+                IsVisible = s.IsVisible,
+                Slug = s.Slug,
+                TitleOverride = s.TitleOverride,
+                DescriptionOverride = s.DescriptionOverride
+            })
+            .ToListAsync(ct);
 
-        return await q.FirstOrDefaultAsync(ct);
+        var seos = await _db.Set<ProductSeo>()
+            .AsNoTracking()
+            .Where(s => s.ProductId == req.ProductId)
+            .Select(s => new ProductSeoDto
+            {
+                StoreId = s.StoreId,
+                MetaTitle = s.MetaTitle,
+                MetaDescription = s.MetaDescription,
+                CanonicalUrl = s.CanonicalUrl,
+                Robots = s.Robots,
+                JsonLd = s.JsonLd
+            })
+            .ToListAsync(ct);
+
+        return new ProductDetailDto
+        {
+            Id = product.Id,
+            Name = product.Name,
+            Code = product.Code,
+            WarehouseCode = product.WarehouseCode,
+            DefaultSlug = product.DefaultSlug,
+            BrandId = product.BrandId,
+            BrandName = product.BrandName ?? string.Empty,
+            CountryCode = product.CountryCode,
+            Status = product.Status.ToString(),
+            PrimaryCategoryId = product.PrimaryCategoryId,
+            Description = product.Description ?? string.Empty,
+            VariationKey = product.VariationKey,
+            Variants = variants,
+            Properties = properties,
+            Images = images,
+            Categories = categories,
+            Stores = stores,
+            Seos = seos
+        };
     }
 }
