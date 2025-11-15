@@ -1,4 +1,4 @@
-﻿using Catalog.Api.Contracts;
+using Catalog.Api.Contracts;
 using Catalog.Application.Brands;
 using Catalog.Application.Categories;
 using Catalog.Application.Common.Behaviors;
@@ -11,6 +11,7 @@ using Catalog.Infrastructure.Categories;
 using Catalog.Infrastructure.Media;
 using FluentValidation;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using System.Reflection;
@@ -19,12 +20,24 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// DbContext
+
 builder.Services.AddDbContext<CatalogDbContext>(opt =>
 {
     var cs = builder.Configuration.GetConnectionString("CatalogDb")
-             ?? "Server=DESKTOP-RAJN9B2\\FARDIN2019;Database=DentalCatalogDb;Integrated Security=True;TrustServerCertificate=True";
-    opt.UseSqlServer(cs, sql => sql.MigrationsHistoryTable("__EFMigrationsHistory", CatalogDbContext.DefaultSchema));
+             ?? throw new InvalidOperationException("Connection string 'CatalogDb' is not configured.");
+    opt.UseSqlServer(cs, sql =>
+    {
+        sql.MigrationsHistoryTable("__EFMigrationsHistory", CatalogDbContext.DefaultSchema);
+        sql.EnableRetryOnFailure();
+    });
+});
+builder.Services.AddCors(o =>
+{
+	o.AddPolicy("ui", p => p
+		.WithOrigins("http://localhost:5173")
+		.AllowAnyHeader()
+		.AllowAnyMethod()
+		.AllowCredentials());
 });
 
 // MediatR
@@ -33,19 +46,29 @@ builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.Loa
 // FluentValidation (DI) + MediatR Pipeline
 builder.Services.AddValidatorsFromAssembly(Assembly.Load("Catalog.Application"));
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
-// 1) Options برای پردازش تصویر
+// 1) Options ???? ?????? ?????
 builder.Services.Configure<ImageProcessingOptions>(builder.Configuration.GetSection("Media:Image"));
 
-// 2) Storage و Processor
+// 2) Storage ? Processor
 builder.Services.AddScoped<IFileStorage, LocalFileStorage>();
 builder.Services.AddScoped<IImageProcessor, ImageSharpProcessor>();
-// سرویس خواندن دسته
+// ????? ?????? ????
 builder.Services.AddScoped<ICategoryReadService, CategoryReadService>();
 builder.Services.AddScoped<DbContext, CatalogDbContext>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// CORS for Admin.Web dev
+builder.Services.AddCors(opt =>
+{
+    opt.AddPolicy("dev", p =>
+        p.WithOrigins("http://localhost:5173")
+         .AllowAnyHeader()
+         .AllowAnyMethod());
+});
+
 var app = builder.Build();
+app.UseCors("ui");
 app.Use(async (ctx, next) =>
 {
     try
@@ -59,41 +82,39 @@ app.Use(async (ctx, next) =>
             .GroupBy(e => e.PropertyName)
             .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
 
-        ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
-        await ctx.Response.WriteAsJsonAsync(new { message = "Validation failed", errors });
+        await Results.ValidationProblem(errors, statusCode: StatusCodes.Status400BadRequest)
+            .ExecuteAsync(ctx);
     }
 
     catch (InvalidOperationException ex)
     {
-        ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
-        await ctx.Response.WriteAsJsonAsync(new { message = ex.Message });
+        await Results.Problem(title: "Bad Request", detail: ex.Message, statusCode: StatusCodes.Status400BadRequest)
+            .ExecuteAsync(ctx);
     }
-    // 409: یکتایی/کلید تکراری SQL Server
+    catch (SixLabors.ImageSharp.UnknownImageFormatException ex)
+    {
+        await Results.Problem(title: "Unsupported image format", detail: ex.Message, statusCode: StatusCodes.Status400BadRequest)
+            .ExecuteAsync(ctx);
+    }
     catch (DbUpdateException ex) when (
         ex.InnerException is Microsoft.Data.SqlClient.SqlException sql &&
         (sql.Number == 2601 || sql.Number == 2627)
     )
     {
-        ctx.Response.StatusCode = StatusCodes.Status409Conflict;
-        await ctx.Response.WriteAsJsonAsync(new { message = "Duplicate key", detail = sql.Message });
+        await Results.Problem(title: "Duplicate key", detail: sql.Message, statusCode: StatusCodes.Status409Conflict)
+            .ExecuteAsync(ctx);
     }
-    // 500: بقیه
+    // 500: ????
     catch (Exception ex)
     {
-        ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
-        await ctx.Response.WriteAsJsonAsync(new { message = "Internal error", detail = ex.Message });
+        await Results.Problem(title: "Internal Server Error", detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError)
+            .ExecuteAsync(ctx);
     }
 });
 var mediaRoot = builder.Configuration["Media:Root"] ?? "./_media";
 
-// مسیر رو کامل کن و اگر نبود بساز
 var mediaRootPath = Path.GetFullPath(mediaRoot);
 Directory.CreateDirectory(mediaRootPath);
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(Path.GetFullPath(mediaRoot)),
-    RequestPath = "/media"
-});
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(mediaRootPath),
@@ -102,30 +123,54 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.MapPost("/api/catalog/products", async (CreateProductCommand cmd, IMediator mediator) =>
+// Enable CORS for development UI
+app.UseCors("dev");
+
+var catalog = app.MapGroup("/api/catalog");
+
+catalog.MapPost("/products", async (CreateProductCommand cmd, IMediator mediator) =>
 {
     var id = await mediator.Send(cmd);
     return Results.Created($"/api/catalog/products/{id}", new { id });
 });
-app.MapPost("/api/catalog/products/{id:guid}/activate", async (Guid id, IMediator mediator) =>
+catalog.MapPost("/products/{id:guid}/activate", async (Guid id, IMediator mediator) =>
 {
     await mediator.Send(new ActivateProductCommand(id));
     return Results.NoContent();
 });
 
-app.MapPost("/api/catalog/products/{id:guid}/images", async (Guid id, AddProductImageCommand body, IMediator mediator) =>
+catalog.MapPost("/products/{id:guid}/hide", async (Guid id, IMediator mediator) =>
 {
-    // اطمینان: ProductId از route بره داخل Command
+    await mediator.Send(new HideProductCommand(id));
+    return Results.NoContent();
+});
+
+catalog.MapPost("/products/{id:guid}/images", async (Guid id, AddProductImageCommand body, IMediator mediator) =>
+{
+    // ???????: ProductId ?? route ??? ???? Command
     var cmd = body with { ProductId = id };
     var imageId = await mediator.Send(cmd);
     return Results.Created($"/api/catalog/products/{id}/images/{imageId}", new { imageId });
 });
 
-app.MapPost("/api/catalog/products/{id:guid}/variants", async (Guid id, UpsertVariantCommand body, IMediator mediator) =>
+catalog.MapPost("/products/{id:guid}/variants", async (Guid id, UpsertVariantCommand body, IMediator mediator) =>
 {
     var cmd = body with { ProductId = id };
     var variantId = await mediator.Send(cmd);
     return Results.Created($"/api/catalog/products/{id}/variants/{variantId}", new { variantId });
+});
+
+// Update variant by id
+catalog.MapPost("/products/{id:guid}/variants/{variantId:guid}", async (Guid id, Guid variantId, UpdateVariantBody body, IMediator mediator) =>
+{
+    await mediator.Send(new UpdateVariantCommand(
+        ProductId: id,
+        VariantId: variantId,
+        VariantValue: body.VariantValue,
+        Sku: body.Sku,
+        IsActive: body.IsActive
+    ));
+    return Results.NoContent();
 });
 
 app.MapDelete("/api/catalog/products/{id:guid}/variants/{variantId:guid}", async (Guid id, Guid variantId, IMediator mediator) =>
@@ -133,27 +178,68 @@ app.MapDelete("/api/catalog/products/{id:guid}/variants/{variantId:guid}", async
     await mediator.Send(new DeleteVariantCommand(id, variantId));
     return Results.NoContent();
 });
-app.MapPost("/api/catalog/products/{id:guid}/variation", async (Guid id, SetVariationCommand body, IMediator mediator) =>
+catalog.MapPost("/products/{id:guid}/variation", async (Guid id, SetVariationCommand body, IMediator mediator) =>
 {
     var cmd = body with { ProductId = id };
     await mediator.Send(cmd);
     return Results.NoContent();
 });
 
-app.MapPost("/api/catalog/products/{id:guid}/properties", async (Guid id, UpsertPropertyCommand body, IMediator mediator) =>
+catalog.MapPost("/products/{id:guid}/properties", async (Guid id, UpsertPropertyCommand body, IMediator mediator) =>
 {
     var cmd = body with { ProductId = id };
     var propertyId = await mediator.Send(cmd);
     return Results.Created($"/api/catalog/products/{id}/properties/{propertyId}", new { propertyId });
 });
+catalog.MapDelete("/products/{pid:guid}/properties/{propId:guid}", async (Guid pid, Guid propId, IMediator m) =>
+{
+    await m.Send(new DeleteProductPropertyCommand(pid, propId));
+    return Results.NoContent();
+});
 
-app.MapPost("/api/catalog/products/{id:guid}/stores", async (Guid id, UpsertProductStoreCommand body, IMediator mediator) =>
+catalog.MapPost("/products/{id:guid}/stores", async (Guid id, UpsertProductStoreCommand body, IMediator mediator) =>
 {
     var cmd = body with { ProductId = id };
     await mediator.Send(cmd);
     return Results.NoContent();
 });
-app.MapPost("/api/catalog/products/{id:guid}/seo", async (Guid id, UpsertProductSeoCommand body, IMediator mediator) =>
+
+catalog.MapDelete("/products/{id:guid}/stores/{storeId:guid}", async (Guid id, Guid storeId, IMediator mediator) =>
+{
+    await mediator.Send(new DeleteProductStoreCommand(id, storeId));
+    return Results.NoContent();
+});
+
+catalog.MapPost("/products/{id:guid}/stores/remove", async (Guid id, RemoveProductStoreDto body, IMediator mediator) =>
+{
+    await mediator.Send(new DeleteProductStoreCommand(id, body.StoreId));
+    return Results.NoContent();
+});
+
+catalog.MapPost("/products/{id:guid}/basics", async (Guid id, UpdateProductBasicsCommand body, IMediator m) =>
+{
+    await m.Send(body with { ProductId = id });
+    return Results.NoContent();
+});
+
+catalog.MapPost("/products/{id:guid}/categories", async (Guid id, SetProductCategoriesCommand body, IMediator m) =>
+{
+    await m.Send(body with { ProductId = id });
+    return Results.NoContent();
+});
+
+catalog.MapPost("/products/{id:guid}/categories/primary", async (Guid id, [FromBody] Guid categoryId, IMediator m) =>
+{
+    await m.Send(new SetPrimaryCategoryCommand(id, categoryId));
+    return Results.NoContent();
+});
+catalog.MapPost("/products/{id:guid}/description",
+	async (Guid id, SetProductDescriptionDto body, IMediator m) =>
+	{
+		await m.Send(new SetProductDescriptionCommand(id, body.ContentHtml));
+		return Results.NoContent();
+	});
+catalog.MapPost("/products/{id:guid}/seo", async (Guid id, UpsertProductSeoCommand body, IMediator mediator) =>
 {
     var cmd = body with { ProductId = id };
     await mediator.Send(cmd);
@@ -165,7 +251,7 @@ app.MapGet("/api/catalog/products/{id:guid}", async (Guid id, IMediator mediator
     var dto = await mediator.Send(new GetProductByIdQuery(id));
     return dto is null ? Results.NotFound() : Results.Ok(dto);
 });
-app.MapGet("/api/catalog/products", async (
+catalog.MapGet("/products", async (
     int page, int pageSize, string? search, Guid? brandId, Guid? categoryId, Guid? storeId, bool? visibleInStore, string? sort,
     IMediator mediator) =>
 {
@@ -174,145 +260,201 @@ app.MapGet("/api/catalog/products", async (
     var result = await mediator.Send(new ListProductsQuery(page, pageSize, search, brandId, categoryId, storeId, visibleInStore, sort));
     return Results.Ok(result);
 });
-app.MapPost("/api/catalog/categories", async (CreateCategoryCommand cmd, IMediator mediator) =>
+catalog.MapPost("/categories", async (CreateCategoryCommand cmd, IMediator mediator) =>
 {
     var id = await mediator.Send(cmd);
     return Results.Created($"/api/catalog/categories/{id}", new { id });
 });
-app.MapPost("/api/catalog/categories/{id:guid}/rename",
+catalog.MapPost("/categories/{id:guid}/rename",
     async (Guid id, RenameCategoryCommand body, IMediator m) =>
     {
         var cmd = body with { CategoryId = id };
         await m.Send(cmd);
         return Results.NoContent();
     });
-app.MapPost("/api/catalog/categories/{id:guid}/move",
+catalog.MapPost("/categories/{id:guid}/move",
     async (Guid id, MoveCategoryCommand body, IMediator m) =>
     {
         var cmd = body with { CategoryId = id };
         await m.Send(cmd);
         return Results.NoContent();
     });
-app.MapGet("/api/catalog/categories/tree", async (IMediator m) =>
+catalog.MapGet("/categories/tree", async (IMediator m) =>
 {
     var nodes = await m.Send(new GetCategoryTreeQuery());
     return Results.Ok(nodes.OrderBy(n => n.ParentId.HasValue).ThenBy(n => n.Name));
 });
-app.MapPost("/api/catalog/countries", async (CreateCountryCommand cmd, IMediator m) =>
+
+catalog.MapGet("/categories/leaves", async (IMediator m) =>
+{
+    var items = await m.Send(new ListLeafCategoriesQuery());
+    return Results.Ok(items);
+});
+catalog.MapGet("/categories/leaves/with-products", async (IMediator m) =>
+{
+    var items = await m.Send(new ListLeafCategoriesWithProductsQuery());
+    return Results.Ok(items);
+});
+
+// Category flags: minimal payload to indicate product linkage per category
+catalog.MapGet("/categories/flags", async (IMediator m) =>
+{
+    var flags = await m.Send(new ListCategoryFlagsQuery());
+    return Results.Ok(flags);
+});
+catalog.MapPost("/countries", async (CreateCountryCommand cmd, IMediator m) =>
 {
     var code2 = await m.Send(cmd);
     return Results.Created($"/api/catalog/countries/{code2}", new { code2 });
 });
 
-// لیست کشورها (اختیاری: جستجو)
-app.MapGet("/api/catalog/countries", async (string? search, IMediator m) =>
+// ???? ?????? (???????: ?????)
+catalog.MapGet("/countries", async (string? search, IMediator m) =>
 {
     var list = await m.Send(new ListCountriesQuery(search));
     return Results.Ok(list);
 });
-// ایجاد برند
-app.MapPost("/api/catalog/brands", async (CreateBrandCommand cmd, IMediator m) =>
+
+catalog.MapPost("/countries/{code2}", async (string code2, UpdateCountryCommand body, IMediator m) =>
+{
+    await m.Send(body with { Code2 = code2 });
+    return Results.NoContent();
+});
+
+catalog.MapDelete("/countries/{code2}", async (string code2, IMediator m) =>
+{
+    await m.Send(new DeleteCountryCommand(code2));
+    return Results.NoContent();
+});
+// ????? ????
+catalog.MapPost("/brands", async (CreateBrandCommand cmd, IMediator m) =>
 {
     var id = await m.Send(cmd);
     return Results.Created($"/api/catalog/brands/{id}", new { id });
 });
 
-// لیست برندها با فیلتر
-app.MapGet("/api/catalog/brands", async (string? search, string? countryCode, BrandStatus? status, IMediator m) =>
+// ???? ?????? ?? ?????
+catalog.MapGet("/brands", async (string? search, BrandStatus? status, IMediator m) =>
 {
-    var list = await m.Send(new ListBrandsQuery(search, countryCode, status));
+    var list = await m.Send(new ListBrandsQuery(search, status));
     return Results.Ok(list);
 });
 
-// جزییات برند
-app.MapGet("/api/catalog/brands/{id:guid}", async (Guid id, IMediator m) =>
+// ?????? ????
+catalog.MapGet("/brands/{id:guid}", async (Guid id, IMediator m) =>
 {
     var dto = await m.Send(new GetBrandByIdQuery(id));
     return dto is null ? Results.NotFound() : Results.Ok(dto);
 });
 
-// تغییر نام برند
-app.MapPost("/api/catalog/brands/{id:guid}/rename", async (Guid id, RenameBrandCommand body, IMediator m) =>
+catalog.MapPut("/brands/{id:guid}", async (Guid id, UpdateBrandCommand body, IMediator m) =>
 {
     await m.Send(body with { BrandId = id });
     return Results.NoContent();
 });
 
-// تنظیم پروفایل برند (توضیح/سال/لوگو/وبسایت)
-app.MapPost("/api/catalog/brands/{id:guid}/profile", async (Guid id, SetBrandProfileCommand body, IMediator m) =>
+catalog.MapPost("/brands/{id:guid}/logo", async (Guid id, [FromForm] UploadBrandLogoForm form, IMediator m) =>
+{
+    if (form.file is null || form.file.Length == 0)
+        return Results.BadRequest("file is required.");
+
+    await using var stream = form.file.OpenReadStream();
+    var dto = await m.Send(new UploadBrandLogoCommand(
+        BrandId: id,
+        FileName: form.file.FileName,
+        ContentType: form.file.ContentType ?? "application/octet-stream",
+        Content: stream
+    ));
+
+    return Results.Ok(dto);
+})
+.Accepts<UploadBrandLogoForm>("multipart/form-data")
+.DisableAntiforgery()
+.Produces<BrandLogoDto>(StatusCodes.Status200OK)
+.WithName("UploadBrandLogo");
+
+// ????? ??? ????
+catalog.MapPost("/brands/{id:guid}/rename", async (Guid id, RenameBrandCommand body, IMediator m) =>
 {
     await m.Send(body with { BrandId = id });
     return Results.NoContent();
 });
 
-// تغییر وضعیت برند (Active/Inactive/Deprecated)
-app.MapPost("/api/catalog/brands/{id:guid}/status", async (Guid id, SetBrandStatusCommand body, IMediator m) =>
+// ????? ??????? ???? (?????/???/????/??????)
+catalog.MapPost("/brands/{id:guid}/profile", async (Guid id, SetBrandProfileCommand body, IMediator m) =>
 {
     await m.Send(body with { BrandId = id });
     return Results.NoContent();
 });
 
-// حذف برند (اگر در محصولی استفاده نشده باشد)
-app.MapDelete("/api/catalog/brands/{id:guid}", async (Guid id, IMediator m) =>
+// ????? ????? ???? (Active/Inactive/Deprecated)
+catalog.MapPost("/brands/{id:guid}/status", async (Guid id, SetBrandStatusCommand body, IMediator m) =>
+{
+    await m.Send(body with { BrandId = id });
+    return Results.NoContent();
+});
+
+// ??? ???? (??? ?? ?????? ??????? ???? ????)
+catalog.MapDelete("/brands/{id:guid}", async (Guid id, IMediator m) =>
 {
     await m.Send(new DeleteBrandCommand(id));
     return Results.NoContent();
 });
-// افزودن نام مستعار
-app.MapPost("/api/catalog/brands/{id:guid}/aliases", async (Guid id, AddBrandAliasCommand body, IMediator m) =>
+// ?????? ??? ??????
+catalog.MapPost("/brands/{id:guid}/aliases", async (Guid id, AddBrandAliasCommand body, IMediator m) =>
 {
     var aliasId = await m.Send(body with { BrandId = id });
     return Results.Created($"/api/catalog/brands/{id}/aliases/{aliasId}", new { id = aliasId });
 });
 
-// لیست نام‌های مستعار برند
-app.MapGet("/api/catalog/brands/{id:guid}/aliases", async (Guid id, IMediator m) =>
+// ???? ??????? ?????? ????
+catalog.MapGet("/brands/{id:guid}/aliases", async (Guid id, IMediator m) =>
 {
     var list = await m.Send(new ListBrandAliasesQuery(id));
     return Results.Ok(list);
 });
 
-// حذف نام مستعار
-app.MapDelete("/api/catalog/brands/aliases/{aliasId:guid}", async (Guid aliasId, IMediator m) =>
+// ??? ??? ??????
+catalog.MapDelete("/brands/aliases/{aliasId:guid}", async (Guid aliasId, IMediator m) =>
 {
     await m.Send(new RemoveBrandAliasCommand(aliasId));
     return Results.NoContent();
 });
 
 
-app.MapPost("/api/catalog/stores", async (CreateStoreCommand cmd, IMediator m) =>
+catalog.MapPost("/stores", async (CreateStoreCommand cmd, IMediator m) =>
 {
     var id = await m.Send(cmd);
     return Results.Created($"/api/catalog/stores/{id}", new { id });
 });
 
 
-app.MapGet("/api/catalog/stores", async (string? search, IMediator m) =>
+catalog.MapGet("/stores", async (string? search, IMediator m) =>
 {
     var list = await m.Send(new ListStoresQuery(search));
     return Results.Ok(list);
 });
 
 
-app.MapGet("/api/catalog/stores/{id:guid}", async (Guid id, IMediator m) =>
+catalog.MapGet("/stores/{id:guid}", async (Guid id, IMediator m) =>
 {
     var dto = await m.Send(new GetStoreByIdQuery(id));
     return dto is null ? Results.NotFound() : Results.Ok(dto);
 });
 
 
-app.MapPost("/api/catalog/stores/{id:guid}/rename", async (Guid id, RenameStoreCommand body, IMediator m) =>
+catalog.MapPost("/stores/{id:guid}/rename", async (Guid id, RenameStoreCommand body, IMediator m) =>
 {
     await m.Send(body with { StoreId = id });
     return Results.NoContent();
 });
 
-app.MapPost("/api/catalog/stores/{id:guid}/domain", async (Guid id, SetStoreDomainCommand body, IMediator m) =>
+catalog.MapPost("/stores/{id:guid}/domain", async (Guid id, SetStoreDomainCommand body, IMediator m) =>
 {
     await m.Send(body with { StoreId = id });
     return Results.NoContent();
 });
-app.MapPost("/api/catalog/products/{id:guid}/images/upload",
+catalog.MapPost("/products/{id:guid}/images/upload",
         async (Guid id, [FromForm] UploadProductImageForm form, IMediator m) =>
         {
             if (form.file is null || form.file.Length == 0)
@@ -329,8 +471,9 @@ app.MapPost("/api/catalog/products/{id:guid}/images/upload",
 
             return Results.Created($"/api/catalog/products/{id}/images/{imageId}", new { id = imageId });
         })
-// این بخش‌ها اختیاری‌ان ولی Swagger رو قشنگ‌تر می‌کنن:
+// ??? ?????? ?????????? ??? Swagger ?? ??????? ??????:
     .Accepts<UploadProductImageForm>("multipart/form-data")
+    .WithMetadata(new RequestSizeLimitAttribute(10 * 1024 * 1024))
     .Produces(StatusCodes.Status201Created)
     .DisableAntiforgery()
     .WithName("UploadProductImage")
@@ -359,26 +502,26 @@ app.MapPost("/api/catalog/products/{id:guid}/images/upload",
         return op;
     });
 // Set main
-app.MapPost("/api/catalog/products/{pid:guid}/images/{imgId:guid}/main", async (Guid pid, Guid imgId, IMediator m) =>
+catalog.MapPost("/products/{pid:guid}/images/{imgId:guid}/main", async (Guid pid, Guid imgId, IMediator m) =>
 {
     await m.Send(new SetMainImageCommand(pid, imgId));
     return Results.NoContent();
 });
 
 // Reorder
-app.MapPost("/api/catalog/products/{pid:guid}/images/reorder", async (Guid pid, Guid[] orderedIds, IMediator m) =>
+catalog.MapPost("/products/{pid:guid}/images/reorder", async (Guid pid, Guid[] orderedIds, IMediator m) =>
 {
     await m.Send(new ReorderProductImagesCommand(pid, orderedIds));
     return Results.NoContent();
 });
 
 // Delete
-app.MapDelete("/api/catalog/products/{pid:guid}/images/{imgId:guid}", async (Guid pid, Guid imgId, IMediator m) =>
+catalog.MapDelete("/products/{pid:guid}/images/{imgId:guid}", async (Guid pid, Guid imgId, IMediator m) =>
 {
     await m.Send(new DeleteProductImageCommand(pid, imgId));
     return Results.NoContent();
 });
-app.MapGet("/api/catalog/admin/products", async (
+catalog.MapGet("/admin/products", async (
     HttpResponse response,
     int page,
     int pageSize,
@@ -401,14 +544,14 @@ app.MapGet("/api/catalog/admin/products", async (
         Sort: sort
     ));
 
-    // هدرها را روی response ست کن
+    // ????? ?? ??? response ?? ??
     response.Headers.Append("X-Total", res.Total.ToString());
     response.Headers.Append("X-Page", res.Page.ToString());
     response.Headers.Append("X-Page-Size", res.PageSize.ToString());
     response.Headers.Append("X-Total-Pages",
         Math.Ceiling((double)res.Total / Math.Max(1, res.PageSize)).ToString());
 
-    return Results.Ok(res); // یا TypedResults.Ok(res)
+    return Results.Ok(res); // ?? TypedResults.Ok(res)
 });
 
 

@@ -1,26 +1,30 @@
-﻿using Catalog.Application.Common;
+using System;
 using FluentValidation;
-using Microsoft.EntityFrameworkCore;
-using Catalog.Domain.Brands;
 
 namespace Catalog.Application.Brands;
 
 public sealed class CreateBrandValidator : AbstractValidator<CreateBrandCommand>
 {
-    public CreateBrandValidator(DbContext db)
+    public CreateBrandValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(256);
-        RuleFor(x => x.CountryCode).NotEmpty().Length(2);
+        RuleFor(x => x.Name)
+            .NotEmpty()
+            .MaximumLength(200);
 
-        RuleFor(x => x).CustomAsync(async (r, ctx, ct) =>
-        {
-            var cc = r.CountryCode.ToUpperInvariant();
-            var countryExists = await db.Set<Country>().AnyAsync(c => c.Code2 == cc, ct);
-            if (!countryExists) ctx.AddFailure("CountryCode", "کشور یافت نشد.");
+        RuleFor(x => x.Website)
+            .MaximumLength(512)
+            .When(x => !string.IsNullOrWhiteSpace(x.Website));
 
-            var normalized = BrandNormalize.Normalize(r.Name);
-            var dup = await db.Set<Domain.Brands.Brand>().AnyAsync(b => b.NormalizedName == normalized, ct);
-            if (dup) ctx.AddFailure("Name", "برندی با همین نام/نرمالایز وجود دارد.");
-        });
+        RuleFor(x => x.Description)
+            .MaximumLength(4000)
+            .When(x => !string.IsNullOrWhiteSpace(x.Description));
+
+        RuleFor(x => x.EstablishedYear)
+            .InclusiveBetween(1800, DateTime.UtcNow.Year)
+            .When(x => x.EstablishedYear.HasValue);
+
+        RuleFor(x => x.Status)
+            .IsInEnum()
+            .When(x => x.Status.HasValue);
     }
 }

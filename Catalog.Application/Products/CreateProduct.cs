@@ -9,5 +9,6 @@ public sealed record CreateProductCommand(
     Guid BrandId,
     IReadOnlyList<Guid> CategoryIds,
     string? WarehouseCode,
-    string? VariationKey
+    string? VariationKey,
+    string? CountryCode
 ) : IRequest<Guid>;

@@ -29,5 +29,6 @@ public sealed class CreateProductValidator : AbstractValidator<CreateProductComm
         });
 
         RuleFor(x => x.VariationKey).MaximumLength(128);
+        RuleFor(x => x.CountryCode).Length(2).When(x => !string.IsNullOrWhiteSpace(x.CountryCode));
     }
 }

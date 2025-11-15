@@ -22,4 +22,5 @@ public sealed class ProductVariant
 
     public void UpdateSku(string sku) => Sku = sku.Trim();
     public void SetActive(bool active) => IsActive = active;
+    public void UpdateValue(string value) => Value = value.Trim();
 }

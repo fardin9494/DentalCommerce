@@ -22,4 +22,12 @@ public sealed class Country
             Region = region,
             FlagEmoji = flagEmoji
         };
+
+    public void UpdateProfile(string nameFa, string nameEn, string? region, string? flagEmoji)
+    {
+        NameFa = nameFa.Trim();
+        NameEn = nameEn.Trim();
+        Region = region;
+        FlagEmoji = flagEmoji;
+    }
 }

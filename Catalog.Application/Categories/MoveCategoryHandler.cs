@@ -60,6 +60,9 @@ public sealed class MoveCategoryHandler : IRequestHandler<MoveCategoryCommand, U
                 .ToListAsync(ct);
         }
 
+        var strategy = _db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
         // 1) تغییر ParentId خودِ دسته
@@ -113,6 +116,7 @@ public sealed class MoveCategoryHandler : IRequestHandler<MoveCategoryCommand, U
         await _db.SaveChangesAsync(ct);
 
         await tx.CommitAsync(ct);
+        });
         return Unit.Value;
     }
 }

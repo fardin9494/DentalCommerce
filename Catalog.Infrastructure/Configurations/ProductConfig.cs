@@ -30,7 +30,14 @@ public class ProductConfig : IEntityTypeConfiguration<Product>
         b.Property(x => x.WarehouseCode)
             .HasMaxLength(64);
 
-        b.Property(x => x.VariationKey)
+        b.Property(x => x.CountryCode)
+            .HasMaxLength(2)
+            .IsFixedLength();
+
+        b.Property(x => x.Description)
+	        .HasColumnType("nvarchar(max)");
+
+		b.Property(x => x.VariationKey)
             .HasMaxLength(128);
 
         b.Property(x => x.Status)
@@ -43,6 +50,7 @@ public class ProductConfig : IEntityTypeConfiguration<Product>
         b.HasIndex(x => x.DefaultSlug).IsUnique();
         b.HasIndex(x => x.Code).IsUnique();
         b.HasIndex(x => x.BrandId);
+        b.HasIndex(x => x.CountryCode);
         b.Property(x => x.PrimaryCategoryId);
         b.HasIndex(x => x.PrimaryCategoryId);
  
@@ -61,6 +69,12 @@ public class ProductConfig : IEntityTypeConfiguration<Product>
             .WithMany()
             .HasForeignKey(x => x.MainImageId)
             .OnDelete(DeleteBehavior.NoAction); // برای جلوگیری از multiple cascade paths
+
+        // Optional Country FK
+        b.HasOne<Country>()
+            .WithMany()
+            .HasForeignKey(x => x.CountryCode)
+            .OnDelete(DeleteBehavior.NoAction);
 
         // Navigation collections: field-backed
         b.Navigation(p => p.Images).UsePropertyAccessMode(PropertyAccessMode.Field);

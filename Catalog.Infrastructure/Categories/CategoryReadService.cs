@@ -1,4 +1,4 @@
-﻿using Catalog.Application.Categories;
+using Catalog.Application.Categories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Catalog.Infrastructure.Categories;
@@ -13,8 +13,7 @@ public sealed class CategoryReadService : ICategoryReadService
 
     public async Task<bool> IsLeafAsync(Guid categoryId, CancellationToken ct)
     {
-        // Leaf = هیچ فرزند مستقیمی ندارد (در Closure depth=1 به‌عنوان ancestor دیده نشود)
-        return !await _db.CategoryClosures
-            .AnyAsync(cc => cc.AncestorId == categoryId && cc.Depth == 1, ct);
+        // Leaf = ??? ????? ??????? ????? (?? Closure depth=1 ???????? ancestor ???? ????)
+        return !await _db.Categories.AnyAsync(c => c.ParentId == categoryId, ct);
     }
 }

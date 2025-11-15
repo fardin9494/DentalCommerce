@@ -11,16 +11,50 @@ export const CountrySchema = z.object({
 })
 export type Country = z.infer<typeof CountrySchema>
 
+// Leaf category item (server-side leaf list)
+export const LeafCategorySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  parentId: z.string().uuid().nullable().optional(),
+  depth: z.number(),
+})
+export type LeafCategory = z.infer<typeof LeafCategorySchema>
+
+// Store list item
+export const StoreSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  domain: z.string().nullable().optional(),
+})
+export type Store = z.infer<typeof StoreSchema>
+
 // Brand list item (from ListBrandsQuery)
 export const BrandSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
-  countryCode: z.string(),
   website: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  establishedYear: z.number().nullable().optional(),
+  logoMediaId: z.string().uuid().nullable().optional(),
+  logoUrl: z.string().nullable().optional(),
   status: z.any(),
   productsCount: z.number(),
 })
 export type Brand = z.infer<typeof BrandSchema>
+
+export const BrandDetailSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  normalizedName: z.string(),
+  website: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  establishedYear: z.number().nullable().optional(),
+  logoMediaId: z.string().uuid().nullable().optional(),
+  logoUrl: z.string().nullable().optional(),
+  status: z.number(),
+})
+export type BrandDetail = z.infer<typeof BrandDetailSchema>
 
 // Category tree node
 export const CategoryNodeSchema = z.object({
@@ -68,7 +102,8 @@ export const ProductDetailSchema = z.object({
   description: z.string(),
   brandId: z.string().uuid(),
   status: z.string(),
-  warehouseCode: z.string(),
+  warehouseCode: z.string().nullable().optional(),
+  countryCode: z.string().length(2).nullable().optional(),
   primaryCategoryId: z.string().uuid().nullable().optional(),
   variationKey: z.string().nullable().optional(),
   images: z.array(ProductImageSchema),
@@ -89,11 +124,12 @@ export type ProductDetail = z.infer<typeof ProductDetailSchema>
 // CreateProductCommand DTO
 export const ProductCreateSchema = z.object({
   name: z.string().min(1, 'نام اجباری است'),
-  slug: z.string().min(1, 'Slug اجباری است'),
-  code: z.string().min(1, 'کد اجباری است'),
-  brandId: z.string().uuid({ message: 'شناسه برند معتبر نیست' }),
-  categoryIds: z.array(z.string().uuid()).min(1, 'حداقل یک دسته لازم است'),
+  slug: z.string().min(1, 'اسلاگ اجباری است'),
+  code: z.string().min(1, 'کد کالا اجباری است'),
+  brandId: z.string().uuid({ message: 'برند را انتخاب کنید' }),
+  categoryIds: z.array(z.string().uuid()).min(1, 'حداقل یک دسته بندی انتخاب کنید'),
   warehouseCode: z.string().optional().nullable(),
   variationKey: z.string().optional().nullable(),
+  countryCode: z.string().length(2).optional().nullable(),
 })
 export type ProductCreateDto = z.infer<typeof ProductCreateSchema>

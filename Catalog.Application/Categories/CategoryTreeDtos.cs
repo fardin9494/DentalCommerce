@@ -7,4 +7,5 @@ public sealed class CategoryTreeNodeDto
     public string Slug { get; init; } = default!;
     public Guid? ParentId { get; init; }
     public int Depth { get; init; }
+    public bool HasProducts { get; init; }
 }

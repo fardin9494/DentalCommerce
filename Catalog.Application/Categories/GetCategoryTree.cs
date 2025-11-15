@@ -1,6 +1,7 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Catalog.Domain.Categories;
+using Catalog.Domain.Products;
 
 namespace Catalog.Application.Categories;
 
@@ -21,8 +22,6 @@ public sealed class GetCategoryTreeHandler : IRequestHandler<GetCategoryTreeQuer
                 Name = c.Name,
                 Slug = c.DefaultSlug,
                 ParentId = c.ParentId,
-
-                // عمق = کمترین Depth بین مسیرهایی که ancestor آنها ریشه است.
                 Depth = _db.Set<CategoryClosure>()
                     .Where(cc => cc.DescendantId == c.Id)
                     .Join(
@@ -34,11 +33,9 @@ public sealed class GetCategoryTreeHandler : IRequestHandler<GetCategoryTreeQuer
                     .Where(x => x.a.ParentId == null)
                     .OrderBy(x => x.cc.Depth)
                     .Select(x => x.cc.Depth)
-                    .FirstOrDefault() // اگر ریشه باشد یا مسیری از ریشه پیدا نشود، 0 برمی‌گرداند
-            };
-
-        var list = await q
-            .OrderBy(n => n.ParentId.HasValue) // ریشه‌ها اول
+                    .FirstOrDefault(),
+                            HasProducts = _db.Set<ProductCategory>().Any(pc => pc.CategoryId == c.Id)};       var list = await q
+            .OrderBy(n => n.ParentId.HasValue)
             .ThenBy(n => n.Name)
             .ToListAsync(ct);
 

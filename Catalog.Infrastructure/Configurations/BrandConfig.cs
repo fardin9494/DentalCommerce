@@ -1,4 +1,5 @@
-﻿using Catalog.Domain.Brands;
+using Catalog.Domain.Brands;
+using Catalog.Domain.Media;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -15,9 +16,7 @@ public class BrandConfig : IEntityTypeConfiguration<Brand>
         b.Property(x => x.NormalizedName).IsRequired().HasMaxLength(256);
         b.HasIndex(x => x.NormalizedName).IsUnique();
 
-        b.Property(x => x.CountryCode).IsRequired().HasMaxLength(2).IsFixedLength();
-        b.HasIndex(x => x.CountryCode);
-
+        // Country moved to Product; brand no longer holds CountryCode
         b.Property(x => x.Website).HasMaxLength(256);
         b.Property(x => x.Description).HasColumnType("nvarchar(max)");
         b.Property(x => x.Status).IsRequired();
@@ -25,9 +24,9 @@ public class BrandConfig : IEntityTypeConfiguration<Brand>
         b.Property(x => x.CreatedAt).HasColumnType("datetime2");
         b.Property(x => x.UpdatedAt).HasColumnType("datetime2");
 
-        b.HasOne<Country>()
+        b.HasOne<MediaAsset>()
             .WithMany()
-            .HasForeignKey(x => x.CountryCode)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasForeignKey(x => x.LogoMediaId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

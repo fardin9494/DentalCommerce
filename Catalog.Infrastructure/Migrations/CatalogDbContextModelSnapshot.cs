@@ -29,12 +29,6 @@ namespace Catalog.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("CountryCode")
-                        .IsRequired()
-                        .HasMaxLength(2)
-                        .HasColumnType("nchar(2)")
-                        .IsFixedLength();
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -69,7 +63,7 @@ namespace Catalog.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CountryCode");
+                    b.HasIndex("LogoMediaId");
 
                     b.HasIndex("NormalizedName")
                         .IsUnique();
@@ -277,6 +271,36 @@ namespace Catalog.Infrastructure.Migrations
                     b.ToTable("CategoryClosure", "catalog");
                 });
 
+            modelBuilder.Entity("Catalog.Domain.Media.MediaAsset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("StoredPath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("ThumbsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("MediaAsset", "catalog");
+                });
+
             modelBuilder.Entity("Catalog.Domain.Products.Product", b =>
                 {
                     b.Property<Guid>("Id")
@@ -291,6 +315,11 @@ namespace Catalog.Infrastructure.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("nchar(2)")
+                        .IsFixedLength();
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -298,6 +327,9 @@ namespace Catalog.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<Guid?>("MainImageId")
                         .HasColumnType("uniqueidentifier");
@@ -333,6 +365,8 @@ namespace Catalog.Infrastructure.Migrations
 
                     b.HasIndex("Code")
                         .IsUnique();
+
+                    b.HasIndex("CountryCode");
 
                     b.HasIndex("DefaultSlug")
                         .IsUnique();
@@ -560,18 +594,21 @@ namespace Catalog.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Domain");
+                    b.HasIndex("Domain")
+                        .IsUnique()
+                        .HasFilter("[Domain] IS NOT NULL");
+
+                    b.HasIndex("Name");
 
                     b.ToTable("Store", "catalog");
                 });
 
             modelBuilder.Entity("Catalog.Domain.Brands.Brand", b =>
                 {
-                    b.HasOne("Catalog.Domain.Brands.Country", null)
+                    b.HasOne("Catalog.Domain.Media.MediaAsset", null)
                         .WithMany()
-                        .HasForeignKey("CountryCode")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .HasForeignKey("LogoMediaId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Catalog.Domain.Brands.BrandAlias", b =>
@@ -613,6 +650,11 @@ namespace Catalog.Infrastructure.Migrations
                         .HasForeignKey("BrandId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Catalog.Domain.Brands.Country", null)
+                        .WithMany()
+                        .HasForeignKey("CountryCode")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("Catalog.Domain.Products.ProductImage", null)
                         .WithMany()

@@ -28,31 +28,34 @@ public sealed class CreateCategoryHandler : IRequestHandler<CreateCategoryComman
             parentId: req.ParentId
         );
 
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-
-        _db.Set<Category>().Add(cat);
-        await _db.SaveChangesAsync(ct);
-
-     
-        _db.Set<CategoryClosure>().Add(CategoryClosure.Self(cat.Id));
-
-        if (req.ParentId is Guid parentId)
+        var strategy = _db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            var ancestors = await _db.Set<CategoryClosure>()
-                .AsNoTracking()
-                .Where(cc => cc.DescendantId == parentId)
-                .ToListAsync(ct);
+            await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
-            foreach (var a in ancestors)
+            _db.Set<Category>().Add(cat);
+            await _db.SaveChangesAsync(ct);
+
+            _db.Set<CategoryClosure>().Add(CategoryClosure.Self(cat.Id));
+
+            if (req.ParentId is Guid parentId)
             {
-                _db.Set<CategoryClosure>().Add(
-                    CategoryClosure.Link(a.AncestorId, cat.Id, a.Depth + 1)
-                );
-            }
-        }
+                var ancestors = await _db.Set<CategoryClosure>()
+                    .AsNoTracking()
+                    .Where(cc => cc.DescendantId == parentId)
+                    .ToListAsync(ct);
 
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+                foreach (var a in ancestors)
+                {
+                    _db.Set<CategoryClosure>().Add(
+                        CategoryClosure.Link(a.AncestorId, cat.Id, a.Depth + 1)
+                    );
+                }
+            }
+
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        });
 
         return cat.Id;
     }

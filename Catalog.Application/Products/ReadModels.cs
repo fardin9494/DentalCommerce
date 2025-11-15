@@ -7,6 +7,7 @@ public sealed class ProductListItemDto
     public Guid Id { get; init; }
     public string Name { get; init; } = default!;
     public string Code { get; init; } = default!;
+
     public string DefaultSlug { get; init; } = default!;
     public Guid? BrandId { get; init; }
     public string? BrandName { get; init; }
@@ -22,11 +23,14 @@ public sealed class ProductDetailDto
     public Guid Id { get; init; }
     public string Name { get; init; } = default!;
     public string Code { get; init; } = default!;
+    public string? WarehouseCode { get; set; } = default!;
     public string DefaultSlug { get; init; } = default!;
     public string BrandName { get; init; } = default!;
+    public string Description { get; init; } = default!;
     public Guid BrandId { get; init; }
     public string Status { get; init; } = default!;
     public Guid? PrimaryCategoryId { get; init; }
+    public string? CountryCode { get; init; }
 
     public string? VariationKey { get; init; }
     public IReadOnlyList<VariantDto> Variants { get; init; } = Array.Empty<VariantDto>();

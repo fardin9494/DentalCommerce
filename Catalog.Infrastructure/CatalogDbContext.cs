@@ -1,5 +1,6 @@
 ﻿using Catalog.Domain.Brands;
 using Catalog.Domain.Categories;
+using Catalog.Domain.Media;
 using Catalog.Domain.Products;
 using Catalog.Domain.Stores;
 using Catalog.Infrastructure.Seeds;
@@ -26,6 +27,7 @@ public class CatalogDbContext : DbContext
     public DbSet<ProductSeo> ProductSeos => Set<ProductSeo>();
     public DbSet<Store> Stores => Set<Store>();
     public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
+    public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

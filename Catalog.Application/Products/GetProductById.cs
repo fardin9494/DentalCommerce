@@ -21,12 +21,15 @@ public sealed class GetProductByIdHandler : IRequestHandler<GetProductByIdQuery,
                 Id = p.Id,
                 Name = p.Name,
                 Code = p.Code,
+                WarehouseCode = p.WarehouseCode,
                 DefaultSlug = p.DefaultSlug,
                 BrandId = p.BrandId,
                 BrandName = _db.Set<Brand>().Where(b => b.Id == p.BrandId).Select(b => b.Name).First(),
+                CountryCode = p.CountryCode,
                 Status = p.Status.ToString(),
                 PrimaryCategoryId = p.PrimaryCategoryId,
-                VariationKey = p.VariationKey,
+                Description = p.Description,
+				VariationKey = p.VariationKey,
 
                 Variants = p.Variants
                     .OrderBy(v => v.Value)

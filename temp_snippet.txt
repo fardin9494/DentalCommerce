@@ -1,0 +1,8 @@
+﻿
+          <div className="pt-4 space-y-2">
+            <h3 className="font-semibold">Ø¯Ø³ØªÙ‡â€ŒØ¨Ù†Ø¯ÛŒ</h3>
+            <CategoryMultiSelect value={categoryIds.length ? categoryIds : product.categories.map(c=>c.categoryId)} onChange={setCategoryIds} />
+            <button className="btn" onClick={async ()=>{
+              try { await setCats.mutateAsync({ categoryIds: (categoryIds.length ? categoryIds : product.categories.map(c=>c.categoryId)) }) ; alert('Ø°Ø®ÛŒØ±Ù‡ Ø´Ø¯') } catch(e:any){ alert(e?.message || 'Ø®Ø·Ø§ Ø¯Ø± Ø°Ø®ÛŒØ±Ù‡ Ø¯Ø³ØªÙ‡â€ŒÙ‡Ø§') }
+            }}>Ø°Ø®ÛŒØ±Ù‡ Ø¯Ø³ØªÙ‡â€ŒÙ‡Ø§</button>
+          </div>

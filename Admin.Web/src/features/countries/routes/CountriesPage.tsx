@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PageHeader } from '../../../shared/components/PageHeader'
 import { Spinner } from '../../../shared/components/Spinner'
 import { useCountries, useCreateCountry, useDeleteCountry, useUpdateCountry } from '../../products/queries'
+import { swalPrompt, swalToastSuccess, swalToastError } from '../../../shared/utils/swal'
 
 export function CountriesPage() {
   const { data: countries, isLoading, isError, error } = useCountries()
@@ -12,7 +13,7 @@ export function CountriesPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Countries">مدیریت کشور ها</PageHeader>
+      <PageHeader title="Countries">مدیریت کشورها</PageHeader>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 card p-4">
           {isLoading ? <Spinner /> : isError ? (
@@ -25,12 +26,13 @@ export function CountriesPage() {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="bg-gray-100 text-left">
-                    <th className="p-2">نام فارسی</th>
-                    <th className="p-2">نام انگلیسی</th>
-                    <th className="p-2">کد</th>
-                    <th className="p-2"> کد دوم</th>
-                    <th className="p-2">قاره</th>
+                    <th className="p-2">نام (FA)</th>
+                    <th className="p-2">Name (EN)</th>
+                    <th className="p-2">ISO2</th>
+                    <th className="p-2">ISO3</th>
+                    <th className="p-2">Region</th>
                     <th className="p-2">پرچم</th>
+                    <th className="p-2"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -41,21 +43,22 @@ export function CountriesPage() {
                       <td className="p-2">{c.code2}</td>
                       <td className="p-2">{c.code3}</td>
                       <td className="p-2">{c.region || '-'}</td>
+                      <td className="p-2">{c.flagEmoji || '-'}</td>
                       <td className="p-2 flex items-center gap-2">
-                        <span>{c.flagEmoji || '-'}</span>
                         <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
-                          const nameFa = prompt('نام (FA)', c.nameFa) || ''
-                          const nameEn = prompt('Name (EN)', c.nameEn) || ''
-                          const region = prompt('Region (optional)', c.region || '') || ''
-                          const flagEmoji = prompt('Flag Emoji (optional)', c.flagEmoji || '') || ''
-                          if (!nameFa.trim() || !nameEn.trim()) return
+                          const nameFa = await swalPrompt({ title: 'نام فارسی', defaultValue: c.nameFa, required: true, confirmText: 'ذخیره', cancelText: 'لغو' })
+                          if (!nameFa) return
+                          const nameEn = await swalPrompt({ title: 'Name (EN)', defaultValue: c.nameEn, required: true, confirmText: 'بعدی', cancelText: 'لغو' })
+                          if (!nameEn) return
+                          const region = await swalPrompt({ title: 'Region (اختیاری)', defaultValue: c.region || '', confirmText: 'بعدی', cancelText: 'رد' })
+                          const flagEmoji = await swalPrompt({ title: 'پرچم (اختیاری)', defaultValue: c.flagEmoji || '', confirmText: 'ذخیره', cancelText: 'لغو' })
                           try {
-                            await update.mutateAsync({ code2: c.code2, input: { nameFa: nameFa.trim(), nameEn: nameEn.trim(), region: region.trim() || null, flagEmoji: flagEmoji.trim() || null } })
-                          } catch (e:any) { alert(e?.message || 'Update failed') }
+                            await update.mutateAsync({ code2: c.code2, input: { nameFa: nameFa.trim(), nameEn: nameEn.trim(), region: region?.trim() || null, flagEmoji: flagEmoji?.trim() || null } })
+                            swalToastSuccess('کشور بروزرسانی شد')
+                          } catch (e:any) { swalToastError(e?.message || 'بروزرسانی ناموفق') }
                         }}>ویرایش</button>
                         <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
-                          if (!confirm(`Delete country ${c.code2}?`)) return
-                          try { await del.mutateAsync(c.code2) } catch (e:any) { alert(e?.message || 'Delete failed') }
+                          try { await del.mutateAsync(c.code2); swalToastSuccess('کشور حذف شد') } catch (e:any) { swalToastError(e?.message || 'حذف ناموفق') }
                         }}>حذف</button>
                       </td>
                     </tr>
@@ -66,7 +69,7 @@ export function CountriesPage() {
           )}
         </div>
         <div className="card p-4">
-          <h3 className="font-semibold mb-3">افزودن کشور</h3>
+          <h3 className="font-semibold mb-3">ایجاد کشور</h3>
           <form className="space-y-3" onSubmit={async (e) => {
             e.preventDefault();
             try {
@@ -79,32 +82,32 @@ export function CountriesPage() {
                 flagEmoji: form.flagEmoji?.trim() || null,
               })
               setForm({ code2: 'IR', code3: 'IRN', nameFa: '', nameEn: '', region: '', flagEmoji: '' })
-              alert('Country created')
+              swalToastSuccess('کشور ایجاد شد')
             } catch (err:any) {
-              alert(err?.message || 'Create failed')
+              swalToastError(err?.message || 'ایجاد ناموفق')
             }
           }}>
             <div>
-              <label className="label">نام فارسی</label>
+              <label className="label">نام (FA)</label>
               <input className="input" value={form.nameFa} onChange={e=>setForm(f=>({ ...f, nameFa: e.target.value }))} />
             </div>
             <div>
-              <label className="label">نام انگلیسی</label>
+              <label className="label">Name (EN)</label>
               <input className="input" value={form.nameEn} onChange={e=>setForm(f=>({ ...f, nameEn: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="label">کد (ISO2)</label>
+                <label className="label">ISO2</label>
                 <input className="input" value={form.code2} onChange={e=>setForm(f=>({ ...f, code2: e.target.value }))} />
               </div>
               <div>
-                <label className="label">کد (ISO3)</label>
+                <label className="label">ISO3</label>
                 <input className="input" value={form.code3} onChange={e=>setForm(f=>({ ...f, code3: e.target.value }))} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="label">قاره (اختیاری)</label>
+                <label className="label">Region (اختیاری)</label>
                 <input className="input" value={form.region} onChange={e=>setForm(f=>({ ...f, region: e.target.value }))} />
               </div>
               <div>
@@ -119,3 +122,4 @@ export function CountriesPage() {
     </div>
   )
 }
+

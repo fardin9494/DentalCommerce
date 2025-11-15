@@ -10,8 +10,11 @@ public sealed class Product : AggregateRoot<Guid>
     public string Name { get; private set; } = null!;
     public string DefaultSlug { get; private set; } = null!;
     public string Code { get; private set; } = null!;         
-    public string? WarehouseCode { get; private set; }        
-    public Guid BrandId { get; private set; }
+    public string? WarehouseCode { get; private set; }
+	public string? Description { get; private set; }
+	public Guid BrandId { get; private set; }
+    // ISO-3166-1 alpha-2 country code of manufacturing (optional)
+    public string? CountryCode { get; private set; }
     public Guid? PrimaryCategoryId { get; private set; }
     public ProductStatus Status { get; private set; } = ProductStatus.Draft;
 
@@ -40,7 +43,8 @@ public sealed class Product : AggregateRoot<Guid>
     public static Product Create(
         string name, string defaultSlug, string code,
         Guid brandId,
-        string? warehouseCode = null)
+        string? warehouseCode = null,
+        string? countryCode = null)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name required");
         if (string.IsNullOrWhiteSpace(defaultSlug)) throw new ArgumentException("Slug required");
@@ -54,6 +58,7 @@ public sealed class Product : AggregateRoot<Guid>
             Code = code.Trim().ToUpperInvariant(),
             WarehouseCode = string.IsNullOrWhiteSpace(warehouseCode) ? null : warehouseCode.Trim(),
             BrandId = brandId,
+            CountryCode = string.IsNullOrWhiteSpace(countryCode) ? null : countryCode.Trim().ToUpperInvariant(),
           
         };
     }
@@ -100,7 +105,24 @@ public sealed class Product : AggregateRoot<Guid>
         Touch();
     }
 
-    public void Rename(string name)
+    public void SetCountry(string? countryCode)
+    {
+        CountryCode = string.IsNullOrWhiteSpace(countryCode) ? null : countryCode.Trim().ToUpperInvariant();
+        Touch();
+    }
+
+    public void SetDescription(string? html)
+    {
+	    // فعلاً اجازه‌ی null یا خالی => پاک‌کردن توضیحات
+	    if (string.IsNullOrWhiteSpace(html))
+		    Description = null;
+	    else
+		    Description = html.Trim();
+
+	    Touch();
+    }
+
+	public void Rename(string name)
     {
         Name = name.Trim();
         Touch();
@@ -138,6 +160,13 @@ public sealed class Product : AggregateRoot<Guid>
 
         foreach (var c in _categories) c.SetPrimary(c.CategoryId == categoryId);
         PrimaryCategoryId = categoryId;
+        Touch();
+    }
+
+    public void ClearPrimaryCategory()
+    {
+        foreach (var c in _categories) c.SetPrimary(false);
+        PrimaryCategoryId = null;
         Touch();
     }
 

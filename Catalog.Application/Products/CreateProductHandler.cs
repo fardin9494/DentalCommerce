@@ -27,8 +27,16 @@ public sealed class CreateProductHandler : IRequestHandler<CreateProductCommand,
             defaultSlug: req.Slug,
             code: code,
             brandId: req.BrandId,
-            warehouseCode: req.WarehouseCode
+            warehouseCode: req.WarehouseCode,
+            countryCode: req.CountryCode
         );
+
+        if (!string.IsNullOrWhiteSpace(req.CountryCode))
+        {
+            var cc = req.CountryCode!.Trim().ToUpperInvariant();
+            var exists = await _db.Set<Catalog.Domain.Brands.Country>().AnyAsync(c => c.Code2 == cc, ct);
+            if (!exists) throw new InvalidOperationException("Country not found.");
+        }
 
         if (!string.IsNullOrWhiteSpace(req.VariationKey))
             product.SetVariation(req.VariationKey);

@@ -1,4 +1,4 @@
-﻿using BuildingBlocks.Domain;
+using BuildingBlocks.Domain;
 
 namespace Catalog.Domain.Brands;
 
@@ -8,7 +8,6 @@ public sealed class Brand : AggregateRoot<Guid>
 {
     public string Name { get; private set; } = null!;
     public string NormalizedName { get; private set; } = null!;
-    public string CountryCode { get; private set; } = null!; // FK -> Country.Code2
     public Guid? LogoMediaId { get; private set; }
     public int? EstablishedYear { get; private set; }
     public string? Website { get; private set; }
@@ -17,23 +16,32 @@ public sealed class Brand : AggregateRoot<Guid>
 
     private Brand() { }
 
-    public static Brand Create(string name, string countryCode, string? website = null)
+    public static Brand Create(
+        string name,
+        string? website = null,
+        string? description = null,
+        int? establishedYear = null,
+        Guid? logoMediaId = null,
+        BrandStatus status = BrandStatus.Active)
     {
-        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("برند الزامی است.");
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name is required.");
 
         return new Brand
         {
             Id = Guid.NewGuid(),
             Name = name.Trim(),
             NormalizedName = Normalize(name),
-            CountryCode = countryCode.ToUpperInvariant(),
-            Website = string.IsNullOrWhiteSpace(website) ? null : website.Trim()
+            Website = string.IsNullOrWhiteSpace(website) ? null : website.Trim(),
+            Description = string.IsNullOrWhiteSpace(description) ? null : description,
+            EstablishedYear = establishedYear,
+            LogoMediaId = logoMediaId,
+            Status = status
         };
     }
 
     public void Rename(string name)
     {
-        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("اسم برند الزامیست");
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Invalid name.");
         Name = name.Trim();
         NormalizedName = Normalize(name);
         Touch();
@@ -54,12 +62,8 @@ public sealed class Brand : AggregateRoot<Guid>
         Touch();
     }
 
-    private static string Normalize(string input)
+    public static string Normalize(string input)
     {
-        // ساده: LowerInvariant + trim + جایگزینی حروف عربی/فارسی رایج
-        var x = input.Trim().ToLowerInvariant()
-            .Replace('ي', 'ی')
-            .Replace('ك', 'ک');
-        return x;
+        return input.Trim().ToLowerInvariant();
     }
 }
