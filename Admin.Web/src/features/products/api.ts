@@ -225,6 +225,14 @@ export async function listPropertyValues(key: string, top = 20) {
   return fetchJson<string[]>(`/products/properties/${encodeURIComponent(key)}/values${toQuery({ top })}`)
 }
 
+export async function listVariantValues(top = 20) {
+  return fetchJson<Array<{ value: string; sku: string; usageCount: number }>>(`/products/variants/values${toQuery({ top })}`)
+}
+
+export async function listRecentVariants(top = 10) {
+  return fetchJson<{ values: string[]; skus: string[] }>(`/products/variants/recent${toQuery({ top })}`)
+}
+
 export async function setVariation(id: string, variationKey: string | null) {
   return fetchJson<void>(`/products/${id}/variation`, { method: 'POST', json: { variationKey } as any })
 }

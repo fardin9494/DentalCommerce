@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import * as api from '../api'
 
 export type VariantItem = { value: string; sku: string; isActive: boolean }
 
@@ -10,6 +11,13 @@ type Props = {
 
 export function VariantsEditor({ value, onChange, baseCode }: Props) {
   const [draft, setDraft] = useState<VariantItem>({ value: '', sku: '', isActive: true })
+  const [valueSuggestions, setValueSuggestions] = useState<Array<{ value: string; sku: string; usageCount: number }>>([])
+  const [recentSkus, setRecentSkus] = useState<string[]>([])
+
+  useEffect(() => {
+    api.listVariantValues(15).then(setValueSuggestions).catch(() => {})
+    api.listRecentVariants(10).then(res => setRecentSkus(res.skus || [])).catch(() => {})
+  }, [])
 
   const add = () => {
     const v = draft.value.trim()
@@ -27,6 +35,34 @@ export function VariantsEditor({ value, onChange, baseCode }: Props) {
         <input className="input sm:col-span-2" placeholder="SKU" value={draft.sku} onChange={e=>setDraft(d=>({ ...d, sku: e.target.value }))} />
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.isActive} onChange={e=>setDraft(d=>({ ...d, isActive: e.target.checked }))} /> فعال</label>
       </div>
+      {valueSuggestions.length > 0 && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          {valueSuggestions.map(v => (
+            <button
+              key={`${v.value}-${v.sku}`}
+              type="button"
+              className="badge badge-gray"
+              onClick={() => setDraft(d => ({ ...d, value: v.value, sku: v.sku }))}
+            >
+              {v.value} {v.sku ? `(${v.sku})` : ''} ({v.usageCount})
+            </button>
+          ))}
+        </div>
+      )}
+      {recentSkus.length > 0 && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          {recentSkus.map(sku => (
+            <button
+              key={sku}
+              type="button"
+              className="badge badge-blue"
+              onClick={() => setDraft(d => ({ ...d, sku }))}
+            >
+              {sku}
+            </button>
+          ))}
+        </div>
+      )}
       <button type="button" className="btn" onClick={add}>افزودن تنوع</button>
       {value.length > 0 && (
         <div className="border rounded">
@@ -50,4 +86,3 @@ export function VariantsEditor({ value, onChange, baseCode }: Props) {
     </div>
   )
 }
-

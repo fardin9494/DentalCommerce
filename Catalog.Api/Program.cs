@@ -1,4 +1,4 @@
-using Catalog.Api.Contracts;
+﻿using Catalog.Api.Contracts;
 using Catalog.Application.Brands;
 using Catalog.Application.Categories;
 using Catalog.Application.Common.Behaviors;
@@ -533,6 +533,19 @@ catalog.MapGet("/products/properties/{key}/values", async (string key, int? top,
     var list = await m.Send(new ListPropertyValuesQuery(key, top ?? 20));
     return Results.Ok(list);
 });
+
+catalog.MapGet("/products/variants/values", async (int? top, IMediator m) =>
+{
+    var list = await m.Send(new ListVariantValuesQuery(top ?? 20));
+    return Results.Ok(list);
+});
+
+catalog.MapGet("/products/variants/recent", async (int? top, IMediator m) =>
+{
+    var dto = await m.Send(new ListRecentVariantsQuery(top ?? 10));
+    return Results.Ok(dto);
+});
+
 catalog.MapGet("/admin/products", async (
     HttpResponse response,
     int page,
@@ -568,3 +581,4 @@ catalog.MapGet("/admin/products", async (
 
 
 app.Run();
+
