@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import * as api from '../api'
 
 export type PropertyItem = { key: string; value: string }
 
@@ -9,6 +10,21 @@ type Props = {
 
 export function PropertiesEditor({ value, onChange }: Props) {
   const [draft, setDraft] = useState<PropertyItem>({ key: '', value: '' })
+  const [keySuggestions, setKeySuggestions] = useState<Array<{ key: string; usageCount: number }>>([])
+  const [valueSuggestions, setValueSuggestions] = useState<string[]>([])
+
+  useEffect(() => {
+    api.listPropertyKeys(15).then(setKeySuggestions).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const k = draft.key.trim()
+    if (!k) {
+      setValueSuggestions([])
+      return
+    }
+    api.listPropertyValues(k, 15).then(setValueSuggestions).catch(() => {})
+  }, [draft.key])
 
   const add = () => {
     if (!draft.key.trim()) return
@@ -23,6 +39,34 @@ export function PropertiesEditor({ value, onChange }: Props) {
         <input className="input" placeholder="کلید" value={draft.key} onChange={e=>setDraft(d=>({ ...d, key: e.target.value }))} />
         <input className="input sm:col-span-2" placeholder="مقدار" value={draft.value} onChange={e=>setDraft(d=>({ ...d, value: e.target.value }))} />
       </div>
+      {keySuggestions.length > 0 && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          {keySuggestions.map(k => (
+            <button
+              key={k.key}
+              type="button"
+              className="badge badge-gray"
+              onClick={() => setDraft(d => ({ ...d, key: k.key }))}
+            >
+              {k.key} ({k.usageCount})
+            </button>
+          ))}
+        </div>
+      )}
+      {valueSuggestions.length > 0 && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          {valueSuggestions.map(v => (
+            <button
+              key={v}
+              type="button"
+              className="badge badge-green"
+              onClick={() => setDraft(d => ({ ...d, value: v }))}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      )}
       <button type="button" className="btn" onClick={add}>افزودن</button>
       {value.length > 0 && (
         <div className="border rounded">
@@ -38,4 +82,3 @@ export function PropertiesEditor({ value, onChange }: Props) {
     </div>
   )
 }
-

@@ -521,6 +521,18 @@ catalog.MapDelete("/products/{pid:guid}/images/{imgId:guid}", async (Guid pid, G
     await m.Send(new DeleteProductImageCommand(pid, imgId));
     return Results.NoContent();
 });
+
+catalog.MapGet("/products/properties/keys", async (int? top, IMediator m) =>
+{
+    var list = await m.Send(new ListPropertyKeysQuery(top ?? 20));
+    return Results.Ok(list);
+});
+
+catalog.MapGet("/products/properties/{key}/values", async (string key, int? top, IMediator m) =>
+{
+    var list = await m.Send(new ListPropertyValuesQuery(key, top ?? 20));
+    return Results.Ok(list);
+});
 catalog.MapGet("/admin/products", async (
     HttpResponse response,
     int page,

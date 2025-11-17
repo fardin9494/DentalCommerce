@@ -217,6 +217,14 @@ export async function upsertProductProperty(id: string, input: { key: string; va
   return fetchJson<{ propertyId: string }>(`/products/${id}/properties`, { method: 'POST', json: input as any })
 }
 
+export async function listPropertyKeys(top = 20) {
+  return fetchJson<Array<{ key: string; usageCount: number }>>(`/products/properties/keys${toQuery({ top })}`)
+}
+
+export async function listPropertyValues(key: string, top = 20) {
+  return fetchJson<string[]>(`/products/properties/${encodeURIComponent(key)}/values${toQuery({ top })}`)
+}
+
 export async function setVariation(id: string, variationKey: string | null) {
   return fetchJson<void>(`/products/${id}/variation`, { method: 'POST', json: { variationKey } as any })
 }
