@@ -6,6 +6,7 @@ import { useBrand, useUpdateBrand, useUploadBrandLogo } from '../../products/que
 import { swalToastError, swalToastSuccess } from '../../../shared/utils/swal'
 import type { BrandStatusValue } from '../../products/api'
 import { toPublicMediaUrl } from '../../../lib/api/client'
+import { DescriptionEditor } from '../../products/components/DescriptionEditor'
 
 const brandStatusOptions = [
   { value: '1', label: 'فعال ' },
@@ -140,7 +141,7 @@ export function BrandDetailPage() {
               </div>
               <div>
                 <label className="label">توضیحات</label>
-                <textarea className="input min-h-[120px]" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+                <DescriptionEditor value={form.description} onChange={html => setForm(f => ({ ...f, description: html }))} />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>

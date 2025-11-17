@@ -63,7 +63,7 @@ export function ProductDetailPage() {
     <div className="space-y-4">
       <PageHeader title={`جزئیات محصول: ${product.name}`} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 card p-4 space-y-2">
+        <div className="lg:col-span-2 card p-4 space-y-6 divide-y divide-gray-200">
           <h3 className="font-semibold">مشخصات (قابل ویرایش)</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
@@ -136,12 +136,15 @@ export function ProductDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 card p-4 space-y-3">
-          <h3 className="font-semibold">ویرایش توضیحات</h3>
-          <DescriptionEditor value={desc} onChange={setDesc} />
-          <button className="btn" onClick={async () => {
-            try { await api.setProductDescription(product.id, desc); await qc.invalidateQueries({ queryKey: ['products','detail', product.id] }); alert('ذخیره شد'); } catch (e:any) { alert(e?.message || 'خطا در ذخیره توضیحات') }
-          }}>ذخیره توضیحات</button>
+        <div className="lg:col-span-2 card p-4 space-y-3 divide-y divide-gray-200">
+          <div className="space-y-3">
+            <h3 className="font-semibold">ویرایش توضیحات</h3>
+            <DescriptionEditor value={desc} onChange={setDesc} />
+            <button className="btn" onClick={async () => {
+              try { await api.setProductDescription(product.id, desc); await qc.invalidateQueries({ queryKey: ['products','detail', product.id] }); alert('ذخیره شد'); } catch (e:any) { alert(e?.message || 'خطا در ذخیره توضیحات') }
+            }}>ذخیره توضیحات</button>
+          </div>
+
           <div className="pt-4 space-y-2">
             <h3 className="font-semibold">تنوع محصول</h3>
             <div className="text-xs text-gray-600">کلید تنوع فعلی: {product.variationKey ?? '—'}</div>
@@ -208,7 +211,7 @@ export function ProductDetailPage() {
             </div>
           </div>
         </div>
-        <div className="card p-4 space-y-2">
+        <div className="card p-4 space-y-4 divide-y divide-gray-200">
           <h3 className="font-semibold">ویژگی‌ها</h3>
           <div className="border rounded">
             <div className="grid grid-cols-6 gap-2 px-3 py-2 bg-gray-50 text-xs">
