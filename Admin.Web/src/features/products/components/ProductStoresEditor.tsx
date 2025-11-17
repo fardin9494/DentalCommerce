@@ -38,18 +38,18 @@ export function ProductStoresEditor({ product }: { product: ProductDetail }) {
 
   return (
     <div className="card p-4 space-y-3">
-      <h3 className="font-semibold">Store availability</h3>
+      <h3 className="font-semibold">دسترسی در فروشگاه ها</h3>
       <div className="border rounded overflow-x-auto">
         <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50 text-xs">
           <div className="col-span-2 flex items-center gap-2">
             <input id="chk-all" type="checkbox" checked={allChecked} onChange={e=>toggleAll(e.target.checked)} />
-            <label htmlFor="chk-all" className="font-medium">In store</label>
+            <label htmlFor="chk-all" className="font-medium">همه فروشگاه ها</label>
           </div>
-          <div className="col-span-2">Visible</div>
-          <div className="col-span-3">Store</div>
+          <div className="col-span-2">قابل نمایش</div>
+          <div className="col-span-3">فروشگاه</div>
           <div className="col-span-3">Slug</div>
-          <div className="col-span-2">Title override</div>
-          <div className="col-span-2">Description override</div>
+          <div className="col-span-2">عنوان جدید</div>
+          <div className="col-span-2">توضیحات اضافه</div>
         </div>
         {(stores ?? []).map(st => {
           const row = form[st.id] || { inStore: false, isVisible: false, slug: '', titleOverride: '', descriptionOverride: '' }
@@ -113,7 +113,7 @@ export function ProductStoresEditor({ product }: { product: ProductDetail }) {
             const results = await Promise.allSettled(ops.map(x => x.p))
             const ok = results.filter(r => r.status === 'fulfilled').length
             const total = ops.length
-            if (ok === total) alert(`Saved store settings for ${ok}/${total} change(s)`) 
+            if (ok === total) alert(`ذخیره تنظیمات برای ${ok}/${total} تغییر`) 
             else {
               // surface failures
               const fails: string[] = []
@@ -122,11 +122,11 @@ export function ProductStoresEditor({ product }: { product: ProductDetail }) {
             }
             await qc.invalidateQueries({ queryKey: ['products','detail', product.id] })
           } catch (e:any) {
-            alert(e?.message || 'Failed to update stores')
+            alert(e?.message || 'خطا در بروزرسانی فروشگاه ها')
           } finally {
             setBusy(false)
           }
-        }}>Save availability</button>
+        }}>ذخیره</button>
       </div>
     </div>
   )

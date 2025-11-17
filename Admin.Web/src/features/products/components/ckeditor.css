@@ -1,0 +1,35 @@
+@layer ckeditor {
+  .ck-editor-wrapper .ck-content h1 {
+    font-size: 2rem;
+    line-height: 1.4;
+  }
+
+  .ck-editor-wrapper .ck-content h2 {
+    font-size: 1.8rem;
+    line-height: 1.4;
+  }
+
+  .ck-editor-wrapper .ck-content h3 {
+    font-size: 1.6rem;
+    line-height: 1.4;
+  }
+
+  .ck-editor-wrapper .ck-content h4 {
+    font-size: 1.4rem;
+  }
+
+  .ck-editor-wrapper .ck-content h5 {
+    font-size: 1.2rem;
+  }
+
+  .ck-editor-wrapper .ck-content h6 {
+    font-size: 1rem;
+  }
+
+  .ck-editor-container .ck-editor__editable {
+    min-height: 520px !important;
+    padding: 20px !important;
+    font-size: 16px;
+    line-height: 1.8;
+  }
+}

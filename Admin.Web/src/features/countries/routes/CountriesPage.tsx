@@ -27,10 +27,10 @@ export function CountriesPage() {
                 <thead>
                   <tr className="bg-gray-100 text-left">
                     <th className="p-2">نام (FA)</th>
-                    <th className="p-2">Name (EN)</th>
-                    <th className="p-2">ISO2</th>
-                    <th className="p-2">ISO3</th>
-                    <th className="p-2">Region</th>
+                    <th className="p-2">نام (EN)</th>
+                    <th className="p-2">کد 2</th>
+                    <th className="p-2">کد 3</th>
+                    <th className="p-2">قاره</th>
                     <th className="p-2">پرچم</th>
                     <th className="p-2"></th>
                   </tr>
@@ -48,9 +48,9 @@ export function CountriesPage() {
                         <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
                           const nameFa = await swalPrompt({ title: 'نام فارسی', defaultValue: c.nameFa, required: true, confirmText: 'ذخیره', cancelText: 'لغو' })
                           if (!nameFa) return
-                          const nameEn = await swalPrompt({ title: 'Name (EN)', defaultValue: c.nameEn, required: true, confirmText: 'بعدی', cancelText: 'لغو' })
+                          const nameEn = await swalPrompt({ title: 'نام (EN)', defaultValue: c.nameEn, required: true, confirmText: 'بعدی', cancelText: 'لغو' })
                           if (!nameEn) return
-                          const region = await swalPrompt({ title: 'Region (اختیاری)', defaultValue: c.region || '', confirmText: 'بعدی', cancelText: 'رد' })
+                          const region = await swalPrompt({ title: 'قاره (اختیاری)', defaultValue: c.region || '', confirmText: 'بعدی', cancelText: 'رد' })
                           const flagEmoji = await swalPrompt({ title: 'پرچم (اختیاری)', defaultValue: c.flagEmoji || '', confirmText: 'ذخیره', cancelText: 'لغو' })
                           try {
                             await update.mutateAsync({ code2: c.code2, input: { nameFa: nameFa.trim(), nameEn: nameEn.trim(), region: region?.trim() || null, flagEmoji: flagEmoji?.trim() || null } })
@@ -92,22 +92,22 @@ export function CountriesPage() {
               <input className="input" value={form.nameFa} onChange={e=>setForm(f=>({ ...f, nameFa: e.target.value }))} />
             </div>
             <div>
-              <label className="label">Name (EN)</label>
+              <label className="label">نام (EN)</label>
               <input className="input" value={form.nameEn} onChange={e=>setForm(f=>({ ...f, nameEn: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="label">ISO2</label>
+                <label className="label">کد ایزو 2</label>
                 <input className="input" value={form.code2} onChange={e=>setForm(f=>({ ...f, code2: e.target.value }))} />
               </div>
               <div>
-                <label className="label">ISO3</label>
+                <label className="label">کد ایزو 3</label>
                 <input className="input" value={form.code3} onChange={e=>setForm(f=>({ ...f, code3: e.target.value }))} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="label">Region (اختیاری)</label>
+                <label className="label">قاره (اختیاری)</label>
                 <input className="input" value={form.region} onChange={e=>setForm(f=>({ ...f, region: e.target.value }))} />
               </div>
               <div>

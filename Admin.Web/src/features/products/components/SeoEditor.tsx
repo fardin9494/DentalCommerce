@@ -35,9 +35,9 @@ export function SeoEditor({ product }: { product: ProductDetail }) {
 
   return (
     <div className="card p-4 space-y-3">
-      <h3 className="font-semibold">SEO per store</h3>
+      <h3 className="font-semibold">سئوی فروشگاه ها</h3>
       <div>
-        <label className="label">Store</label>
+        <label className="label">فروشگاه</label>
         <select className="input" value={sid} onChange={e=>setStoreId(e.target.value)}>
           {(stores ?? []).map(s => (
             <option key={s.id} value={s.id}>{s.name} {s.domain ? `(${s.domain})` : ''}</option>
@@ -45,7 +45,7 @@ export function SeoEditor({ product }: { product: ProductDetail }) {
         </select>
         <label className="mt-2 inline-flex items-center gap-2 text-sm">
           <input type="checkbox" checked={applyAll} onChange={e=>setApplyAll(e.target.checked)} />
-          <span>Apply to all stores</span>
+          <span>اعمال برای همه فروشگاه ها</span>
         </label>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -94,7 +94,7 @@ export function SeoEditor({ product }: { product: ProductDetail }) {
           } finally {
             setBusy(false)
           }
-        }}>Save SEO</button>
+        }}>ذخیره</button>
       </div>
     </div>
   )

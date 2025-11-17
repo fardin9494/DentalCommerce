@@ -163,13 +163,13 @@ export function ProductDetailPage() {
                 <div key={v.id} className="grid grid-cols-5 gap-2 px-3 py-2 border-b last:border-0 text-sm items-center">
                   <div className="col-span-2"><span className="cursor-pointer underline" onClick={()=>{ setEditingVariantId(v.id); setTmpVariantValue(v.value); setTmpVariantSku(v.sku); setTmpVariantActive(v.isActive); }}>{v.value}</span></div>
                   <div className="col-span-2 font-mono">{v.sku}</div>
-                  <div className="flex items-center gap-2">
-                    <button className="btn px-2 py-1" onClick={async ()=>{
+                  <div className="flex items-center justify-end gap-2 text-xs whitespace-nowrap">
+                    <button className="btn px-2 py-1 text-xs flex-shrink-0" onClick={async ()=>{
                       try { await addVariant.mutateAsync({ value: v.value, sku: v.sku, isActive: !v.isActive }) }
                       catch(e:any){ alert(e?.message || 'Update failed') }
                     }}>{v.isActive ? 'Deactivate' : 'Activate'}</button>
-                    <span>{v.isActive ? 'فعال' : 'غیرفعال'}</span>
-                    <button className="btn-red px-2 py-1" onClick={async ()=>{ if(!confirm('حذف شود؟')) return; try { await deleteVariant.mutateAsync(v.id) } catch(e:any){ alert(e?.message || 'خطا در حذف') } }}>حذف</button>
+                    <span className="text-xs flex-shrink-0">{v.isActive ? 'فعال' : 'غیرفعال'}</span>
+                    <button className="btn-red px-2 py-1 text-xs flex-shrink-0" onClick={async ()=>{ if(!confirm('حذف شود؟')) return; try { await deleteVariant.mutateAsync(v.id) } catch(e:any){ alert(e?.message || 'خطا در حذف') } }}>حذف</button>
                   </div>
                 </div>
               ))}

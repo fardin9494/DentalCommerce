@@ -12,10 +12,11 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@ckeditor5-local": ["CkEditor5/ckeditor5.js"],
+      "@ckeditor5-static/*": ["CkEditor5/*"]
     },
     "strict": true
   },
   "include": ["src"]
 }
-

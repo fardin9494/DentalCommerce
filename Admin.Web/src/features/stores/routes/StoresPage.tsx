@@ -17,15 +17,15 @@ export function StoresPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 card p-4">
           {isLoading ? <Spinner /> : isError ? (
-            <div className="text-sm text-red-600">Failed to load stores{(error as any)?.message ? `: ${(error as any).message}` : ''}</div>
+            <div className="text-sm text-red-600">خطا در خواندن فروشگاه ها{(error as any)?.message ? `: ${(error as any).message}` : ''}</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="bg-gray-100 text-left">
-                    <th className="p-2">Name</th>
-                    <th className="p-2">Domain</th>
-                    <th className="p-2">Actions</th>
+                    <th className="p-2">نام</th>
+                    <th className="p-2">وبسایت</th>
+                    <th className="p-2">تغییرات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -38,12 +38,12 @@ export function StoresPage() {
                           const name = await swalPrompt({ title: 'ویرایش نام فروشگاه', defaultValue: s.name, required: true, confirmText: 'ذخیره', cancelText: 'لغو' })
                           if (!name) return
                           try { await rename.mutateAsync({ id: s.id, name }); swalToastSuccess('نام فروشگاه بروزرسانی شد') } catch (e:any) { swalToastError(e?.message || 'خطا در تغییر نام فروشگاه') }
-                        }}>Rename</button>
+                        }}>تغییر نام</button>
                         <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
                           const domain = await swalPrompt({ title: 'دامنه فروشگاه (اختیاری)', defaultValue: s.domain || '', confirmText: 'ذخیره', cancelText: 'لغو' })
                           if (domain === null) return
                           try { await setDomain.mutateAsync({ id: s.id, domain: (domain || '').trim() || null }); swalToastSuccess('دامنه بروزرسانی شد') } catch (e:any) { swalToastError(e?.message || 'خطا در ثبت دامنه') }
-                        }}>Set Domain</button>
+                        }}>تغییر وبسایت</button>
                       </td>
                     </tr>
                   ))}
@@ -65,14 +65,14 @@ export function StoresPage() {
             }
           }}>
             <div>
-              <label className="label">Name</label>
+              <label className="label">نام</label>
               <input className="input" value={form.name} onChange={e=>setForm(f=>({ ...f, name: e.target.value }))} />
             </div>
             <div>
-              <label className="label">Domain (optional)</label>
+              <label className="label">وبسایت (اختیاری)</label>
               <input className="input" value={form.domain} onChange={e=>setForm(f=>({ ...f, domain: e.target.value }))} />
             </div>
-            <button type="submit" className="btn">Create</button>
+            <button type="submit" className="btn">ایجاد</button>
           </form>
         </div>
       </div>
