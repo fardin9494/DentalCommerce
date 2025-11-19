@@ -20,9 +20,9 @@ export function StoresPage() {
             <div className="text-sm text-red-600">خطا در خواندن فروشگاه ها{(error as any)?.message ? `: ${(error as any).message}` : ''}</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
+              <table className="min-w-full text-sm text-center">
                 <thead>
-                  <tr className="bg-gray-100 text-left">
+                  <tr className="bg-gray-100">
                     <th className="p-2">نام</th>
                     <th className="p-2">وبسایت</th>
                     <th className="p-2">تغییرات</th>
@@ -33,7 +33,7 @@ export function StoresPage() {
                     <tr key={s.id} className="border-b last:border-0">
                       <td className="p-2">{s.name}</td>
                       <td className="p-2">{s.domain || '-'}</td>
-                      <td className="p-2 flex gap-2">
+                      <td className="p-2 store-actions">
                         <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
                           const name = await swalPrompt({ title: 'ویرایش نام فروشگاه', defaultValue: s.name, required: true, confirmText: 'ذخیره', cancelText: 'لغو' })
                           if (!name) return
@@ -79,4 +79,3 @@ export function StoresPage() {
     </div>
   )
 }
-

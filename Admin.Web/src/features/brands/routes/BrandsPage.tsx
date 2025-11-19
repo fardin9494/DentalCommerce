@@ -44,9 +44,9 @@ export function BrandsPage() {
         <div className="lg:col-span-2 card p-4">
           {isLoading ? <Spinner /> : (
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
+              <table className="min-w-full text-sm text-center">
                 <thead>
-                  <tr className="bg-gray-100 text-left">
+                  <tr className="bg-gray-100">
                     <th className="p-2">نام</th>
                     <th className="p-2">وضعیت</th>
                     <th className="p-2">تعداد محصولات</th>
@@ -59,9 +59,9 @@ export function BrandsPage() {
                       <td className="p-2">{b.name}</td>
                       <td className="p-2">{String(b.status)}</td>
                       <td className="p-2">{b.productsCount}</td>
-                      <td className="p-2 flex gap-2">
+                      <td className="p-2 brand-actions">
                         <button className="btn-secondary px-3 py-1.5 rounded" onClick={() => navigate(`/brands/${b.id}`)}>ویرایش</button>
-                        <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
+                        <button className="btn-red px-3 py-1.5 rounded ml-2" onClick={async () => {
                           try {
                             await del.mutateAsync(b.id)
                             swalToastSuccess('برند حذف شد')

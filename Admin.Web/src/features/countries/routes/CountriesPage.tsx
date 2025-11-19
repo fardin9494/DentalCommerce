@@ -23,9 +23,9 @@ export function CountriesPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
+              <table className="min-w-full text-sm text-center">
                 <thead>
-                  <tr className="bg-gray-100 text-left">
+                  <tr className="bg-gray-100">
                     <th className="p-2">نام (FA)</th>
                     <th className="p-2">نام (EN)</th>
                     <th className="p-2">کد 2</th>
@@ -44,7 +44,7 @@ export function CountriesPage() {
                       <td className="p-2">{c.code3}</td>
                       <td className="p-2">{c.region || '-'}</td>
                       <td className="p-2">{c.flagEmoji || '-'}</td>
-                      <td className="p-2 flex items-center gap-2">
+                      <td className="p-2 country-actions">
                         <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
                           const nameFa = await swalPrompt({ title: 'نام فارسی', defaultValue: c.nameFa, required: true, confirmText: 'ذخیره', cancelText: 'لغو' })
                           if (!nameFa) return
@@ -122,4 +122,3 @@ export function CountriesPage() {
     </div>
   )
 }
-
