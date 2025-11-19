@@ -10,7 +10,16 @@ export async function fetchJson<T>(path: string, opts: Options = {}): Promise<T>
   const headers = new Headers(opts.headers)
   if (opts.json !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (!headers.has('Accept')) headers.set('Accept', 'application/json')
-  if (opts.token) headers.set('Authorization', `Bearer ${opts.token}`)
+
+  let token = opts.token
+  if (!token && typeof window !== 'undefined') {
+    try {
+      token = localStorage.getItem('admin_token') ?? undefined
+    } catch {
+      // ignore storage errors
+    }
+  }
+  if (token) headers.set('Authorization', `Bearer ${token}`)
 
   const res = await fetch(`${API_BASE}${path}`.replace(/\/$/, ''), {
     ...opts,

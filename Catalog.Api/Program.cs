@@ -17,6 +17,10 @@ using Microsoft.Extensions.FileProviders;
 using System.Reflection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,13 +35,28 @@ builder.Services.AddDbContext<CatalogDbContext>(opt =>
         sql.EnableRetryOnFailure();
     });
 });
-builder.Services.AddCors(o =>
+
+// CORS: single admin policy; dev vs production
+var adminOrigin = builder.Configuration["Cors:AdminOrigin"]; // e.g. https://admin.yourdomain.com
+builder.Services.AddCors(opt =>
 {
-	o.AddPolicy("ui", p => p
-		.WithOrigins("http://localhost:5173")
-		.AllowAnyHeader()
-		.AllowAnyMethod()
-		.AllowCredentials());
+    opt.AddPolicy("admin", p =>
+    {
+        if (builder.Environment.IsDevelopment())
+        {
+            p.WithOrigins("http://localhost:5173")
+             .AllowAnyHeader()
+             .AllowAnyMethod()
+             .AllowCredentials();
+        }
+        else if (!string.IsNullOrWhiteSpace(adminOrigin))
+        {
+            p.WithOrigins(adminOrigin)
+             .AllowAnyHeader()
+             .AllowAnyMethod()
+             .AllowCredentials();
+        }
+    });
 });
 
 // MediatR
@@ -58,17 +77,80 @@ builder.Services.AddScoped<DbContext, CatalogDbContext>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// CORS for Admin.Web dev
-builder.Services.AddCors(opt =>
-{
-    opt.AddPolicy("dev", p =>
-        p.WithOrigins("http://localhost:5173")
-         .AllowAnyHeader()
-         .AllowAnyMethod());
-});
-
 var app = builder.Build();
-app.UseCors("ui");
+
+// Simple shared-password gate for admin APIs (/api/catalog/*).
+// If Admin:PasswordHash is configured, the incoming bearer token
+// is hashed with SHA-256 and compared to that hash. Otherwise we
+// fall back to plain Admin:Password comparison. This is temporary
+// until full auth/roles are implemented.
+var adminPassword = app.Configuration["Admin:Password"];
+var adminPasswordHashHex = app.Configuration["Admin:PasswordHash"];
+byte[]? adminPasswordHash = null;
+if (!string.IsNullOrWhiteSpace(adminPasswordHashHex))
+{
+    adminPasswordHash = Convert.FromHexString(adminPasswordHashHex);
+}
+
+if (!string.IsNullOrWhiteSpace(adminPassword) || adminPasswordHash is not null)
+{
+    app.Use(async (ctx, next) =>
+    {
+        // Allow CORS preflight without auth
+        if (HttpMethods.IsOptions(ctx.Request.Method))
+        {
+            await next();
+            return;
+        }
+
+        if (ctx.Request.Path.StartsWithSegments("/api/catalog"))
+        {
+            if (!ctx.Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await ctx.Response.WriteAsync("Unauthorized");
+                return;
+            }
+
+            const string prefix = "Bearer ";
+            var auth = authHeader.ToString();
+            if (!auth.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await ctx.Response.WriteAsync("Unauthorized");
+                return;
+            }
+
+            var token = auth[prefix.Length..].Trim();
+            var ok = false;
+
+            if (adminPasswordHash is not null)
+            {
+                var bytes = Encoding.UTF8.GetBytes(token);
+                var hash = SHA256.HashData(bytes);
+                ok = CryptographicOperations.FixedTimeEquals(hash, adminPasswordHash);
+            }
+            else if (!string.IsNullOrWhiteSpace(adminPassword))
+            {
+                ok = string.Equals(token, adminPassword, StringComparison.Ordinal);
+            }
+
+            if (!ok)
+            {
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await ctx.Response.WriteAsync("Unauthorized");
+                return;
+            }
+        }
+
+        await next();
+    });
+}
+
+var env = app.Services.GetRequiredService<IHostEnvironment>();
+var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("GlobalException");
+
+app.UseCors("admin");
 app.Use(async (ctx, next) =>
 {
     try
@@ -78,6 +160,8 @@ app.Use(async (ctx, next) =>
     // 400: FluentValidation
     catch (ValidationException ex)
     {
+        logger.LogWarning(ex, "Validation failed for request {Path}", ctx.Request.Path);
+
         var errors = ex.Errors
             .GroupBy(e => e.PropertyName)
             .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
@@ -88,12 +172,18 @@ app.Use(async (ctx, next) =>
 
     catch (InvalidOperationException ex)
     {
-        await Results.Problem(title: "Bad Request", detail: ex.Message, statusCode: StatusCodes.Status400BadRequest)
+        logger.LogWarning(ex, "Bad request (InvalidOperation) for {Path}", ctx.Request.Path);
+        var detail = env.IsDevelopment() ? ex.Message : null;
+
+        await Results.Problem(title: "Bad Request", detail: detail, statusCode: StatusCodes.Status400BadRequest)
             .ExecuteAsync(ctx);
     }
     catch (SixLabors.ImageSharp.UnknownImageFormatException ex)
     {
-        await Results.Problem(title: "Unsupported image format", detail: ex.Message, statusCode: StatusCodes.Status400BadRequest)
+        logger.LogWarning(ex, "Unsupported image format for {Path}", ctx.Request.Path);
+        var detail = env.IsDevelopment() ? ex.Message : null;
+
+        await Results.Problem(title: "Unsupported image format", detail: detail, statusCode: StatusCodes.Status400BadRequest)
             .ExecuteAsync(ctx);
     }
     catch (DbUpdateException ex) when (
@@ -101,13 +191,20 @@ app.Use(async (ctx, next) =>
         (sql.Number == 2601 || sql.Number == 2627)
     )
     {
-        await Results.Problem(title: "Duplicate key", detail: sql.Message, statusCode: StatusCodes.Status409Conflict)
+        var sqllog = (Microsoft.Data.SqlClient.SqlException)ex.InnerException!;
+        logger.LogWarning(ex, "Duplicate key error ({SqlNumber}) for {Path}", sqllog.Number, ctx.Request.Path);
+        var detail = env.IsDevelopment() ? sqllog.Message : null;
+
+        await Results.Problem(title: "Duplicate key", detail: detail, statusCode: StatusCodes.Status409Conflict)
             .ExecuteAsync(ctx);
     }
     // 500: ????
     catch (Exception ex)
     {
-        await Results.Problem(title: "Internal Server Error", detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError)
+        logger.LogError(ex, "Unhandled exception for request {Path}", ctx.Request.Path);
+        var detail = env.IsDevelopment() ? ex.Message : null;
+
+        await Results.Problem(title: "Internal Server Error", detail: detail, statusCode: StatusCodes.Status500InternalServerError)
             .ExecuteAsync(ctx);
     }
 });
@@ -127,6 +224,7 @@ app.UseSwaggerUI();
 app.UseCors("dev");
 
 var catalog = app.MapGroup("/api/catalog");
+catalog.MapGet("/auth/check", () => Results.NoContent());
 
 catalog.MapPost("/products", async (CreateProductCommand cmd, IMediator mediator) =>
 {

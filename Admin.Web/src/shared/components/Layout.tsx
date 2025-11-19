@@ -1,7 +1,15 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
+import { LoginPage } from '../../app/LoginPage'
+import { useAdminAuth } from '../../app/auth'
 
 export function Layout() {
   const loc = useLocation()
+  const { token } = useAdminAuth()
+
+  if (!token) {
+    return <LoginPage />
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="bg-white border-b">
@@ -29,4 +37,3 @@ export function Layout() {
 function navCls(active: boolean) {
   return `px-3 py-1.5 rounded-md hover:bg-gray-100 ${active ? 'bg-gray-900 text-white hover:bg-gray-800' : ''}`
 }
-
