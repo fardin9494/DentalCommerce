@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models;
 using System.Security.Cryptography;
 using System.Text;
+using Catalog.Api.Contracts.Receipts;
 using Inventory.Application.Features.Adjustments.Commands;
 using Inventory.Application.Features.Issues.Commands;
 using Inventory.Application.Features.Pricing.Commands;
@@ -692,22 +693,47 @@ catalog.MapGet("/admin/products", async (
     return Results.Ok(res); // ?? TypedResults.Ok(res)
 });
 var inv = app.MapGroup("/api/inventory").DisableAntiforgery();
+inv.MapPost("/receipts", async ([FromBody] CreateReceiptBody body, IMediator m) =>
+    {
+        var id = await m.Send(new CreateReceiptDraftCommand(
+            body.WarehouseId,
+            body.Reason,
+            body.ExternalRef,
+            body.DocDateUtc
+        ));
+        return Results.Created($"/api/inventory/receipts/{id}", new { id });
+    })
+    .Accepts<CreateReceiptBody>("application/json")
+    .Produces(StatusCodes.Status201Created);
 
-inv.MapPost("/receipts", async (IMediator m, Guid warehouseId, string? externalRef) =>
+
+inv.MapPost("/receipts/{id:guid}/lines", async (Guid id, AddReceiptLineBody body, IMediator m) =>
 {
-    var id = await m.Send(new CreateReceiptDraftCommand(warehouseId, externalRef));
-    return Results.Created($"/api/inventory/receipts/{id}", new { id });
-});
+    var lineId = await m.Send(new AddReceiptLineCommand(
+        id, body.ProductId, body.VariantId, body.Qty, body.LotNumber, body.ExpiryDateUtc, body.UnitCost));
+    return Results.Created($"/api/inventory/receipts/{id}/lines/{lineId}", new { id = lineId });
+}).Produces(StatusCodes.Status201Created); 
 
-inv.MapPost("/receipts/{id:guid}/lines", async (Guid id, IMediator m, AddReceiptLineCommand body) =>
-    Results.Created($"/api/inventory/receipts/{id}/lines",
-        new { id = await m.Send(body with { ReceiptId = id }) }));
+inv.MapDelete("/receipts/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMediator m) =>
+    {
+        await m.Send(new RemoveReceiptLineCommand(id, lineId));
+        return Results.NoContent();
+    })
+    .Produces(StatusCodes.Status204NoContent);
+
 
 inv.MapPost("/receipts/{id:guid}/post", async (Guid id, IMediator m) =>
 {
     await m.Send(new PostReceiptCommand(id));
     return Results.NoContent();
-});
+}).Produces(StatusCodes.Status204NoContent);
+
+inv.MapPost("/receipts/{id:guid}/cancel", async (Guid id, IMediator m) =>
+    {
+        await m.Send(new CancelReceiptCommand(id));
+        return Results.NoContent();
+    })
+    .Produces(StatusCodes.Status204NoContent);
 
 var prices = inv.MapGroup("/prices");
 
@@ -842,5 +868,7 @@ adj.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
     await m.Send(new CancelAdjustmentCommand(id));
     return Results.NoContent();
 });
+
+
 app.Run();
 

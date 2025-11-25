@@ -13,52 +13,86 @@ public sealed class ShipTransferHandler : IRequestHandler<ShipTransferCommand, U
 
     public async Task<Unit> Handle(ShipTransferCommand req, CancellationToken ct)
     {
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-
         var tr = await _db.Transfers
-            .Include(t => t.Lines).ThenInclude(l => l.Segments)
-            .FirstOrDefaultAsync(t => t.Id == req.TransferId, ct)
-            ?? throw new InvalidOperationException("سند انتقال پیدا نشد.");
+            .Include(t => t.Lines)
+            .ThenInclude(l => l.Segments)
+            .FirstOrDefaultAsync(t => t.Id == req.TransferId, ct);
 
-        // اعتبارسنجی
-        if (tr.Lines.Count == 0) throw new InvalidOperationException("سند انتقال بدون آیتم قابل ارسال نیست.");
+        if (tr is null)
+            throw new InvalidOperationException("سند انتقال یافت نشد.");
+
+        if (tr.Status != TransferStatus.Draft)
+            throw new InvalidOperationException("فقط سند پیش‌نویس قابل ارسال است.");
+
+        if (tr.Lines.Count == 0)
+            throw new InvalidOperationException("انتقال بدون آیتم قابل ارسال نیست.");
+
         if (tr.Lines.Any(l => l.RemainingQty > 0))
-            throw new InvalidOperationException("ابتدا همه خطوط را تخصیص دهید.");
+            throw new InvalidOperationException("همه خطوط باید کامل سگمنت‌بندی شوند.");
 
-        var when = DateTime.SpecifyKind(req.WhenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
+        var strategy = _db.Database.CreateExecutionStrategy();
 
-        foreach (var l in tr.Lines)
+        await strategy.ExecuteAsync(async () =>
         {
-            foreach (var s in l.Segments)
+            const int maxAttempts = 5;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var si = await _db.StockItems.FirstAsync(x => x.Id == s.StockItemId, ct);
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+                try
+                {
+                    // از انبار مبدا کم کن (برای هر سگمنت)
+                    foreach (var line in tr.Lines)
+                    {
+                        foreach (var seg in line.Segments)
+                        {
+                            var srcItem = await _db.StockItems
+                                .FirstOrDefaultAsync(si => si.Id == seg.StockItemId, ct)
+                                ?? throw new InvalidOperationException("StockItem مبدا یافت نشد.");
 
-                // آزادسازی رزرو و کاهش موجودی
-                si.Release(s.Qty);
-                si.Decrease(s.Qty);
+                            // کم کردن از مبدا
+                            srcItem.Decrease(seg.Qty);
 
-                // Ledger (TransferOut)
-                var led = StockLedgerEntry.Create(
-                    timestampUtc: when,
-                    productId: l.ProductId,
-                    variantId: l.VariantId,
-                    warehouseId: tr.SourceWarehouseId,
-                    lotNumber: si.LotNumber,
-                    expiryDate: si.ExpiryDate,
-                    deltaQty: -s.Qty,
-                    type: StockMovementType.TransferOut,
-                    refDocType: "Transfer",
-                    refDocId: tr.Id,
-                    unitCost: null,
-                    note: null
-                );
-                _db.StockLedger.Add(led);
+                            var led = StockLedgerEntry.Create(
+                                timestampUtc: DateTime.UtcNow,
+                                productId: srcItem.ProductId,
+                                variantId: srcItem.VariantId,
+                                warehouseId: srcItem.WarehouseId, // مبدا
+                                lotNumber: srcItem.LotNumber,
+                                expiryDate: srcItem.ExpiryDate,
+                                deltaQty: -seg.Qty,
+                                type: StockMovementType.TransferOut,
+                                refDocType: nameof(Transfer),
+                                refDocId: tr.Id,
+                                unitCost: null,
+                                note: tr.ExternalRef
+                            );
+                            _db.StockLedger.Add(led);
+                        }
+                    }
+
+                    tr.Ship(req.WhenUtc);
+
+                    await _db.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
+                    break;
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
+
+                    tr = await _db.Transfers
+                        .Include(t => t.Lines)
+                        .ThenInclude(l => l.Segments)
+                        .FirstOrDefaultAsync(t => t.Id == req.TransferId, ct)
+                        ?? throw new InvalidOperationException("سند انتقال در تلاش مجدد یافت نشد.");
+
+                    if (attempt == maxAttempts)
+                        throw;
+                }
             }
-        }
+        });
 
-        tr.Ship(when);
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
         return Unit.Value;
     }
 }

@@ -18,6 +18,7 @@ public sealed class StockItem : AggregateRoot<Guid>
     public decimal Blocked { get; private set; }            // مسدود/قرنطینه
     public string? BlockReason { get; private set; }
 
+    public byte[] RowVersion { get; private set; } = default!;
     private StockItem() { }
 
     public static StockItem Create(Guid productId, Guid? variantId, Guid warehouseId, string? lotNumber, DateTime? expiry)

@@ -1,12 +1,11 @@
-﻿// src/Inventory/Inventory.Application/Features/Transfers/Commands/ReceiveTransferHandler.cs
-using Inventory.Application.Features.Transfers.Commands;
-using Inventory.Domain.Aggregates;
+﻿using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Inventory.Application.Features.Transfers.Commands;
+
 public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferCommand, Unit>
 {
     private readonly InventoryDbContext _db;
@@ -14,109 +13,116 @@ public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferComm
 
     public async Task<Unit> Handle(ReceiveTransferCommand req, CancellationToken ct)
     {
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-
+        // Transfer + Segments
         var tr = await _db.Transfers
             .Include(t => t.Lines)
-                .ThenInclude(l => l.Segments)
-            .FirstOrDefaultAsync(t => t.Id == req.TransferId, ct)
-            ?? throw new InvalidOperationException("سند انتقال پیدا نشد.");
+            .ThenInclude(l => l.Segments)
+            .FirstOrDefaultAsync(t => t.Id == req.TransferId, ct);
+
+        if (tr is null)
+            throw new InvalidOperationException("سند انتقال یافت نشد.");
 
         if (tr.Status is not (TransferStatus.Shipped or TransferStatus.PartiallyReceived))
-            throw new InvalidOperationException("سند باید در وضعیت Shipped/PartiallyReceived باشد.");
+            throw new InvalidOperationException("در این وضعیت امکان ثبت دریافت نیست.");
 
-        var when = DateTime.SpecifyKind(req.WhenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
+        // سگمنتی که قرار است در مقصد دریافت شود
+        var segment = tr.Lines.SelectMany(l => l.Segments).FirstOrDefault(s => s.Id == req.SegmentId)
+                      ?? throw new InvalidOperationException("سگمنت موردنظر یافت نشد.");
 
-        // طرح دریافت: یا همه‌ی باقی‌مانده، یا لیست ورودی کاربر
-        var plan = new List<(Guid SegmentId, Guid ProductId, Guid? VariantId, decimal Qty)>();
+        if (req.Qty <= 0) throw new ArgumentOutOfRangeException(nameof(req.Qty));
+        if (req.Qty > segment.RemainingToReceive)
+            throw new InvalidOperationException("بیش از مقدار مجاز دریافت درخواست شده است.");
 
-        if (req.Segments is null || req.Segments.Count == 0)
+        // برای ساخت StockItem مقصد باید از StockItem مبدا، ویژگی‌های lot/expiry را بخوانیم
+        var srcItem = await _db.StockItems.FirstOrDefaultAsync(x => x.Id == segment.StockItemId, ct)
+                      ?? throw new InvalidOperationException("StockItem مبدا برای سگمنت یافت نشد.");
+
+        var destWarehouseId = tr.DestinationWarehouseId;
+
+        var strategy = _db.Database.CreateExecutionStrategy();
+
+        await strategy.ExecuteAsync(async () =>
         {
-            foreach (var l in tr.Lines)
-                foreach (var s in l.Segments)
+            const int maxAttempts = 5;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+                try
                 {
-                    var remain = s.RemainingToReceive;
-                    if (remain > 0)
-                        plan.Add((s.Id, l.ProductId, l.VariantId, remain));
+                    // StockItem مقصد را پیدا یا ایجاد کن
+                    var destItem = await _db.StockItems.FirstOrDefaultAsync(si =>
+                            si.ProductId == srcItem.ProductId &&
+                            si.VariantId == srcItem.VariantId &&
+                            si.WarehouseId == destWarehouseId &&
+                            si.LotNumber == srcItem.LotNumber &&
+                            si.ExpiryDate == srcItem.ExpiryDate,
+                        ct);
+
+                    if (destItem is null)
+                    {
+                        destItem = StockItem.Create(
+                            productId: srcItem.ProductId,
+                            variantId: srcItem.VariantId,
+                            warehouseId: destWarehouseId,
+                            lotNumber: srcItem.LotNumber,
+                            expiry: srcItem.ExpiryDate
+                        );
+                        _db.StockItems.Add(destItem);
+                    }
+
+                    // افزایش موجودی مقصد
+                    destItem.Increase(req.Qty);
+
+                    // ثبت در دفتر انبار
+                    var led = StockLedgerEntry.Create(
+                        timestampUtc: DateTime.UtcNow,
+                        productId: destItem.ProductId,
+                        variantId: destItem.VariantId,
+                        warehouseId: destItem.WarehouseId, // مقصد
+                        lotNumber: destItem.LotNumber,
+                        expiryDate: destItem.ExpiryDate,
+                        deltaQty: +req.Qty,
+                        type: StockMovementType.TransferIn,
+                        refDocType: nameof(Transfer),
+                        refDocId: tr.Id,
+                        unitCost: null,
+                        note: tr.ExternalRef
+                    );
+                    _db.StockLedger.Add(led);
+
+                    // به‌روز کردن سگمنت در دامنه
+                    tr.ReceiveOnSegment(segment.Id, req.Qty);
+                    tr.AfterReceiveEvaluateCompletion();
+
+                    await _db.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
+                    break;
                 }
-        }
-        else
-        {
-            // اعتبارسنجی سگمنت‌ها و مقادیر
-            var segIndex = tr.Lines.SelectMany(x => x.Segments).ToDictionary(s => s.Id);
-            foreach (var dto in req.Segments)
-            {
-                if (!segIndex.TryGetValue(dto.SegmentId, out var seg))
-                    throw new InvalidOperationException("Segment نامعتبر است.");
+                catch (DbUpdateConcurrencyException)
+                {
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
 
-                if (dto.Qty <= 0 || dto.Qty > seg.RemainingToReceive)
-                    throw new InvalidOperationException("مقدار دریافت نامعتبر است.");
+                    // re-load برای تلاش بعدی
+                    tr = await _db.Transfers
+                        .Include(t => t.Lines)
+                        .ThenInclude(l => l.Segments)
+                        .FirstOrDefaultAsync(t => t.Id == req.TransferId, ct)
+                        ?? throw new InvalidOperationException("سند انتقال در تلاش مجدد یافت نشد.");
 
-                var line = tr.Lines.First(l => l.Segments.Contains(seg));
-                plan.Add((seg.Id, line.ProductId, line.VariantId, dto.Qty));
+                    segment = tr.Lines.SelectMany(l => l.Segments)
+                               .FirstOrDefault(s => s.Id == req.SegmentId)
+                               ?? throw new InvalidOperationException("سگمنت در تلاش مجدد یافت نشد.");
+
+                    srcItem = await _db.StockItems.FirstOrDefaultAsync(x => x.Id == segment.StockItemId, ct)
+                              ?? throw new InvalidOperationException("StockItem مبدا در تلاش مجدد یافت نشد.");
+
+                    if (attempt == maxAttempts)
+                        throw;
+                }
             }
-        }
+        });
 
-        // اجرای دریافت برای هر مورد از طرح
-        foreach (var item in plan)
-        {
-            var (segmentId, productId, variantId, qty) = item;
-
-            // اطلاعات lot/expiry را از StockItemِ مبداِ سگمنت بخوان (در Ship تثبیت شده)
-            var seg = tr.Lines.SelectMany(x => x.Segments).First(s => s.Id == segmentId);
-            var srcSi = await _db.StockItems
-                                 .AsNoTracking()
-                                 .FirstAsync(x => x.Id == seg.StockItemId, ct);
-
-            // در مقصد، آیتم انبار متناظر را پیدا/ایجاد کن (همان product/variant/lot/expiry)
-            var destSi = await _db.StockItems.FirstOrDefaultAsync(x =>
-                    x.WarehouseId == tr.DestinationWarehouseId &&
-                    x.ProductId == productId &&
-                    x.VariantId == variantId &&
-                    x.LotNumber == srcSi.LotNumber &&
-                    x.ExpiryDate == srcSi.ExpiryDate, ct);
-
-            if (destSi is null)
-            {
-                destSi = StockItem.Create(
-                    productId: productId,
-                    variantId: variantId,
-                    warehouseId: tr.DestinationWarehouseId,
-                    lotNumber: srcSi.LotNumber,
-                    expiry: srcSi.ExpiryDate
-                );
-                _db.StockItems.Add(destSi);
-            }
-
-            // افزایش موجودی مقصد
-            destSi.Increase(qty);
-
-            // ثبت در دفتر حرکات: TransferIn
-            var led = StockLedgerEntry.Create(
-                timestampUtc: when,
-                productId: productId,
-                variantId: variantId,
-                warehouseId: tr.DestinationWarehouseId,
-                lotNumber: destSi.LotNumber,
-                expiryDate: destSi.ExpiryDate,
-                deltaQty: qty,
-                type: StockMovementType.TransferIn,
-                refDocType: "Transfer",
-                refDocId: tr.Id,
-                unitCost: null,
-                note: null
-            );
-            _db.StockLedger.Add(led);
-
-            // بروزرسانی سگمنت از مسیر روت Aggregate (DDD-پسند)
-            tr.ReceiveOnSegment(segmentId, qty);
-        }
-
-        // تعیین وضعیت نهایی/بینابینی
-        tr.AfterReceiveEvaluateCompletion();
-
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
         return Unit.Value;
     }
 }

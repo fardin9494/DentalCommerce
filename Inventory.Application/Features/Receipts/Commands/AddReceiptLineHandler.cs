@@ -20,3 +20,4 @@ public sealed class AddReceiptLineHandler : IRequestHandler<AddReceiptLineComman
         return line.Id;
     }
 }
+

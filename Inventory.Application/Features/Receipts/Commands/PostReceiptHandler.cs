@@ -17,36 +17,35 @@ public sealed class PostReceiptHandler : IRequestHandler<PostReceiptCommand, Uni
 
         var rec = await _db.Receipts
             .Include(r => r.Lines)
-            .FirstOrDefaultAsync(r => r.Id == req.ReceiptId, ct)
-            ?? throw new InvalidOperationException("رسید پیدا نشد.");
+            .FirstOrDefaultAsync(r => r.Id == req.ReceiptId, ct);
 
-        if (rec.Status != ReceiptStatus.Draft)
-            throw new InvalidOperationException("فقط رسید پیش‌نویس قابل پست است.");
-        if (rec.Lines.Count == 0)
-            throw new InvalidOperationException("رسید بدون آیتم قابل پست نیست.");
+        if (rec is null) throw new InvalidOperationException("رسید یافت نشد.");
 
+        // پست کردن و اعمال روی انبار
         var when = req.WhenUtc ?? DateTime.UtcNow;
 
-        foreach (var l in rec.Lines)
+        foreach (var l in rec.Lines.OrderBy(x => x.LineNo))
         {
-            // StockItem: پیدا کن یا بساز
-            var item = await _db.StockItems.FirstOrDefaultAsync(si =>
+            // Upsert StockItem
+            var stock = await _db.StockItems.FirstOrDefaultAsync(si =>
                     si.ProductId == l.ProductId &&
                     si.VariantId == l.VariantId &&
                     si.WarehouseId == rec.WarehouseId &&
                     si.LotNumber == l.LotNumber &&
-                    si.ExpiryDate == l.ExpiryDate, ct);
+                    si.ExpiryDate == l.ExpiryDate,
+                ct);
 
-            if (item is null)
+            if (stock is null)
             {
-                item = StockItem.Create(l.ProductId, l.VariantId, rec.WarehouseId, l.LotNumber, l.ExpiryDate);
-                _db.StockItems.Add(item);
+                stock = StockItem.Create(l.ProductId, l.VariantId, rec.WarehouseId, l.LotNumber, l.ExpiryDate);
+                _db.StockItems.Add(stock);
             }
 
-            item.Increase(l.Qty);
+            // افزایش موجودی (RowVersion روی StockItem کنترل همزمانی رو انجام می‌ده)
+            stock.Increase(l.Qty);
 
             // Ledger
-            var le = StockLedgerEntry.Create(
+            var entry = StockLedgerEntry.Create(
                 timestampUtc: when,
                 productId: l.ProductId,
                 variantId: l.VariantId,
@@ -55,11 +54,12 @@ public sealed class PostReceiptHandler : IRequestHandler<PostReceiptCommand, Uni
                 expiryDate: l.ExpiryDate,
                 deltaQty: +l.Qty,
                 type: StockMovementType.Receipt,
-                refDocType: "Receipt",
+                refDocType: nameof(Receipt),
                 refDocId: rec.Id,
-                unitCost: l.UnitCost
+                unitCost: l.UnitCost,
+                note: rec.ExternalRef
             );
-            _db.StockLedger.Add(le);
+            _db.StockLedger.Add(entry);
         }
 
         rec.Post(when);

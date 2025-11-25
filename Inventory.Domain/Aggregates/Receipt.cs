@@ -13,15 +13,21 @@ public sealed class Receipt : AggregateRoot<Guid>
     public ReceiptStatus Status { get; private set; } = ReceiptStatus.Draft;
     public DateTime? PostedAt { get; private set; }
 
+    public ReceiptReason Reason { get; private set; }
+
     public IReadOnlyList<ReceiptLine> Lines => _lines;
 
-    private Receipt() { }
+    private Receipt()
+    {
+       
+    }
 
-    public static Receipt Create(Guid warehouseId, DateTime? docDateUtc = null, string? externalRef = null)
+    public static Receipt Create(Guid warehouseId, ReceiptReason reason, DateTime? docDateUtc = null, string? externalRef = null)
         => new()
         {
             Id = Guid.NewGuid(),
             WarehouseId = warehouseId,
+            Reason = reason,
             DocDate = DateTime.SpecifyKind(docDateUtc ?? DateTime.UtcNow, DateTimeKind.Utc),
             ExternalRef = string.IsNullOrWhiteSpace(externalRef) ? null : externalRef.Trim()
         };

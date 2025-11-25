@@ -13,52 +13,85 @@ public sealed class PostIssueHandler : IRequestHandler<PostIssueCommand, Unit>
 
     public async Task<Unit> Handle(PostIssueCommand req, CancellationToken ct)
     {
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-
         var issue = await _db.Issues
-            .Include(i => i.Lines).ThenInclude(l => l.Allocations)
-            .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
-            ?? throw new InvalidOperationException("سند خروج پیدا نشد.");
+            .Include(i => i.Lines)
+            .ThenInclude(l => l.Allocations)
+            .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct);
+
+        if (issue is null)
+            throw new InvalidOperationException("سند خروج یافت نشد.");
+
+        if (issue.Status != IssueStatus.Draft)
+            throw new InvalidOperationException("فقط سند پیش‌نویس قابل پست است.");
 
         if (issue.Lines.Count == 0)
             throw new InvalidOperationException("سند خروج بدون آیتم قابل پست نیست.");
+
         if (issue.Lines.Any(l => l.RemainingQty > 0))
-            throw new InvalidOperationException("ابتدا همه‌ی خطوط را کامل تخصیص دهید.");
+            throw new InvalidOperationException("قبل از پست، تمام خطوط باید کامل تخصیص داده شوند.");
 
-        var when = DateTime.SpecifyKind(req.WhenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
+        var strategy = _db.Database.CreateExecutionStrategy();
 
-        foreach (var l in issue.Lines)
+        await strategy.ExecuteAsync(async () =>
         {
-            foreach (var a in l.Allocations)
+            const int maxAttempts = 5;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var si = await _db.StockItems.FirstAsync(x => x.Id == a.StockItemId, ct);
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+                try
+                {
+                    // هر تخصیص: از StockItem مربوطه کم کن و دفتر را ثبت کن
+                    foreach (var line in issue.Lines)
+                    {
+                        foreach (var a in line.Allocations)
+                        {
+                            var si = await _db.StockItems.FirstOrDefaultAsync(x => x.Id == a.StockItemId, ct)
+                                ?? throw new InvalidOperationException("StockItem تخصیص‌یافته یافت نشد.");
 
-                // اول آزادسازی رزرو، بعد کاهش موجودی
-                si.Release(a.Qty);
-                si.Decrease(a.Qty);
+                            // کم کردن از موجودی
+                            si.Decrease(a.Qty);
 
-                var ledger = StockLedgerEntry.Create(
-                    timestampUtc: when,
-                    productId: l.ProductId,
-                    variantId: l.VariantId,
-                    warehouseId: issue.WarehouseId,
-                    lotNumber: si.LotNumber,
-                    expiryDate: si.ExpiryDate,
-                    deltaQty: -a.Qty,
-                    type: StockMovementType.Issue,
-                    refDocType: "Issue",
-                    refDocId: issue.Id,
-                    unitCost: null,
-                    note: null
-                );
-                _db.StockLedger.Add(ledger);
+                            var ledger = StockLedgerEntry.Create(
+                                timestampUtc: DateTime.UtcNow,
+                                productId: si.ProductId,
+                                variantId: si.VariantId,
+                                warehouseId: si.WarehouseId,
+                                lotNumber: si.LotNumber,
+                                expiryDate: si.ExpiryDate,
+                                deltaQty: -a.Qty,
+                                type: StockMovementType.Issue,
+                                refDocType: nameof(Issue),
+                                refDocId: issue.Id,
+                                unitCost: null,
+                                note: issue.ExternalRef
+                            );
+                            _db.StockLedger.Add(ledger);
+                        }
+                    }
+
+                    issue.Post(req.WhenUtc);
+
+                    await _db.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
+                    break;
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
+
+                    issue = await _db.Issues
+                        .Include(i => i.Lines)
+                        .ThenInclude(l => l.Allocations)
+                        .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
+                        ?? throw new InvalidOperationException("سند خروج در تلاش مجدد یافت نشد.");
+
+                    if (attempt == maxAttempts)
+                        throw;
+                }
             }
-        }
+        });
 
-        issue.Post(when);
-
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
         return Unit.Value;
     }
 }
