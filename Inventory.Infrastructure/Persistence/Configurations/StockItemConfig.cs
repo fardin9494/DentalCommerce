@@ -11,7 +11,7 @@ public sealed class StockItemConfig : IEntityTypeConfiguration<StockItem>
         b.ToTable("StockItem");
         b.HasKey(x => x.Id);
 
-        b.HasIndex(x => new { x.WarehouseId, x.ProductId, x.VariantId, x.LotNumber, x.ExpiryDate })
+        b.HasIndex(x => new { x.ProductId, x.VariantId, x.WarehouseId, x.LotNumber, x.ExpiryDate, x.ShelfId })
             .IsUnique();
 
         b.Property(x => x.LotNumber).HasMaxLength(64);

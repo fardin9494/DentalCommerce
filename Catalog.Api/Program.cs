@@ -724,7 +724,7 @@ inv.MapDelete("/receipts/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid li
 
 inv.MapPost("/receipts/{id:guid}/post", async (Guid id, IMediator m) =>
 {
-    await m.Send(new PostReceiptCommand(id));
+    await m.Send(new ReceiveReceiptCommand(id));
     return Results.NoContent();
 }).Produces(StatusCodes.Status204NoContent);
 
@@ -745,23 +745,21 @@ prices.MapPost("/stock-items/{id:guid}",
         return Results.Created($"/api/inventory/prices/stock-items/{id}", new { id = priceId });
     });
 
-// دریافت قیمت مؤثر فعلی برای StockItem
 prices.MapGet("/stock-items/{id:guid}",
-    async (Guid id, DateTime? at, IMediator m) =>
+    async (Guid id, IMediator m) =>
     {
-        var dto = await m.Send(new GetEffectiveStockItemPriceQuery(id, at));
+        var dto = await m.Send(new GetInventoryCostQuery { StockItemId = id });
         return Results.Ok(dto);
     });
 
-// کم‌ترین قیمت پایه‌ی قابل‌نمایش برای محصول (می‌تونی warehouse/variant هم فیلتر کنی)
+// 2. دریافت کم‌ترین هزینه خرید موجود برای محصول (Available Stock Cost)
+// تغییرات: نام کوئری عوض شد.
 prices.MapGet("/products/{pid:guid}",
     async (Guid pid, Guid? variantId, Guid? warehouseId, IMediator m) =>
     {
-        var dto = await m.Send(new GetDisplayPriceForProductQuery(pid, variantId, warehouseId));
+        var dto = await m.Send(new GetAvailableStockCostQuery(pid, variantId, warehouseId));
         return Results.Ok(dto);
     });
-
-
 var issues = inv.MapGroup("/issues");
 
 // 1) ساخت پیش‌نویس

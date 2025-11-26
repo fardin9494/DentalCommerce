@@ -9,6 +9,7 @@
 		<PackageReference Include="MediatR" Version="12.5.0" />
 	</ItemGroup>
   <ItemGroup>
+    <Folder Include="Features\Shelves\Commands\" />
     <Folder Include="Features\Stock\Queries\" />
     <Folder Include="Markers\" />
   </ItemGroup>

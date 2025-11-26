@@ -11,7 +11,8 @@ public sealed class Receipt : AggregateRoot<Guid>
     public string? ExternalRef { get; private set; } // شماره‌ی فاکتور تامین‌کننده/ارجاع خارجی (اختیاری)
     public DateTime DocDate { get; private set; }    // تاریخ سند (UTC)
     public ReceiptStatus Status { get; private set; } = ReceiptStatus.Draft;
-    public DateTime? PostedAt { get; private set; }
+    public DateTime? ReceivedAt { get; private set; }
+    public DateTime? ApprovedAt { get; private set; }
 
     public ReceiptReason Reason { get; private set; }
 
@@ -53,21 +54,41 @@ public sealed class Receipt : AggregateRoot<Guid>
         Touch();
     }
 
-    public void Post(DateTime? whenUtc = null)
+    public void Receive(DateTime? whenUtc = null)
     {
-        EnsureDraft();
-        if (_lines.Count == 0) throw new InvalidOperationException("رسید بدون آیتم قابل پست نیست.");
-        Status = ReceiptStatus.Posted;
-        PostedAt = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
+        EnsureStatus(ReceiptStatus.Draft);
+        if (_lines.Count == 0) throw new InvalidOperationException("رسید بدون آیتم قابل دریافت نیست.");
+
+        Status = ReceiptStatus.Received;
+        ReceivedAt = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
         Touch();
     }
 
+    // متد جدید: مرحله دوم - تایید توسط مدیر
+    public void Approve(DateTime? whenUtc = null)
+    {
+        EnsureStatus(ReceiptStatus.Received); // فقط رسید دریافت شده قابل تایید است
+
+        Status = ReceiptStatus.Approved;
+        ApprovedAt = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
+        Touch();
+    }
+
+    // تغییر کوچک در Cancel برای سازگاری
     public void Cancel()
     {
         if (Status != ReceiptStatus.Draft) throw new InvalidOperationException("فقط رسید پیش‌نویس قابل ابطال است.");
         Status = ReceiptStatus.Canceled;
         Touch();
     }
+
+    // Helper method
+    private void EnsureStatus(ReceiptStatus expected)
+    {
+        if (Status != expected)
+            throw new InvalidOperationException($"عملیات در وضعیت {Status} مجاز نیست. وضعیت باید {expected} باشد.");
+    }
+
 
     private void EnsureDraft()
     {

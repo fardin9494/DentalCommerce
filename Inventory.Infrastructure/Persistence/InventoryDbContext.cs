@@ -21,7 +21,8 @@ public sealed class InventoryDbContext : DbContext
     public DbSet<Transfer> Transfers => Set<Transfer>();
     public DbSet<TransferLine> TransferLines => Set<TransferLine>();
     public DbSet<TransferSegment> TransferSegments => Set<TransferSegment>();
-    public DbSet<StockItemPrice> StockItemPrices => Set<StockItemPrice>();
+    public DbSet<StockShelf> StockShelves => Set<StockShelf>();
+    public DbSet<InventoryCost> InventoryCosts => Set<InventoryCost>();
     public DbSet<Adjustment> Adjustments => Set<Adjustment>();
     public DbSet<AdjustmentLine> AdjustmentLines => Set<AdjustmentLine>();
 

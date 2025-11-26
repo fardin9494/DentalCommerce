@@ -16,7 +16,8 @@ public sealed class ReceiptConfig : IEntityTypeConfiguration<Receipt>
         b.Property(x => x.DocDate).HasColumnType("datetime2").IsRequired();
         b.Property(x => x.ExternalRef).HasMaxLength(64);
         b.Property(x => x.Status).HasConversion<int>().IsRequired();
-        b.Property(x => x.PostedAt).HasColumnType("datetime2");
+        b.Property(x => x.ApprovedAt).HasColumnType("datetime2").IsRequired(false);
+        b.Property(x => x.ReceivedAt).HasColumnType("datetime2").IsRequired(false);
 
         b.Property(x => x.CreatedAt).HasColumnType("datetime2");
         b.Property(x => x.UpdatedAt).HasColumnType("datetime2");
