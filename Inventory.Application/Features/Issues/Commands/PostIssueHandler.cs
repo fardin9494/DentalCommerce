@@ -13,85 +13,58 @@ public sealed class PostIssueHandler : IRequestHandler<PostIssueCommand, Unit>
 
     public async Task<Unit> Handle(PostIssueCommand req, CancellationToken ct)
     {
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
         var issue = await _db.Issues
             .Include(i => i.Lines)
             .ThenInclude(l => l.Allocations)
             .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct);
 
-        if (issue is null)
-            throw new InvalidOperationException("سند خروج یافت نشد.");
+        if (issue is null) throw new InvalidOperationException("سند خروج یافت نشد.");
 
-        if (issue.Status != IssueStatus.Draft)
-            throw new InvalidOperationException("فقط سند پیش‌نویس قابل پست است.");
+        var when = req.WhenUtc ?? DateTime.UtcNow;
 
-        if (issue.Lines.Count == 0)
-            throw new InvalidOperationException("سند خروج بدون آیتم قابل پست نیست.");
+        // تغییر وضعیت سند به Posted
+        issue.Post(when);
 
-        if (issue.Lines.Any(l => l.RemainingQty > 0))
-            throw new InvalidOperationException("قبل از پست، تمام خطوط باید کامل تخصیص داده شوند.");
-
-        var strategy = _db.Database.CreateExecutionStrategy();
-
-        await strategy.ExecuteAsync(async () =>
+        // پردازش تمام خطوط و تخصیص‌ها
+        foreach (var line in issue.Lines)
         {
-            const int maxAttempts = 5;
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            foreach (var alloc in line.Allocations)
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
-                {
-                    // هر تخصیص: از StockItem مربوطه کم کن و دفتر را ثبت کن
-                    foreach (var line in issue.Lines)
-                    {
-                        foreach (var a in line.Allocations)
-                        {
-                            var si = await _db.StockItems.FirstOrDefaultAsync(x => x.Id == a.StockItemId, ct)
-                                ?? throw new InvalidOperationException("StockItem تخصیص‌یافته یافت نشد.");
+                var stock = await _db.StockItems.FindAsync(new object[] { alloc.StockItemId }, ct);
+                if (stock is null) throw new InvalidOperationException("رکورد موجودی یافت نشد.");
 
-                            // کم کردن از موجودی
-                            si.Decrease(a.Qty);
+                // 1. کسر نهایی از انبار (تبدیل رزرو به خروج قطعی)
+                stock.Release(alloc.Qty); // حذف رزرو
+                stock.Decrease(alloc.Qty); // کم کردن OnHand
 
-                            var ledger = StockLedgerEntry.Create(
-                                timestampUtc: DateTime.UtcNow,
-                                productId: si.ProductId,
-                                variantId: si.VariantId,
-                                warehouseId: si.WarehouseId,
-                                lotNumber: si.LotNumber,
-                                expiryDate: si.ExpiryDate,
-                                deltaQty: -a.Qty,
-                                type: StockMovementType.Issue,
-                                refDocType: nameof(Issue),
-                                refDocId: issue.Id,
-                                unitCost: null,
-                                note: issue.ExternalRef
-                            );
-                            _db.StockLedger.Add(ledger);
-                        }
-                    }
+                // 2. پیدا کردن قیمت تمام شده (Cost) برای ثبت در سود و زیان
+                var costRecord = await _db.InventoryCosts
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.StockItemId == stock.Id, ct);
 
-                    issue.Post(req.WhenUtc);
-
-                    await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    break;
-                }
-                catch (DbUpdateConcurrencyException)
-                {
-                    await tx.RollbackAsync(ct);
-                    _db.ChangeTracker.Clear();
-
-                    issue = await _db.Issues
-                        .Include(i => i.Lines)
-                        .ThenInclude(l => l.Allocations)
-                        .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
-                        ?? throw new InvalidOperationException("سند خروج در تلاش مجدد یافت نشد.");
-
-                    if (attempt == maxAttempts)
-                        throw;
-                }
+                // 3. ثبت در کاردکس (Ledger)
+                var entry = StockLedgerEntry.Create(
+                    timestampUtc: when,
+                    productId: line.ProductId,
+                    variantId: line.VariantId,
+                    warehouseId: issue.WarehouseId,
+                    lotNumber: stock.LotNumber,
+                    expiryDate: stock.ExpiryDate,
+                    deltaQty: -alloc.Qty, // خروج منفی است
+                    type: StockMovementType.Issue,
+                    refDocType: nameof(Issue),
+                    refDocId: issue.Id,
+                    unitCost: costRecord?.Amount, // <--- قیمت خرید اینجا ثبت می‌شود
+                    note: $"Issued to Order {issue.ExternalRef} - Shelf: {stock.ShelfId}"
+                );
+                _db.StockLedger.Add(entry);
             }
-        });
+        }
 
+        await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         return Unit.Value;
     }
 }

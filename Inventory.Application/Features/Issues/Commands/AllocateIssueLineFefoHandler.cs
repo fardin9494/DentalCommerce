@@ -5,84 +5,71 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Inventory.Application.Features.Issues.Commands;
 
-public sealed class AllocateIssueLineFefoHandler
-    : IRequestHandler<AllocateIssueLineFefoCommand, IReadOnlyList<AllocationDto>>
+public sealed class AllocateIssueLineFefoHandler : IRequestHandler<AllocateIssueLineFefoCommand, IReadOnlyList<AllocationDto>>
 {
     private readonly InventoryDbContext _db;
     public AllocateIssueLineFefoHandler(InventoryDbContext db) => _db = db;
 
     public async Task<IReadOnlyList<AllocationDto>> Handle(AllocateIssueLineFefoCommand req, CancellationToken ct)
     {
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-
+        // 1. بارگذاری سند خروج و خطوط آن
         var issue = await _db.Issues
-            .Include(i => i.Lines).ThenInclude(l => l.Allocations)
-            .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
-            ?? throw new InvalidOperationException("سند خروج پیدا نشد.");
+            .Include(i => i.Lines)
+            .ThenInclude(l => l.Allocations) // لود کردن تخصیص‌های قبلی برای محاسبه صحیح RemainingQty
+            .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct);
 
-        var line = issue.Lines.FirstOrDefault(l => l.Id == req.LineId)
-                   ?? throw new InvalidOperationException("خط سند خروج پیدا نشد.");
+        if (issue is null) throw new InvalidOperationException("سند خروج یافت نشد.");
 
-        // اگر قبلاً تخصیص داشت، ابتدا آزاد و پاک کن
-        if (line.Allocations.Count > 0)
+        // استفاده از req.LineId مطابق با ریکورد شما
+        var line = issue.Lines.FirstOrDefault(l => l.Id == req.LineId);
+        if (line is null) throw new InvalidOperationException("خط سند مورد نظر یافت نشد.");
+
+        // مقدار مورد نیاز برای تخصیص
+        decimal qtyNeeded = line.RemainingQty;
+
+        // لیست خروجی برای نمایش به کلاینت (که چه چیزهایی رزرو شد)
+        var allocatedResult = new List<AllocationDto>();
+
+        if (qtyNeeded <= 0)
+            return allocatedResult; // قبلاً کامل تخصیص داده شده است
+
+        // 2. استراتژی FEFO: پیدا کردن کاندیداها
+        // شرط مهم: ShelfId != null (فقط از کالاهای چیده شده در قفسه بردار)
+        var candidates = await _db.StockItems
+            .Where(si => si.ProductId == line.ProductId
+                         && si.VariantId == line.VariantId
+                         && si.WarehouseId == issue.WarehouseId
+                         && si.ShelfId != null
+                         && (si.OnHand - si.Reserved - si.Blocked) > 0) // موجودی آزاد دارد
+            .OrderBy(si => si.ExpiryDate) // اولویت با تاریخ نزدیک‌تر
+            .ToListAsync(ct);
+
+        // 3. حلقه تخصیص
+        foreach (var stock in candidates)
         {
-            foreach (var a in line.Allocations)
-            {
-                var si0 = await _db.StockItems.FirstAsync(si => si.Id == a.StockItemId, ct);
-                si0.Release(a.Qty);
-            }
-            issue.ClearAllocations(line.Id);
-            await _db.SaveChangesAsync(ct);
+            if (qtyNeeded <= 0) break;
+
+            decimal available = stock.Available;
+            decimal toTake = Math.Min(available, qtyNeeded);
+
+            // الف) رزرو روی موجودی کالا
+            stock.Reserve(toTake);
+
+            // ب) ثبت تخصیص در سند خروج
+            issue.AddAllocation(line.Id, stock.Id, toTake);
+
+            // ج) افزودن به لیست خروجی
+            allocatedResult.Add(new AllocationDto(stock.Id, toTake));
+
+            qtyNeeded -= toTake;
         }
 
-        var need = line.RemainingQty;
-        if (need <= 0) return line.Allocations.Select(a => new AllocationDto(a.StockItemId, a.Qty)).ToList();
-
-        // FEFO: موجودی‌های قابل‌فروش در همین انبار
-        var stockQuery =
-            _db.StockItems.AsNoTracking()
-            .Where(si => si.WarehouseId == issue.WarehouseId
-                      && si.ProductId == line.ProductId
-                      && si.VariantId == line.VariantId
-                      && (si.OnHand - si.Reserved - si.Blocked) > 0)
-            .Select(si => new
-            {
-                si.Id,
-                Available = si.OnHand - si.Reserved - si.Blocked,
-                si.ExpiryDate
-            })
-            .OrderBy(x => x.ExpiryDate.HasValue ? 0 : 1) // انقضا دارها جلوتر
-            .ThenBy(x => x.ExpiryDate);
-
-        var candidates = await stockQuery.ToListAsync(ct);
-        if (candidates.Count == 0)
-            throw new InvalidOperationException("موجودی کافی برای تخصیص یافت نشد.");
-
-        var allocations = new List<AllocationDto>();
-
-        foreach (var c in candidates)
-        {
-            if (need <= 0) break;
-            var take = Math.Min(need, c.Available);
-            if (take <= 0) continue;
-
-            // رزرو روی آیتم
-            var si = await _db.StockItems.FirstAsync(x => x.Id == c.Id, ct);
-            si.Reserve(take);
-
-            // ثبت تخصیص در خط
-           issue.AddAllocation(line.Id, c.Id, take);
-
-            allocations.Add(new AllocationDto(c.Id, take));
-            need -= take;
-        }
-
-        if (need > 0)
-            throw new InvalidOperationException("موجودی کافی برای تخصیص کامل خط وجود ندارد.");
+        // اگر بعد از گشتن تمام قفسه‌ها هنوز کسر داشتیم
+        if (qtyNeeded > 0)
+            throw new InvalidOperationException($"موجودی قابل فروش کافی در قفسه‌ها یافت نشد. مقدار کسر: {qtyNeeded}");
 
         await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
 
-        return allocations;
+        return allocatedResult;
     }
 }

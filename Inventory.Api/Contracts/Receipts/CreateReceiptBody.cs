@@ -1,6 +1,6 @@
 ﻿using Inventory.Domain.Enums;
 
-namespace Catalog.Api.Contracts.Receipts;
+namespace Inventory.Api.Contracts.Receipts;
 
 public sealed record CreateReceiptBody(
     Guid WarehouseId,

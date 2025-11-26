@@ -19,16 +19,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models;
 using System.Security.Cryptography;
 using System.Text;
-using Catalog.Api.Contracts.Receipts;
-using Inventory.Application.Features.Adjustments.Commands;
-using Inventory.Application.Features.Issues.Commands;
-using Inventory.Application.Features.Pricing.Commands;
-using Inventory.Application.Features.Pricing.Queries;
-using Inventory.Application.Features.Receipts.Commands;
-using Inventory.Application.Features.Transfers.Commands;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Inventory.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,14 +35,7 @@ builder.Services.AddDbContext<CatalogDbContext>(opt =>
         sql.EnableRetryOnFailure();
     });
 });
-builder.Services.AddDbContext<InventoryDbContext>(opt =>
-{
-    var cs = builder.Configuration.GetConnectionString("InventoryDb")
-             ?? throw new InvalidOperationException("Connection string 'InventoryDb' is not configured.");
 
-    opt.UseSqlServer(cs, sql =>
-        sql.MigrationsHistoryTable("__EFMigrationsHistory", InventoryDbContext.DefaultSchema));
-});
 // CORS: single admin policy; dev vs production
 var adminOrigin = builder.Configuration["Cors:AdminOrigin"]; // e.g. https://admin.yourdomain.com
 builder.Services.AddCors(opt =>
@@ -76,10 +61,9 @@ builder.Services.AddCors(opt =>
 
 // MediatR
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.Load("Catalog.Application")));
-builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.Load("Inventory.Application")));
+
 // FluentValidation (DI) + MediatR Pipeline
 builder.Services.AddValidatorsFromAssembly(Assembly.Load("Catalog.Application"));
-builder.Services.AddValidatorsFromAssembly(Assembly.Load("Inventory.Application"));
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 // 1) Options ???? ?????? ?????
 builder.Services.Configure<ImageProcessingOptions>(builder.Configuration.GetSection("Media:Image"));
@@ -348,11 +332,11 @@ catalog.MapPost("/products/{id:guid}/categories/primary", async (Guid id, [FromB
     return Results.NoContent();
 });
 catalog.MapPost("/products/{id:guid}/description",
-	async (Guid id, SetProductDescriptionDto body, IMediator m) =>
-	{
-		await m.Send(new SetProductDescriptionCommand(id, body.ContentHtml));
-		return Results.NoContent();
-	});
+    async (Guid id, SetProductDescriptionDto body, IMediator m) =>
+    {
+        await m.Send(new SetProductDescriptionCommand(id, body.ContentHtml));
+        return Results.NoContent();
+    });
 catalog.MapPost("/products/{id:guid}/seo", async (Guid id, UpsertProductSeoCommand body, IMediator mediator) =>
 {
     var cmd = body with { ProductId = id };
@@ -692,181 +676,6 @@ catalog.MapGet("/admin/products", async (
 
     return Results.Ok(res); // ?? TypedResults.Ok(res)
 });
-var inv = app.MapGroup("/api/inventory").DisableAntiforgery();
-inv.MapPost("/receipts", async ([FromBody] CreateReceiptBody body, IMediator m) =>
-    {
-        var id = await m.Send(new CreateReceiptDraftCommand(
-            body.WarehouseId,
-            body.Reason,
-            body.ExternalRef,
-            body.DocDateUtc
-        ));
-        return Results.Created($"/api/inventory/receipts/{id}", new { id });
-    })
-    .Accepts<CreateReceiptBody>("application/json")
-    .Produces(StatusCodes.Status201Created);
-
-
-inv.MapPost("/receipts/{id:guid}/lines", async (Guid id, AddReceiptLineBody body, IMediator m) =>
-{
-    var lineId = await m.Send(new AddReceiptLineCommand(
-        id, body.ProductId, body.VariantId, body.Qty, body.LotNumber, body.ExpiryDateUtc, body.UnitCost));
-    return Results.Created($"/api/inventory/receipts/{id}/lines/{lineId}", new { id = lineId });
-}).Produces(StatusCodes.Status201Created); 
-
-inv.MapDelete("/receipts/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMediator m) =>
-    {
-        await m.Send(new RemoveReceiptLineCommand(id, lineId));
-        return Results.NoContent();
-    })
-    .Produces(StatusCodes.Status204NoContent);
-
-
-inv.MapPost("/receipts/{id:guid}/post", async (Guid id, IMediator m) =>
-{
-    await m.Send(new ReceiveReceiptCommand(id));
-    return Results.NoContent();
-}).Produces(StatusCodes.Status204NoContent);
-
-inv.MapPost("/receipts/{id:guid}/cancel", async (Guid id, IMediator m) =>
-    {
-        await m.Send(new CancelReceiptCommand(id));
-        return Results.NoContent();
-    })
-    .Produces(StatusCodes.Status204NoContent);
-
-var prices = inv.MapGroup("/prices");
-
-// ست‌کردن قیمت پایه‌ی StockItem
-prices.MapPost("/stock-items/{id:guid}",
-    async (Guid id, SetStockItemPriceCommand body, IMediator m) =>
-    {
-        var priceId = await m.Send(body with { StockItemId = id });
-        return Results.Created($"/api/inventory/prices/stock-items/{id}", new { id = priceId });
-    });
-
-prices.MapGet("/stock-items/{id:guid}",
-    async (Guid id, IMediator m) =>
-    {
-        var dto = await m.Send(new GetInventoryCostQuery { StockItemId = id });
-        return Results.Ok(dto);
-    });
-
-// 2. دریافت کم‌ترین هزینه خرید موجود برای محصول (Available Stock Cost)
-// تغییرات: نام کوئری عوض شد.
-prices.MapGet("/products/{pid:guid}",
-    async (Guid pid, Guid? variantId, Guid? warehouseId, IMediator m) =>
-    {
-        var dto = await m.Send(new GetAvailableStockCostQuery(pid, variantId, warehouseId));
-        return Results.Ok(dto);
-    });
-var issues = inv.MapGroup("/issues");
-
-// 1) ساخت پیش‌نویس
-issues.MapPost("/", async (Guid warehouseId, string? externalRef, IMediator m) =>
-{
-    var id = await m.Send(new CreateIssueDraftCommand(warehouseId, externalRef));
-    return Results.Created($"/api/inventory/issues/{id}", new { id });
-});
-
-// 2) افزودن خط
-issues.MapPost("/{id:guid}/lines", async (Guid id, AddIssueLineCommand body, IMediator m) =>
-{
-    var lineId = await m.Send(body with { IssueId = id });
-    return Results.Created($"/api/inventory/issues/{id}/lines/{lineId}", new { id = lineId });
-});
-
-// 3) تخصیص FEFO برای یک خط
-issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fefo", async (Guid id, Guid lineId, IMediator m) =>
-{
-    var res = await m.Send(new AllocateIssueLineFefoCommand(id, lineId));
-    return Results.Ok(res);
-});
-
-// 4) پست خروج
-issues.MapPost("/{id:guid}/post", async (Guid id, IMediator m) =>
-{
-    await m.Send(new PostIssueCommand(id));
-    return Results.NoContent();
-});
-
-// 5) ابطال پیش‌نویس (آزادسازی رزروها)
-issues.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
-{
-    await m.Send(new CancelIssueCommand(id));
-    return Results.NoContent();
-});
-
-var transfers = inv.MapGroup("/transfers");
-
-// ایجاد پیش‌نویس
-transfers.MapPost("/", async (Guid sourceWarehouseId, Guid destinationWarehouseId, string? externalRef, IMediator m) =>
-{
-    var id = await m.Send(new CreateTransferDraftCommand(sourceWarehouseId, destinationWarehouseId, externalRef));
-    return Results.Created($"/api/inventory/transfers/{id}", new { id });
-});
-
-// افزودن خط
-transfers.MapPost("/{id:guid}/lines", async (Guid id, AddTransferLineCommand body, IMediator m) =>
-{
-    var lineId = await m.Send(body with { TransferId = id });
-    return Results.Created($"/api/inventory/transfers/{id}/lines/{lineId}", new { id = lineId });
-});
-
-// تخصیص FEFO
-transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fefo", async (Guid id, Guid lineId, IMediator m) =>
-{
-    var res = await m.Send(new AllocateTransferLineFefoCommand(id, lineId));
-    return Results.Ok(res);
-});
-
-// Ship
-transfers.MapPost("/{id:guid}/ship", async (Guid id, IMediator m) =>
-{
-    await m.Send(new ShipTransferCommand(id));
-    return Results.NoContent();
-});
-
-// Receive (کلیه‌ی باقی‌مانده‌ها یا لیست Segmentها)
-transfers.MapPost("/{id:guid}/receive", async (Guid id, ReceiveTransferCommand body, IMediator m) =>
-{
-    await m.Send(body with { TransferId = id });
-    return Results.NoContent();
-});
-
-// Cancel
-transfers.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
-{
-    await m.Send(new CancelTransferCommand(id));
-    return Results.NoContent();
-});
-
-var adj = app.MapGroup("/api/inventory/adjustments").DisableAntiforgery();
-
-adj.MapPost("/", async (CreateAdjustmentDraftCommand cmd, IMediator m) =>
-{
-    var id = await m.Send(cmd);
-    return Results.Created($"/api/inventory/adjustments/{id}", new { id });
-});
-
-adj.MapPost("/{id:guid}/lines", async (Guid id, AddAdjustmentLineCommand body, IMediator m) =>
-{
-    var lineId = await m.Send(body with { AdjustmentId = id });
-    return Results.Created($"/api/inventory/adjustments/{id}/lines/{lineId}", new { id = lineId });
-});
-
-adj.MapPost("/{id:guid}/post", async (Guid id, IMediator m) =>
-{
-    await m.Send(new PostAdjustmentCommand(id));
-    return Results.NoContent();
-});
-
-adj.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
-{
-    await m.Send(new CancelAdjustmentCommand(id));
-    return Results.NoContent();
-});
 
 
 app.Run();
-
