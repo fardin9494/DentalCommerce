@@ -1,4 +1,4 @@
-﻿using Inventory.Infrastructure.Persistence;
+using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,28 +11,45 @@ public sealed class CancelTransferHandler : IRequestHandler<CancelTransferComman
 
     public async Task<Unit> Handle(CancelTransferCommand req, CancellationToken ct)
     {
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        var strategy = _db.Database.CreateExecutionStrategy();
+        const int maxAttempts = 5;
 
-        var tr = await _db.Transfers
-                     .Include(t => t.Lines).ThenInclude(l => l.Segments)
-                     .FirstOrDefaultAsync(t => t.Id == req.TransferId, ct)
-                 ?? throw new InvalidOperationException("سند انتقال پیدا نشد.");
-
-        // آزاد کردن رزروها
-        foreach (var l in tr.Lines.ToList())
+        await strategy.ExecuteAsync(async () =>
         {
-            foreach (var s in l.Segments.ToList())
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var si = await _db.StockItems.FirstAsync(x => x.Id == s.StockItemId, ct);
-                si.Release(s.Qty);
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+                try
+                {
+                    var tr = await _db.Transfers
+                                 .Include(t => t.Lines).ThenInclude(l => l.Segments)
+                                 .FirstOrDefaultAsync(t => t.Id == req.TransferId, ct)
+                             ?? throw new InvalidOperationException("انتقال پیدا نشد.");
+
+                    foreach (var l in tr.Lines.ToList())
+                    {
+                        foreach (var s in l.Segments.ToList())
+                        {
+                            var si = await _db.StockItems.FirstAsync(x => x.Id == s.StockItemId, ct);
+                            si.Release(s.Qty);
+                        }
+                        tr.ClearSegments(l.Id);
+                    }
+
+                    tr.Cancel();
+
+                    await _db.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
+                    break;
+                }
+                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+                {
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
+                }
             }
-            tr.ClearSegments(l.Id);
-        }
+        });
 
-        tr.Cancel();
-
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
         return Unit.Value;
     }
 }

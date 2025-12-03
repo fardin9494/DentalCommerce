@@ -1,4 +1,4 @@
-﻿using Inventory.Domain.Aggregates;
+using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
@@ -13,58 +13,69 @@ public sealed class PostIssueHandler : IRequestHandler<PostIssueCommand, Unit>
 
     public async Task<Unit> Handle(PostIssueCommand req, CancellationToken ct)
     {
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        var strategy = _db.Database.CreateExecutionStrategy();
+        const int maxAttempts = 5;
 
-        var issue = await _db.Issues
-            .Include(i => i.Lines)
-            .ThenInclude(l => l.Allocations)
-            .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct);
-
-        if (issue is null) throw new InvalidOperationException("سند خروج یافت نشد.");
-
-        var when = req.WhenUtc ?? DateTime.UtcNow;
-
-        // تغییر وضعیت سند به Posted
-        issue.Post(when);
-
-        // پردازش تمام خطوط و تخصیص‌ها
-        foreach (var line in issue.Lines)
+        await strategy.ExecuteAsync(async () =>
         {
-            foreach (var alloc in line.Allocations)
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var stock = await _db.StockItems.FindAsync(new object[] { alloc.StockItemId }, ct);
-                if (stock is null) throw new InvalidOperationException("رکورد موجودی یافت نشد.");
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+                try
+                {
+                    var issue = await _db.Issues
+                        .Include(i => i.Lines)
+                        .ThenInclude(l => l.Allocations)
+                        .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
+                        ?? throw new InvalidOperationException("سفارش برداشت پیدا نشد.");
 
-                // 1. کسر نهایی از انبار (تبدیل رزرو به خروج قطعی)
-                stock.Release(alloc.Qty); // حذف رزرو
-                stock.Decrease(alloc.Qty); // کم کردن OnHand
+                    var when = req.WhenUtc ?? DateTime.UtcNow;
+                    issue.Post(when);
 
-                // 2. پیدا کردن قیمت تمام شده (Cost) برای ثبت در سود و زیان
-                var costRecord = await _db.InventoryCosts
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(c => c.StockItemId == stock.Id, ct);
+                    foreach (var line in issue.Lines)
+                    {
+                        foreach (var alloc in line.Allocations)
+                        {
+                            var stock = await _db.StockItems.FirstOrDefaultAsync(x => x.Id == alloc.StockItemId, ct)
+                                ?? throw new InvalidOperationException("موجودی انتخاب‌شده پیدا نشد.");
 
-                // 3. ثبت در کاردکس (Ledger)
-                var entry = StockLedgerEntry.Create(
-                    timestampUtc: when,
-                    productId: line.ProductId,
-                    variantId: line.VariantId,
-                    warehouseId: issue.WarehouseId,
-                    lotNumber: stock.LotNumber,
-                    expiryDate: stock.ExpiryDate,
-                    deltaQty: -alloc.Qty, // خروج منفی است
-                    type: StockMovementType.Issue,
-                    refDocType: nameof(Issue),
-                    refDocId: issue.Id,
-                    unitCost: costRecord?.Amount, // <--- قیمت خرید اینجا ثبت می‌شود
-                    note: $"Issued to Order {issue.ExternalRef} - Shelf: {stock.ShelfId}"
-                );
-                _db.StockLedger.Add(entry);
+                            stock.Release(alloc.Qty);
+                            stock.Decrease(alloc.Qty);
+
+                            var costRecord = await _db.InventoryCosts
+                                .AsNoTracking()
+                                .FirstOrDefaultAsync(c => c.StockItemId == stock.Id, ct);
+
+                            var entry = StockLedgerEntry.Create(
+                                timestampUtc: when,
+                                productId: line.ProductId,
+                                variantId: line.VariantId,
+                                warehouseId: issue.WarehouseId,
+                                lotNumber: stock.LotNumber,
+                                expiryDate: stock.ExpiryDate,
+                                deltaQty: -alloc.Qty,
+                                type: StockMovementType.Issue,
+                                refDocType: nameof(Issue),
+                                refDocId: issue.Id,
+                                unitCost: costRecord?.Amount,
+                                note: $"Issued to Order {issue.ExternalRef} - Shelf: {stock.ShelfId}"
+                            );
+                            _db.StockLedger.Add(entry);
+                        }
+                    }
+
+                    await _db.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
+                    break;
+                }
+                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+                {
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
+                }
             }
-        }
+        });
 
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
         return Unit.Value;
     }
 }

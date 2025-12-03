@@ -18,6 +18,7 @@ public sealed class AddAdjustmentLineHandler : IRequestHandler<AddAdjustmentLine
                   ?? throw new InvalidOperationException("Adjustment پیدا نشد.");
 
         var line = adj.AddLine(req.ProductId, req.VariantId, req.LotNumber, req.ExpiryDateUtc, req.QtyDelta);
+        _db.Entry(line).State = EntityState.Added;
         await _db.SaveChangesAsync(ct);
         return line.Id;
     }

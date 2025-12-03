@@ -20,7 +20,11 @@ builder.Services.AddDbContext<InventoryDbContext>(opt =>
     // ????? ???? ?? appsettings.json ????? ?????? ??????? InventoryDb ?? ?????
     var cs = builder.Configuration.GetConnectionString("InventoryDb")
              ?? throw new InvalidOperationException("Connection string 'InventoryDb' is not configured.");
-    opt.UseSqlServer(cs);
+    opt.UseSqlServer(cs, sql =>
+    {
+        sql.MigrationsHistoryTable("__EFMigrationsHistory", InventoryDbContext.DefaultSchema);
+        sql.EnableRetryOnFailure();
+    });
 });
 
 builder.Services.AddMediatR(cfg =>

@@ -15,6 +15,7 @@ public sealed class AddIssueLineHandler : IRequestHandler<AddIssueLineCommand, G
                     ?? throw new InvalidOperationException("سند خروج پیدا نشد.");
 
         var line = issue.AddLine(req.ProductId, req.VariantId, req.Qty);
+        _db.Entry(line).State = EntityState.Added;
         await _db.SaveChangesAsync(ct);
         return line.Id;
     }

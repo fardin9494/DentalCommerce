@@ -11,27 +11,45 @@ public sealed class CancelIssueHandler : IRequestHandler<CancelIssueCommand, Uni
 
     public async Task<Unit> Handle(CancelIssueCommand req, CancellationToken ct)
     {
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        var strategy = _db.Database.CreateExecutionStrategy();
+        const int maxAttempts = 5;
 
-        var issue = await _db.Issues
-                        .Include(i => i.Lines).ThenInclude(l => l.Allocations)
-                        .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
-                    ?? throw new InvalidOperationException("سند خروج پیدا نشد.");
-
-        // آزاد کردن رزروهای فعلی
-        foreach (var l in issue.Lines.ToList())
+        await strategy.ExecuteAsync(async () =>
         {
-            foreach (var a in l.Allocations.ToList())
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var si = await _db.StockItems.FirstAsync(x => x.Id == a.StockItemId, ct);
-                si.Release(a.Qty);
-            }
-            issue.ClearAllocations(l.Id); 
-        }
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+                try
+                {
+                    var issue = await _db.Issues
+                                    .Include(i => i.Lines).ThenInclude(l => l.Allocations)
+                                    .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
+                                ?? throw new InvalidOperationException("سند خروج پیدا نشد.");
 
-        issue.Cancel();
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+                    // آزاد کردن رزروهای فعلی
+                    foreach (var l in issue.Lines.ToList())
+                    {
+                        foreach (var a in l.Allocations.ToList())
+                        {
+                            var si = await _db.StockItems.FirstAsync(x => x.Id == a.StockItemId, ct);
+                            si.Release(a.Qty);
+                        }
+                        issue.ClearAllocations(l.Id);
+                    }
+
+                    issue.Cancel();
+                    await _db.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
+                    break;
+                }
+                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+                {
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
+                }
+            }
+        });
+
         return Unit.Value;
     }
 }

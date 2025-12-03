@@ -37,14 +37,15 @@ builder.Services.AddDbContext<CatalogDbContext>(opt =>
 });
 
 // CORS: single admin policy; dev vs production
+const string AdminCorsPolicy = "admin";
 var adminOrigin = builder.Configuration["Cors:AdminOrigin"]; // e.g. https://admin.yourdomain.com
 builder.Services.AddCors(opt =>
 {
-    opt.AddPolicy("admin", p =>
+    opt.AddPolicy(AdminCorsPolicy, p =>
     {
         if (builder.Environment.IsDevelopment())
         {
-            p.WithOrigins("http://localhost:5173")
+            p.WithOrigins("http://localhost:5173", "https://localhost:5173")
              .AllowAnyHeader()
              .AllowAnyMethod()
              .AllowCredentials();
@@ -78,6 +79,9 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+// Run CORS before the admin gate so even 401 responses carry the headers
+app.UseCors(AdminCorsPolicy);
 
 // Simple shared-password gate for admin APIs (/api/catalog/*).
 // If Admin:PasswordHash is configured, the incoming bearer token
@@ -150,7 +154,6 @@ if (!string.IsNullOrWhiteSpace(adminPassword) || adminPasswordHash is not null)
 var env = app.Services.GetRequiredService<IHostEnvironment>();
 var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("GlobalException");
 
-app.UseCors("admin");
 app.Use(async (ctx, next) =>
 {
     try
@@ -219,9 +222,6 @@ app.UseStaticFiles(new StaticFileOptions
 });
 app.UseSwagger();
 app.UseSwaggerUI();
-
-// Enable CORS for development UI
-app.UseCors("dev");
 
 var catalog = app.MapGroup("/api/catalog");
 catalog.MapGet("/auth/check", () => Results.NoContent());

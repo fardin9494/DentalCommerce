@@ -1,5 +1,4 @@
 import { fetchJson, toQuery } from '../../lib/api/client'
-import { API_BASE } from '../../app/env'
 import type { Paginated } from '../../lib/api/types'
 import { BrandSchema, BrandDetailSchema, CategoryNodeSchema, CountrySchema, StoreSchema, LeafCategorySchema, ProductCreateSchema, ProductDetailSchema, ProductListItemSchema, type ProductDetail, type ProductListItem, type ProductCreateDto, type BrandDetail } from './types'
 import { swalConfirm } from '../../shared/utils/swal'
@@ -46,22 +45,10 @@ export async function uploadProductImage(id: string, file: File, alt?: string): 
   const form = new FormData()
   form.append('file', file)
   if (alt) form.append('alt', alt)
-  const base = (API_BASE || '').replace(/\/$/, '')
-  const res = await fetch(`${base}/products/${id}/images/upload`, {
+  return fetchJson<{ id: string }>(`/products/${id}/images/upload`, {
     method: 'POST',
     body: form,
   })
-  if (!res.ok) {
-    try {
-      const data = await res.json()
-      const msg = data?.detail || data?.title || data?.message || data?.error || (typeof data === 'string' ? data : '')
-      throw new Error(msg || `Upload failed (${res.status})`)
-    } catch {
-      const txt = await res.text().catch(() => '')
-      throw new Error(txt || `Upload failed (${res.status})`)
-    }
-  }
-  return res.json()
 }
 
 export async function listBrands() {
@@ -140,16 +127,10 @@ export async function uploadBrandLogo(id: string, file: File) {
   if (!file || file.size === 0) throw new Error('فایل انتخاب نشده است')
   const form = new FormData()
   form.append('file', file)
-  const base = (API_BASE || '').replace(/\/$/, '')
-  const res = await fetch(`${base}/brands/${id}/logo`, {
+  return fetchJson<BrandLogoResponse>(`/brands/${id}/logo`, {
     method: 'POST',
     body: form,
   })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `Upload failed (${res.status})`)
-  }
-  return (await res.json()) as BrandLogoResponse
 }
 export async function deleteBrand(id: string) {
   return fetchJson<void>(`/brands/${id}`, { method: 'DELETE' })

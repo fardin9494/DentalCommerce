@@ -1,4 +1,4 @@
-﻿using Inventory.Infrastructure.Persistence;
+using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,37 +16,47 @@ public sealed class ApproveReceiptHandler : IRequestHandler<ApproveReceiptComman
 
     public async Task<Unit> Handle(ApproveReceiptCommand req, CancellationToken ct)
     {
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        var strategy = _db.Database.CreateExecutionStrategy();
+        const int maxAttempts = 5;
 
-        var rec = await _db.Receipts.Include(r => r.Lines)
-            .FirstOrDefaultAsync(r => r.Id == req.ReceiptId, ct);
-
-        if (rec is null) throw new InvalidOperationException("رسید یافت نشد.");
-
-        // 1. تغییر وضعیت سند
-        rec.Approve(); // Status -> Approved
-
-        // 2. آزادسازی موجودی (Unblock)
-        foreach (var l in rec.Lines)
+        await strategy.ExecuteAsync(async () =>
         {
-            var stock = await _db.StockItems.FirstOrDefaultAsync(si =>
-                si.ProductId == l.ProductId &&
-                si.VariantId == l.VariantId &&
-                si.WarehouseId == rec.WarehouseId &&
-                si.LotNumber == l.LotNumber &&
-                si.ExpiryDate == l.ExpiryDate, ct);
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+                try
+                {
+                    var rec = await _db.Receipts.Include(r => r.Lines)
+                        .FirstOrDefaultAsync(r => r.Id == req.ReceiptId, ct)
+                        ?? throw new InvalidOperationException("رسید پیدا نشد.");
 
-            if (stock is null) throw new InvalidOperationException($"رکورد موجودی برای خط {l.LineNo} یافت نشد.");
+                    rec.Approve();
 
-            // کالا را از قرنطینه آزاد می‌کنیم -> به Available اضافه می‌شود
-            stock.Unblock(l.Qty);
-        }
+                    foreach (var l in rec.Lines)
+                    {
+                        var stock = await _db.StockItems.FirstOrDefaultAsync(si =>
+                            si.ProductId == l.ProductId &&
+                            si.VariantId == l.VariantId &&
+                            si.WarehouseId == rec.WarehouseId &&
+                            si.LotNumber == l.LotNumber &&
+                            si.ExpiryDate == l.ExpiryDate, ct)
+                            ?? throw new InvalidOperationException($"موجودی مربوط به خط {l.LineNo} یافت نشد.");
 
-        // نکته: اینجا معمولاً نیازی به درج در StockLedger نیست چون موجودی کل (OnHand) تغییر نکرده،
-        // فقط وضعیت کیفی آن تغییر کرده است. اما اگر بخواهید می‌توانید یک لاگ جداگانه بگیرید.
+                        stock.Unblock(l.Qty);
+                    }
 
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+                    await _db.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
+                    break;
+                }
+                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+                {
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
+                }
+            }
+        });
+
         return Unit.Value;
     }
 }

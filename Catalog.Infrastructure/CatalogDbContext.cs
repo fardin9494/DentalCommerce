@@ -1,4 +1,6 @@
-﻿using Catalog.Domain.Brands;
+using System;
+using BuildingBlocks.Domain;
+using Catalog.Domain.Brands;
 using Catalog.Domain.Categories;
 using Catalog.Domain.Media;
 using Catalog.Domain.Products;
@@ -29,13 +31,28 @@ public class CatalogDbContext : DbContext
     public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
 
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema(DefaultSchema);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CatalogDbContext).Assembly);
         CountrySeed.Seed(modelBuilder);
+        IgnoreRowVersion(modelBuilder);
 
         base.OnModelCreating(modelBuilder);
+    }
+
+    /// <summary>
+    /// در کاتالوگ کنترل همزمانی سطر فعلاً نیاز نیست؛ RowVersion مشترک را نادیده می‌گیریم تا ستون اضافه نشود.
+    /// </summary>
+    private static void IgnoreRowVersion(ModelBuilder modelBuilder)
+    {
+        const string rowVersionPropertyName = nameof(AggregateRoot<Guid>.RowVersion);
+
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            var prop = entityType.FindProperty(rowVersionPropertyName) ?? entityType.FindProperty("RowVersion");
+            if (prop is null) continue;
+            modelBuilder.Entity(entityType.ClrType).Ignore(prop.Name);
+        }
     }
 }

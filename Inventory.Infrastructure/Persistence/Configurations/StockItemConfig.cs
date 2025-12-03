@@ -20,7 +20,12 @@ public sealed class StockItemConfig : IEntityTypeConfiguration<StockItem>
         b.Property(x => x.OnHand).HasPrecision(18, 3);
         b.Property(x => x.Reserved).HasPrecision(18, 3);
         b.Property(x => x.Blocked).HasPrecision(18, 3);
-        b.Property(x => x.RowVersion).IsRowVersion();
+        b.Property(x => x.RowVersion)
+            .IsRowVersion()
+            .IsConcurrencyToken()
+            .ValueGeneratedOnAddOrUpdate()
+            .HasColumnType("rowversion");
+
         // قیود (بهتر: ToTable(...HasCheckConstraint))
         b.ToTable(t =>
         {

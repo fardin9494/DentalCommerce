@@ -15,6 +15,7 @@ public sealed class AddTransferLineHandler : IRequestHandler<AddTransferLineComm
                  ?? throw new InvalidOperationException("سند انتقال پیدا نشد.");
 
         var line = tr.AddLine(req.ProductId, req.VariantId, req.Qty);
+        _db.Entry(line).State = EntityState.Added;
         await _db.SaveChangesAsync(ct);
         return line.Id;
     }
