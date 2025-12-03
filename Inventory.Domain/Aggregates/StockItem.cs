@@ -8,6 +8,12 @@ public sealed class StockItem : AggregateRoot<Guid>
     public Guid? VariantId { get; private set; }
     public Guid WarehouseId { get; private set; }
 
+    /// <summary>
+    /// Denormalized SKU for self-contained inventory operations.
+    /// This allows the Inventory context to identify physical items without querying the Catalog service.
+    /// </summary>
+    public string Sku { get; private set; } = null!;
+
     // تغییر اصلی: استفاده از شناسه شلف
     public Guid? ShelfId { get; private set; }
 
@@ -25,15 +31,21 @@ public sealed class StockItem : AggregateRoot<Guid>
         Guid productId,
         Guid? variantId,
         Guid warehouseId,
+        string sku,
         string? lotNumber,
         DateTime? expiry,
-        Guid? shelfId = null) // پارامتر جدید
-        => new()
+        Guid? shelfId = null)
+    {
+        if (string.IsNullOrWhiteSpace(sku))
+            throw new ArgumentException("SKU cannot be null or empty.", nameof(sku));
+
+        return new StockItem
         {
             Id = Guid.NewGuid(),
             ProductId = productId,
             VariantId = variantId,
             WarehouseId = warehouseId,
+            Sku = sku.Trim(),
             LotNumber = string.IsNullOrWhiteSpace(lotNumber) ? null : lotNumber.Trim(),
             ExpiryDate = expiry,
             ShelfId = shelfId,
@@ -41,6 +53,7 @@ public sealed class StockItem : AggregateRoot<Guid>
             Reserved = 0,
             Blocked = 0
         };
+    }
 
     public void Increase(decimal qty)
     {

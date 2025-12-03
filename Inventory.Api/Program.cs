@@ -57,8 +57,14 @@ app.UseCors("AllowAll");
 // INVENTORY ENDPOINTS
 // ==========================================
 
-// --- Receipts (???? ????) ---
+// --- Receipts (ورود به انبار) ---
 var receipts = app.MapGroup("/api/inventory/receipts").DisableAntiforgery();
+
+receipts.MapGet("/{id:guid}", async (Guid id, IMediator m) =>
+{
+    var dto = await m.Send(new Inventory.Application.Features.Receipts.Queries.ReceiptDetailsQuery(id));
+    return dto is null ? Results.NotFound() : Results.Ok(dto);
+});
 
 receipts.MapPost("/", async (CreateReceiptDraftCommand cmd, IMediator m) =>
 {
@@ -75,6 +81,18 @@ receipts.MapPost("/{id:guid}/lines", async (Guid id, AddReceiptLineCommand body,
 receipts.MapDelete("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMediator m) =>
 {
     await m.Send(new RemoveReceiptLineCommand(id, lineId));
+    return Results.NoContent();
+});
+
+receipts.MapPut("/{id:guid}", async (Guid id, UpdateReceiptHeaderCommand body, IMediator m) =>
+{
+    await m.Send(body with { ReceiptId = id });
+    return Results.NoContent();
+});
+
+receipts.MapPut("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, UpdateReceiptLineCommand body, IMediator m) =>
+{
+    await m.Send(body with { ReceiptId = id, LineId = lineId });
     return Results.NoContent();
 });
 
@@ -100,8 +118,14 @@ receipts.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
 });
 
 
-// --- Issues (???? ????) ---
+// --- Issues (خروج از انبار) ---
 var issues = app.MapGroup("/api/inventory/issues").DisableAntiforgery();
+
+issues.MapGet("/{id:guid}", async (Guid id, IMediator m) =>
+{
+    var dto = await m.Send(new Inventory.Application.Features.Issues.Queries.IssueDetailsQuery(id));
+    return dto is null ? Results.NotFound() : Results.Ok(dto);
+});
 
 issues.MapPost("/", async (CreateIssueDraftCommand cmd, IMediator m) =>
 {
@@ -113,6 +137,24 @@ issues.MapPost("/{id:guid}/lines", async (Guid id, AddIssueLineCommand body, IMe
 {
     var lineId = await m.Send(body with { IssueId = id });
     return Results.Created($"/api/inventory/issues/{id}/lines/{lineId}", new { id = lineId });
+});
+
+issues.MapDelete("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMediator m) =>
+{
+    await m.Send(new RemoveIssueLineCommand(id, lineId));
+    return Results.NoContent();
+});
+
+issues.MapPut("/{id:guid}", async (Guid id, UpdateIssueHeaderCommand body, IMediator m) =>
+{
+    await m.Send(body with { IssueId = id });
+    return Results.NoContent();
+});
+
+issues.MapPut("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, UpdateIssueLineCommand body, IMediator m) =>
+{
+    await m.Send(body with { IssueId = id, LineId = lineId });
+    return Results.NoContent();
 });
 
 issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fefo", async (Guid id, Guid lineId, IMediator m) =>
@@ -135,8 +177,14 @@ issues.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
 });
 
 
-// --- Transfers (?????? ??? ?????) ---
+// --- Transfers (انتقال بین انبارها) ---
 var transfers = app.MapGroup("/api/inventory/transfers").DisableAntiforgery();
+
+transfers.MapGet("/{id:guid}", async (Guid id, IMediator m) =>
+{
+    var dto = await m.Send(new Inventory.Application.Features.Transfers.Queries.TransferDetailsQuery(id));
+    return dto is null ? Results.NotFound() : Results.Ok(dto);
+});
 
 transfers.MapPost("/", async (CreateTransferDraftCommand cmd, IMediator m) =>
 {
@@ -148,6 +196,24 @@ transfers.MapPost("/{id:guid}/lines", async (Guid id, AddTransferLineCommand bod
 {
     var lineId = await m.Send(body with { TransferId = id });
     return Results.Created($"/api/inventory/transfers/{id}/lines/{lineId}", new { id = lineId });
+});
+
+transfers.MapDelete("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMediator m) =>
+{
+    await m.Send(new RemoveTransferLineCommand(id, lineId));
+    return Results.NoContent();
+});
+
+transfers.MapPut("/{id:guid}", async (Guid id, UpdateTransferHeaderCommand body, IMediator m) =>
+{
+    await m.Send(body with { TransferId = id });
+    return Results.NoContent();
+});
+
+transfers.MapPut("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, UpdateTransferLineCommand body, IMediator m) =>
+{
+    await m.Send(body with { TransferId = id, LineId = lineId });
+    return Results.NoContent();
 });
 
 transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fefo", async (Guid id, Guid lineId, IMediator m) =>
@@ -175,8 +241,14 @@ transfers.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
 });
 
 
-// --- Adjustments (???????????) ---
+// --- Adjustments (اصلاح موجودی) ---
 var adj = app.MapGroup("/api/inventory/adjustments").DisableAntiforgery();
+
+adj.MapGet("/{id:guid}", async (Guid id, IMediator m) =>
+{
+    var dto = await m.Send(new Inventory.Application.Features.Adjustments.Queries.AdjustmentDetailsQuery(id));
+    return dto is null ? Results.NotFound() : Results.Ok(dto);
+});
 
 adj.MapPost("/", async (CreateAdjustmentDraftCommand cmd, IMediator m) =>
 {
@@ -188,6 +260,24 @@ adj.MapPost("/{id:guid}/lines", async (Guid id, AddAdjustmentLineCommand body, I
 {
     var lineId = await m.Send(body with { AdjustmentId = id });
     return Results.Created($"/api/inventory/adjustments/{id}/lines/{lineId}", new { id = lineId });
+});
+
+adj.MapDelete("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMediator m) =>
+{
+    await m.Send(new RemoveAdjustmentLineCommand(id, lineId));
+    return Results.NoContent();
+});
+
+adj.MapPut("/{id:guid}", async (Guid id, UpdateAdjustmentHeaderCommand body, IMediator m) =>
+{
+    await m.Send(body with { AdjustmentId = id });
+    return Results.NoContent();
+});
+
+adj.MapPut("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, UpdateAdjustmentLineCommand body, IMediator m) =>
+{
+    await m.Send(body with { AdjustmentId = id, LineId = lineId });
+    return Results.NoContent();
 });
 
 adj.MapPost("/{id:guid}/post", async (Guid id, IMediator m) =>

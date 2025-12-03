@@ -48,10 +48,15 @@ public sealed class ReceiveReceiptHandler : IRequestHandler<ReceiveReceiptComman
 
                         if (stock is null)
                         {
+                            // TODO: دریافت SKU از Catalog Service (فعلاً placeholder)
+                            // در آینده باید از ICatalogProductService.GetSkuAsync استفاده شود
+                            var sku = $"PROD-{l.ProductId}"; // Placeholder - باید از Catalog دریافت شود
+                            
                             stock = StockItem.Create(
                                 productId: l.ProductId,
                                 variantId: l.VariantId,
                                 warehouseId: rec.WarehouseId,
+                                sku: sku,
                                 lotNumber: l.LotNumber,
                                 expiry: l.ExpiryDate,
                                 shelfId: null

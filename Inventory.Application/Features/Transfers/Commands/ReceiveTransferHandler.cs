@@ -60,10 +60,12 @@ public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferComm
 
                     if (destItem is null)
                     {
+                        // استفاده از SKU موجود در StockItem مبدا (denormalized)
                         destItem = StockItem.Create(
                             productId: srcItem.ProductId,
                             variantId: srcItem.VariantId,
                             warehouseId: destWarehouseId,
+                            sku: srcItem.Sku, // استفاده از SKU موجود
                             lotNumber: srcItem.LotNumber,
                             expiry: srcItem.ExpiryDate
                         );

@@ -14,6 +14,14 @@ public sealed class StockItemConfig : IEntityTypeConfiguration<StockItem>
         b.HasIndex(x => new { x.ProductId, x.VariantId, x.WarehouseId, x.LotNumber, x.ExpiryDate, x.ShelfId })
             .IsUnique();
 
+        // SKU configuration: required, indexed for warehouse operations
+        b.Property(x => x.Sku)
+            .IsRequired()
+            .HasMaxLength(100);
+
+        b.HasIndex(x => x.Sku)
+            .HasDatabaseName("IX_StockItem_Sku");
+
         b.Property(x => x.LotNumber).HasMaxLength(64);
         b.Property(x => x.ExpiryDate).HasColumnType("datetime2");
 

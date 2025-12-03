@@ -54,6 +54,14 @@ public sealed class Receipt : AggregateRoot<Guid>
         Touch();
     }
 
+    public void UpdateHeader(string? externalRef, DateTime? docDateUtc)
+    {
+        EnsureDraft();
+        if (externalRef != null) ExternalRef = string.IsNullOrWhiteSpace(externalRef) ? null : externalRef.Trim();
+        if (docDateUtc.HasValue) DocDate = DateTime.SpecifyKind(docDateUtc.Value, DateTimeKind.Utc);
+        Touch();
+    }
+
     public void Receive(DateTime? whenUtc = null)
     {
         EnsureStatus(ReceiptStatus.Draft);
@@ -124,4 +132,15 @@ public sealed class ReceiptLine : BaseEntity<Guid>
         };
 
     internal void Renumber(int no) => LineNo = no;
+
+    public void UpdateQty(decimal qty)
+    {
+        if (qty <= 0) throw new ArgumentOutOfRangeException(nameof(qty));
+        Qty = qty;
+    }
+
+    public void UpdateUnitCost(decimal? unitCost)
+    {
+        UnitCost = unitCost;
+    }
 }

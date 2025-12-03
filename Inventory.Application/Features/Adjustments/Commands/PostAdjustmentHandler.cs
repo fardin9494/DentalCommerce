@@ -49,7 +49,18 @@ public sealed class PostAdjustmentHandler : IRequestHandler<PostAdjustmentComman
 
                         if (si is null)
                         {
-                            si = StockItem.Create(l.ProductId, l.VariantId, adj.WarehouseId, l.LotNumber, l.ExpiryDate);
+                            // TODO: دریافت SKU از Catalog Service (فعلاً placeholder)
+                            // در آینده باید از ICatalogProductService.GetSkuAsync استفاده شود
+                            var sku = $"PROD-{l.ProductId}"; // Placeholder - باید از Catalog دریافت شود
+                            
+                            si = StockItem.Create(
+                                productId: l.ProductId,
+                                variantId: l.VariantId,
+                                warehouseId: adj.WarehouseId,
+                                sku: sku,
+                                lotNumber: l.LotNumber,
+                                expiry: l.ExpiryDate
+                            );
                             _db.StockItems.Add(si);
                         }
 

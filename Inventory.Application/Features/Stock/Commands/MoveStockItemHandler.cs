@@ -58,7 +58,16 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
 
                     if (dest is null)
                     {
-                        dest = StockItem.Create(source.ProductId, source.VariantId, source.WarehouseId, source.LotNumber, source.ExpiryDate, req.TargetShelfId);
+                        // استفاده از SKU موجود در StockItem مبدا (denormalized)
+                        dest = StockItem.Create(
+                            productId: source.ProductId,
+                            variantId: source.VariantId,
+                            warehouseId: source.WarehouseId,
+                            sku: source.Sku, // استفاده از SKU موجود
+                            lotNumber: source.LotNumber,
+                            expiry: source.ExpiryDate,
+                            shelfId: req.TargetShelfId
+                        );
                         _db.StockItems.Add(dest);
 
                         var sourceCost = await _db.InventoryCosts.OrderByDescending(c => c.RecordedAt).FirstOrDefaultAsync(c => c.StockItemId == source.Id, ct);

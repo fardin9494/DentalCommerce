@@ -53,6 +53,14 @@ public sealed class Adjustment : AggregateRoot<Guid>
 
     public void SetNote(string? note) { EnsureDraft(); Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(); Touch(); }
 
+    public void UpdateHeader(string? note, DateTime? docDateUtc)
+    {
+        EnsureDraft();
+        if (note != null) Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        if (docDateUtc.HasValue) DocDate = DateTime.SpecifyKind(docDateUtc.Value, DateTimeKind.Utc);
+        Touch();
+    }
+
     public void Post(DateTime? whenUtc = null)
     {
         EnsureDraft();
@@ -101,4 +109,10 @@ public sealed class AdjustmentLine : BaseEntity<Guid>
         };
 
     internal void Renumber(int no) => LineNo = no;
+
+    public void UpdateQtyDelta(decimal qtyDelta)
+    {
+        if (qtyDelta == 0) throw new InvalidOperationException("مقدار نباید صفر باشد.");
+        QtyDelta = qtyDelta;
+    }
 }

@@ -47,6 +47,14 @@ public sealed class Issue : AggregateRoot<Guid>
         Touch();
     }
 
+    public void UpdateHeader(string? externalRef, DateTime? docDateUtc)
+    {
+        EnsureDraft();
+        if (externalRef != null) ExternalRef = string.IsNullOrWhiteSpace(externalRef) ? null : externalRef.Trim();
+        if (docDateUtc.HasValue) DocDate = DateTime.SpecifyKind(docDateUtc.Value, DateTimeKind.Utc);
+        Touch();
+    }
+
     public void Post(DateTime? whenUtc = null)
     {
         EnsureDraft();
@@ -120,6 +128,13 @@ public sealed class IssueLine : BaseEntity<Guid>
         };
 
     internal void Renumber(int no) => LineNo = no;
+
+    public void UpdateQty(decimal qty)
+    {
+        if (qty <= 0) throw new ArgumentOutOfRangeException(nameof(qty));
+        if (AllocatedQty > qty) throw new InvalidOperationException("مقدار جدید نمی‌تواند کمتر از مقدار تخصیص داده شده باشد.");
+        RequestedQty = qty;
+    }
 
     internal IssueAllocation AddAllocation(Guid stockItemId, decimal qty)
     {
