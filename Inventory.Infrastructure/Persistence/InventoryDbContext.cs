@@ -45,19 +45,47 @@ public sealed class InventoryDbContext : DbContext
         {
             if (entityType.ClrType is null) continue;
 
-            var prop = entityType.FindProperty(rowVersionPropertyName) ?? entityType.FindProperty("RowVersion");
-            if (prop is null) continue;
-
+            var isAggregateRoot = IsAggregateRoot(entityType.ClrType);
+            
+            // ابتدا سعی می‌کنیم RowVersion را از AggregateRoot پیدا کنیم
+            var prop = entityType.FindProperty(rowVersionPropertyName);
+            
+            // اگر پیدا نشد و entity یک child entity است که در دیتابیس RowVersion دارد،
+            // باید آن را به صورت shadow property اضافه کنیم
+            if (prop is null && !isAggregateRoot)
+            {
+                // بررسی می‌کنیم که آیا این entity در migration قبلی RowVersion داشته یا نه
+                // لیست entities که در migration AddRowVersionToInventoryDocs RowVersion اضافه شده:
+                var entitiesWithRowVersionInDb = new[]
+                {
+                    "ReceiptLine", "IssueLine", "IssueAllocation", "TransferLine", 
+                    "TransferSegment", "AdjustmentLine", "InventoryCost"
+                };
+                
+                var entityName = entityType.ClrType.Name;
+                if (entitiesWithRowVersionInDb.Contains(entityName))
+                {
+                    // اضافه کردن RowVersion به صورت shadow property برای child entities
+                    var entityBuilder = modelBuilder.Entity(entityType.ClrType);
+                    entityBuilder.Property<byte[]>("RowVersion")
+                        .IsRequired() // non-nullable برای هماهنگی با دیتابیس
+                        .HasColumnType("rowversion")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .IsConcurrencyToken(false); // برای child entities concurrency token نیست
+                }
+                
+                continue;
+            }
+            
+            // اگر RowVersion پیدا شد (از AggregateRoot)
+            if (prop is not null)
+            {
+                // پیکربندی RowVersion
                 prop.ValueGenerated = ValueGenerated.OnAddOrUpdate;
                 prop.SetColumnType("rowversion");
-
-            var isAggregateRoot = IsAggregateRoot(entityType.ClrType);
-            prop.IsConcurrencyToken = isAggregateRoot;
-
-            if (!isAggregateRoot)
-            {
-                prop.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
-                prop.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+                
+                // فقط برای AggregateRoots به عنوان ConcurrencyToken استفاده می‌شود
+                prop.IsConcurrencyToken = isAggregateRoot;
             }
         }
     }
