@@ -11,6 +11,7 @@ using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Inventory.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,6 +34,32 @@ builder.Services.AddMediatR(cfg =>
 });
 
 builder.Services.AddValidatorsFromAssembly(typeof(Inventory.Application.Markers.AssemblyMarker).Assembly);
+
+// Anti-Corruption Layer: Catalog API Gateway
+var catalogApiUrl = builder.Configuration["CatalogApiUrl"]
+    ?? throw new InvalidOperationException("CatalogApiUrl is not configured in appsettings.json");
+
+// Service-to-Service authentication token for Catalog API
+var catalogApiToken = builder.Configuration["CatalogApi:ServiceToken"]
+    ?? builder.Configuration["CatalogApi:Password"] // Fallback to Password for backward compatibility
+    ?? throw new InvalidOperationException("CatalogApi:ServiceToken or CatalogApi:Password is not configured in appsettings.json");
+
+builder.Services.AddHttpClient("CatalogApi", client =>
+{
+    client.BaseAddress = new Uri(catalogApiUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+    // Add Bearer token for service-to-service authentication
+    client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", catalogApiToken);
+});
+
+// Register CatalogApiGateway with adapter pattern to match ICatalogGateway interface
+builder.Services.AddScoped<Inventory.Application.Common.Interfaces.ICatalogGateway>(sp =>
+{
+    var gateway = sp.GetRequiredService<Inventory.Infrastructure.Gateways.CatalogApiGateway>();
+    return new CatalogGatewayAdapter(gateway);
+});
+builder.Services.AddScoped<Inventory.Infrastructure.Gateways.CatalogApiGateway>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

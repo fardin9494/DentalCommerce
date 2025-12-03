@@ -1,3 +1,4 @@
+using Inventory.Application.Common.Interfaces;
 using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
 using Inventory.Infrastructure.Persistence;
@@ -9,10 +10,12 @@ namespace Inventory.Application.Features.Receipts.Commands;
 public sealed class ReceiveReceiptHandler : IRequestHandler<ReceiveReceiptCommand, Unit>
 {
     private readonly InventoryDbContext _db;
+    private readonly ICatalogGateway _catalogGateway;
 
-    public ReceiveReceiptHandler(InventoryDbContext db)
+    public ReceiveReceiptHandler(InventoryDbContext db, ICatalogGateway catalogGateway)
     {
         _db = db;
+        _catalogGateway = catalogGateway;
     }
 
     public async Task<Unit> Handle(ReceiveReceiptCommand req, CancellationToken ct)
@@ -48,15 +51,21 @@ public sealed class ReceiveReceiptHandler : IRequestHandler<ReceiveReceiptComman
 
                         if (stock is null)
                         {
-                            // TODO: دریافت SKU از Catalog Service (فعلاً placeholder)
-                            // در آینده باید از ICatalogProductService.GetSkuAsync استفاده شود
-                            var sku = $"PROD-{l.ProductId}"; // Placeholder - باید از Catalog دریافت شود
-                            
+                            // Fetch authoritative SKU from Catalog service via ACL
+                            var catalogItem = await _catalogGateway.GetCatalogItemAsync(l.ProductId, l.VariantId, ct);
+                            if (catalogItem is null)
+                            {
+                                var errorMessage = l.VariantId.HasValue
+                                    ? $"محصول با شناسه {l.ProductId} یا variant با شناسه {l.VariantId.Value} در کاتالوگ یافت نشد یا غیرفعال است."
+                                    : $"محصول با شناسه {l.ProductId} در کاتالوگ یافت نشد.";
+                                throw new InvalidOperationException(errorMessage);
+                            }
+
                             stock = StockItem.Create(
                                 productId: l.ProductId,
                                 variantId: l.VariantId,
                                 warehouseId: rec.WarehouseId,
-                                sku: sku,
+                                sku: catalogItem.Sku,
                                 lotNumber: l.LotNumber,
                                 expiry: l.ExpiryDate,
                                 shelfId: null

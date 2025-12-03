@@ -1,4 +1,5 @@
-﻿using Inventory.Infrastructure.Persistence;
+﻿using Inventory.Application.Common.Interfaces;
+using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,7 +8,13 @@ namespace Inventory.Application.Features.Receipts.Commands;
 public sealed class AddReceiptLineHandler : IRequestHandler<AddReceiptLineCommand, Guid>
 {
     private readonly InventoryDbContext _db;
-    public AddReceiptLineHandler(InventoryDbContext db) => _db = db;
+    private readonly ICatalogGateway _catalogGateway;
+
+    public AddReceiptLineHandler(InventoryDbContext db, ICatalogGateway catalogGateway)
+    {
+        _db = db;
+        _catalogGateway = catalogGateway;
+    }
 
     public async Task<Guid> Handle(AddReceiptLineCommand req, CancellationToken ct)
     {
@@ -28,6 +35,16 @@ public sealed class AddReceiptLineHandler : IRequestHandler<AddReceiptLineComman
                         .Include(r => r.Lines)
                         .FirstOrDefaultAsync(r => r.Id == req.ReceiptId, ct)
                         ?? throw new InvalidOperationException("رسید پیدا نشد.");
+
+                    // Validate product and variant exist in Catalog before adding line
+                    var catalogItem = await _catalogGateway.GetCatalogItemAsync(req.ProductId, req.VariantId, ct);
+                    if (catalogItem is null)
+                    {
+                        var errorMessage = req.VariantId.HasValue
+                            ? $"محصول با شناسه {req.ProductId} یا variant با شناسه {req.VariantId.Value} در کاتالوگ یافت نشد یا غیرفعال است."
+                            : $"محصول با شناسه {req.ProductId} در کاتالوگ یافت نشد.";
+                        throw new InvalidOperationException(errorMessage);
+                    }
 
                     var line = rec.AddLine(req.ProductId, req.VariantId, req.Qty, req.LotNumber, req.ExpiryDateUtc, req.UnitCost);
                     _db.Entry(line).State = EntityState.Added;

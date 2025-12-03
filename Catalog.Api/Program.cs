@@ -88,15 +88,17 @@ app.UseCors(AdminCorsPolicy);
 // is hashed with SHA-256 and compared to that hash. Otherwise we
 // fall back to plain Admin:Password comparison. This is temporary
 // until full auth/roles are implemented.
+// Service-to-Service authentication: ServiceToken allows internal services to call Catalog API
 var adminPassword = app.Configuration["Admin:Password"];
 var adminPasswordHashHex = app.Configuration["Admin:PasswordHash"];
+var serviceToken = app.Configuration["Service:Token"]; // Service-to-service token
 byte[]? adminPasswordHash = null;
 if (!string.IsNullOrWhiteSpace(adminPasswordHashHex))
 {
     adminPasswordHash = Convert.FromHexString(adminPasswordHashHex);
 }
 
-if (!string.IsNullOrWhiteSpace(adminPassword) || adminPasswordHash is not null)
+if (!string.IsNullOrWhiteSpace(adminPassword) || adminPasswordHash is not null || !string.IsNullOrWhiteSpace(serviceToken))
 {
     app.Use(async (ctx, next) =>
     {
@@ -128,12 +130,19 @@ if (!string.IsNullOrWhiteSpace(adminPassword) || adminPasswordHash is not null)
             var token = auth[prefix.Length..].Trim();
             var ok = false;
 
-            if (adminPasswordHash is not null)
+            // First check service-to-service token (plain comparison, faster for internal services)
+            if (!string.IsNullOrWhiteSpace(serviceToken) && string.Equals(token, serviceToken, StringComparison.Ordinal))
+            {
+                ok = true;
+            }
+            // Then check admin password hash
+            else if (adminPasswordHash is not null)
             {
                 var bytes = Encoding.UTF8.GetBytes(token);
                 var hash = SHA256.HashData(bytes);
                 ok = CryptographicOperations.FixedTimeEquals(hash, adminPasswordHash);
             }
+            // Finally check plain admin password
             else if (!string.IsNullOrWhiteSpace(adminPassword))
             {
                 ok = string.Equals(token, adminPassword, StringComparison.Ordinal);
@@ -348,6 +357,13 @@ app.MapGet("/api/catalog/products/{id:guid}", async (Guid id, IMediator mediator
 {
     var dto = await mediator.Send(new GetProductByIdQuery(id));
     return dto is null ? Results.NotFound() : Results.Ok(dto);
+});
+
+// Validation endpoint for Inventory service
+catalog.MapGet("/products/{id:guid}/validate", async (Guid id, Guid? variantId, IMediator mediator) =>
+{
+    var exists = await mediator.Send(new ValidateProductExistsQuery(id, variantId));
+    return exists ? Results.Ok(new { exists = true }) : Results.NotFound(new { exists = false });
 });
 catalog.MapGet("/products", async (
     int page, int pageSize, string? search, Guid? brandId, Guid? categoryId, Guid? storeId, bool? visibleInStore, string? sort,
