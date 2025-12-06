@@ -12,6 +12,10 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Inventory.Api;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -64,9 +68,28 @@ builder.Services.AddScoped<Inventory.Infrastructure.Gateways.CatalogApiGateway>(
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddCors(options =>
+// CORS: single admin policy; dev vs production
+const string AdminCorsPolicy = "admin";
+var adminOrigin = builder.Configuration["Cors:AdminOrigin"]; // e.g. https://admin.yourdomain.com
+builder.Services.AddCors(opt =>
 {
-    options.AddPolicy("AllowAll", b => b.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+    opt.AddPolicy(AdminCorsPolicy, p =>
+    {
+        if (builder.Environment.IsDevelopment())
+        {
+            p.WithOrigins("http://localhost:5173", "https://localhost:5173")
+             .AllowAnyHeader()
+             .AllowAnyMethod()
+             .AllowCredentials();
+        }
+        else if (!string.IsNullOrWhiteSpace(adminOrigin))
+        {
+            p.WithOrigins(adminOrigin)
+             .AllowAnyHeader()
+             .AllowAnyMethod()
+             .AllowCredentials();
+        }
+    });
 });
 
 var app = builder.Build();
@@ -78,11 +101,100 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors("AllowAll");
+// Run CORS before the admin gate so even 401 responses carry the headers
+app.UseCors(AdminCorsPolicy);
+
+// Simple shared-password gate for admin APIs (/api/inventory/*).
+// If Admin:PasswordHash is configured, the incoming bearer token
+// is hashed with SHA-256 and compared to that hash. Otherwise we
+// fall back to plain Admin:Password comparison. This is temporary
+// until full auth/roles are implemented.
+var adminPassword = app.Configuration["Admin:Password"];
+var adminPasswordHashHex = app.Configuration["Admin:PasswordHash"];
+byte[]? adminPasswordHash = null;
+if (!string.IsNullOrWhiteSpace(adminPasswordHashHex))
+{
+    adminPasswordHash = Convert.FromHexString(adminPasswordHashHex);
+}
+
+if (!string.IsNullOrWhiteSpace(adminPassword) || adminPasswordHash is not null)
+{
+    app.Use(async (ctx, next) =>
+    {
+        try
+        {
+            // Allow CORS preflight without auth
+            if (HttpMethods.IsOptions(ctx.Request.Method))
+            {
+                await next();
+                return;
+            }
+
+            if (ctx.Request.Path.StartsWithSegments("/api/inventory"))
+            {
+                if (!ctx.Request.Headers.TryGetValue("Authorization", out var authHeader))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    ctx.Response.ContentType = "text/plain";
+                    await ctx.Response.WriteAsync("Unauthorized");
+                    return;
+                }
+
+                const string prefix = "Bearer ";
+                var auth = authHeader.ToString();
+                if (!auth.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    ctx.Response.ContentType = "text/plain";
+                    await ctx.Response.WriteAsync("Unauthorized");
+                    return;
+                }
+
+                var token = auth[prefix.Length..].Trim();
+                var ok = false;
+
+                // Check admin password hash
+                if (adminPasswordHash is not null)
+                {
+                    var bytes = Encoding.UTF8.GetBytes(token);
+                    var hash = SHA256.HashData(bytes);
+                    ok = CryptographicOperations.FixedTimeEquals(hash, adminPasswordHash);
+                }
+                // Fall back to plain admin password
+                else if (!string.IsNullOrWhiteSpace(adminPassword))
+                {
+                    ok = string.Equals(token, adminPassword, StringComparison.Ordinal);
+                }
+
+                if (!ok)
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    ctx.Response.ContentType = "text/plain";
+                    await ctx.Response.WriteAsync("Unauthorized");
+                    return;
+                }
+            }
+
+            await next();
+        }
+        catch (Exception ex)
+        {
+            var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
+            logger.LogError(ex, "Error in authentication middleware for {Path}", ctx.Request.Path);
+            ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            ctx.Response.ContentType = "text/plain";
+            await ctx.Response.WriteAsync("Internal Server Error");
+        }
+    });
+}
 
 // ==========================================
 // INVENTORY ENDPOINTS
 // ==========================================
+
+// Authentication check endpoint
+var auth = app.MapGroup("/api/inventory").DisableAntiforgery();
+auth.MapGet("/auth/check", () => Results.NoContent());
 
 // --- Receipts (ورود به انبار) ---
 var receipts = app.MapGroup("/api/inventory/receipts").DisableAntiforgery();
