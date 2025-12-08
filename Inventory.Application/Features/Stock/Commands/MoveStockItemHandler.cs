@@ -77,6 +77,22 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
                         }
                     }
 
+                    // دریافت نام قفسه‌ها برای ثبت در کاردکس
+                    var sourceShelfName = source.ShelfId.HasValue
+                        ? await _db.StockShelves
+                            .Where(s => s.Id == source.ShelfId.Value)
+                            .Select(s => s.Name)
+                            .FirstOrDefaultAsync(ct) ?? "نامشخص"
+                        : "بدون قفسه";
+                    
+                    var destShelfName = await _db.StockShelves
+                        .Where(s => s.Id == req.TargetShelfId)
+                        .Select(s => s.Name)
+                        .FirstOrDefaultAsync(ct) ?? "نامشخص";
+
+                    var totalQty = movingAvailable + movingBlocked;
+                    var note = req.Note ?? $"انتقال از قفسه {sourceShelfName} به قفسه {destShelfName}";
+
                     if (movingAvailable > 0)
                     {
                         source.Decrease(movingAvailable);
@@ -92,6 +108,40 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
                         dest.Increase(movingBlocked);
                         dest.Block(movingBlocked, reason);
                     }
+
+                    // ثبت در کاردکس: کاهش از قفسه مبدا
+                    var sourceEntry = StockLedgerEntry.Create(
+                        timestampUtc: DateTime.UtcNow,
+                        productId: source.ProductId,
+                        variantId: source.VariantId,
+                        warehouseId: source.WarehouseId,
+                        lotNumber: source.LotNumber,
+                        expiryDate: source.ExpiryDate,
+                        deltaQty: -totalQty,
+                        type: StockMovementType.ShelfTransferOut,
+                        refDocType: "StockMove",
+                        refDocId: source.Id, // استفاده از source StockItemId به عنوان ref
+                        unitCost: null,
+                        note: note
+                    );
+                    _db.StockLedger.Add(sourceEntry);
+
+                    // ثبت در کاردکس: افزایش در قفسه مقصد
+                    var destEntry = StockLedgerEntry.Create(
+                        timestampUtc: DateTime.UtcNow,
+                        productId: dest.ProductId,
+                        variantId: dest.VariantId,
+                        warehouseId: dest.WarehouseId,
+                        lotNumber: dest.LotNumber,
+                        expiryDate: dest.ExpiryDate,
+                        deltaQty: +totalQty,
+                        type: StockMovementType.ShelfTransferIn,
+                        refDocType: "StockMove",
+                        refDocId: dest.Id, // استفاده از dest StockItemId به عنوان ref
+                        unitCost: null,
+                        note: note
+                    );
+                    _db.StockLedger.Add(destEntry);
 
                     await _db.SaveChangesAsync(ct);
                     await tx.CommitAsync(ct);

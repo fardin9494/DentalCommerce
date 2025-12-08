@@ -11,6 +11,10 @@ import { AdjustmentsListPage } from '../features/adjustments/routes/AdjustmentsL
 import { AdjustmentDetailPage } from '../features/adjustments/routes/AdjustmentDetailPage'
 import { WarehousesPage } from '../features/warehouses/routes/WarehousesPage'
 import { StockItemsPage } from '../features/stock-items/routes/StockItemsPage'
+import { ShelvesPage } from '../features/shelves/routes/ShelvesPage'
+import { PutAwayPage } from '../features/put-away/routes/PutAwayPage'
+import { ShelfTransferPage } from '../features/shelf-transfer/routes/ShelfTransferPage'
+import { StockLedgerPage } from '../features/stock-ledger/routes/StockLedgerPage'
 
 const router = createBrowserRouter([
   {
@@ -29,6 +33,10 @@ const router = createBrowserRouter([
       { path: 'adjustments/:id', element: <AdjustmentDetailPage /> },
       { path: 'warehouses', element: <WarehousesPage /> },
       { path: 'stock-items', element: <StockItemsPage /> },
+      { path: 'shelves', element: <ShelvesPage /> },
+      { path: 'put-away', element: <PutAwayPage /> },
+      { path: 'shelf-transfer', element: <ShelfTransferPage /> },
+      { path: 'stock-ledger', element: <StockLedgerPage /> },
     ],
   },
 ])

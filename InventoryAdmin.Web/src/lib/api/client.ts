@@ -34,13 +34,20 @@ export async function fetchJson<T>(path: string, opts: Options = {}): Promise<T>
     try {
       if (isJson) {
         const data = await res.json()
-        message = data.message || data.error || message
+        // Try to get error message from various possible fields
+        message = data.detail || data.message || data.error || data.title || message
         details = data
       } else {
         message = await res.text()
       }
     } catch {}
-    const err: ApiError = { status: res.status, message, details }
+    
+    // Create a more descriptive error message
+    const errorMessage = details && typeof details === 'object' && 'error' in details
+      ? String(details.error)
+      : message
+    
+    const err: ApiError = { status: res.status, message: errorMessage, details }
     throw err
   }
 

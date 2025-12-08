@@ -10,8 +10,8 @@ public sealed record ReceiptDetailsQuery(Guid Id) : IRequest<ReceiptDetailsDto?>
 public sealed record ReceiptDetailsDto(
     Guid Id,
     Guid WarehouseId,
-    ReceiptStatus Status,
-    ReceiptReason Reason,
+    string Status,      // Changed to string
+    string Reason,      // Changed to string
     string? ExternalRef,
     DateTime DocDate,
     DateTime? ReceivedAt,
@@ -58,11 +58,15 @@ public sealed class GetReceiptDetailsHandler : IRequestHandler<ReceiptDetailsQue
             ))
             .ToList();
 
+        // Handle invalid enum values (0) that might exist in old data
+        var status = Enum.IsDefined(typeof(ReceiptStatus), rec.Status) ? rec.Status.ToString() : "Draft";
+        var reason = Enum.IsDefined(typeof(ReceiptReason), rec.Reason) ? rec.Reason.ToString() : "Other";
+
         return new ReceiptDetailsDto(
             rec.Id,
             rec.WarehouseId,
-            rec.Status,
-            rec.Reason,
+            status,
+            reason,
             rec.ExternalRef,
             rec.DocDate,
             rec.ReceivedAt,
@@ -71,5 +75,3 @@ public sealed class GetReceiptDetailsHandler : IRequestHandler<ReceiptDetailsQue
         );
     }
 }
-
-

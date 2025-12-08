@@ -1,5 +1,11 @@
-import { fetchJson } from '@/lib/api/client'
-import { ReceiptDetailSchema, CreateReceiptSchema, AddReceiptLineSchema, UpdateReceiptHeaderSchema, UpdateReceiptLineSchema, type ReceiptDetail, type CreateReceiptDto, type AddReceiptLineDto, type UpdateReceiptHeaderDto, type UpdateReceiptLineDto } from './types'
+import { fetchJson, toQuery } from '@/lib/api/client'
+import { ReceiptDetailSchema, CreateReceiptSchema, AddReceiptLineSchema, UpdateReceiptHeaderSchema, UpdateReceiptLineSchema, ReceiptsListResultSchema, type ReceiptDetail, type CreateReceiptDto, type AddReceiptLineDto, type UpdateReceiptHeaderDto, type UpdateReceiptLineDto, type ReceiptsListResult, type ReceiptsListFilters } from './types'
+
+export async function getReceiptsList(filters: ReceiptsListFilters = {}): Promise<ReceiptsListResult> {
+  const query = toQuery(filters)
+  const data = await fetchJson<unknown>(`/receipts${query}`)
+  return ReceiptsListResultSchema.parse(data)
+}
 
 export async function getReceipt(id: string): Promise<ReceiptDetail> {
   const data = await fetchJson<unknown>(`/receipts/${id}`)

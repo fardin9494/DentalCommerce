@@ -49,6 +49,35 @@ public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferComm
                 await using var tx = await _db.Database.BeginTransactionAsync(ct);
                 try
                 {
+                    // Reload transfer and segment in case of retry
+                    if (attempt > 1)
+                    {
+                        tr = await _db.Transfers
+                            .Include(t => t.Lines)
+                            .ThenInclude(l => l.Segments)
+                            .FirstOrDefaultAsync(t => t.Id == req.TransferId, ct)
+                            ?? throw new InvalidOperationException($"سند انتقال {req.TransferId} در تلاش مجدد {attempt} یافت نشد.");
+
+                        if (tr.Status is not (TransferStatus.Shipped or TransferStatus.PartiallyReceived))
+                            throw new InvalidOperationException(
+                                $"وضعیت سند انتقال {req.TransferId} در تلاش مجدد {attempt} تغییر کرده است. " +
+                                $"وضعیت فعلی: {tr.Status}"
+                            );
+
+                        segment = tr.Lines.SelectMany(l => l.Segments)
+                                   .FirstOrDefault(s => s.Id == req.SegmentId)
+                                   ?? throw new InvalidOperationException($"سگمنت {req.SegmentId} در تلاش مجدد {attempt} یافت نشد.");
+
+                        if (req.Qty > segment.RemainingToReceive)
+                            throw new InvalidOperationException(
+                                $"مقدار درخواستی {req.Qty} بیش از مقدار باقی‌مانده {segment.RemainingToReceive} است. " +
+                                $"(SegmentId: {req.SegmentId}, TransferId: {req.TransferId})"
+                            );
+
+                        srcItem = await _db.StockItems.FirstOrDefaultAsync(x => x.Id == segment.StockItemId, ct)
+                                  ?? throw new InvalidOperationException($"StockItem مبدا {segment.StockItemId} در تلاش مجدد {attempt} یافت نشد.");
+                    }
+
                     // StockItem مقصد را پیدا یا ایجاد کن
                     var destItem = await _db.StockItems.FirstOrDefaultAsync(si =>
                             si.ProductId == srcItem.ProductId &&
@@ -61,66 +90,126 @@ public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferComm
                     if (destItem is null)
                     {
                         // استفاده از SKU موجود در StockItem مبدا (denormalized)
-                        destItem = StockItem.Create(
-                            productId: srcItem.ProductId,
-                            variantId: srcItem.VariantId,
-                            warehouseId: destWarehouseId,
-                            sku: srcItem.Sku, // استفاده از SKU موجود
-                            lotNumber: srcItem.LotNumber,
-                            expiry: srcItem.ExpiryDate
-                        );
-                        _db.StockItems.Add(destItem);
+                        try
+                        {
+                            destItem = StockItem.Create(
+                                productId: srcItem.ProductId,
+                                variantId: srcItem.VariantId,
+                                warehouseId: destWarehouseId,
+                                sku: srcItem.Sku, // استفاده از SKU موجود
+                                lotNumber: srcItem.LotNumber,
+                                expiry: srcItem.ExpiryDate
+                            );
+                            _db.StockItems.Add(destItem);
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new InvalidOperationException(
+                                $"خطا در ایجاد StockItem مقصد برای محصول {srcItem.ProductId} (SKU: {srcItem.Sku}): {ex.Message}. " +
+                                $"(TransferId: {tr.Id}, SegmentId: {segment.Id}, WarehouseId: {destWarehouseId})",
+                                ex
+                            );
+                        }
                     }
 
-                    // افزایش موجودی مقصد
-                    destItem.Increase(req.Qty);
+                    try
+                    {
+                        // افزایش موجودی مقصد
+                        destItem.Increase(req.Qty);
+                    }
+                    catch (ArgumentOutOfRangeException ex)
+                    {
+                        throw new ArgumentException(
+                            $"مقدار نامعتبر برای افزایش موجودی: {req.Qty}. " +
+                            $"(TransferId: {tr.Id}, SegmentId: {segment.Id}, StockItemId: {destItem.Id})",
+                            ex
+                        );
+                    }
 
-                    // ثبت در دفتر انبار
-                    var led = StockLedgerEntry.Create(
-                        timestampUtc: DateTime.UtcNow,
-                        productId: destItem.ProductId,
-                        variantId: destItem.VariantId,
-                        warehouseId: destItem.WarehouseId, // مقصد
-                        lotNumber: destItem.LotNumber,
-                        expiryDate: destItem.ExpiryDate,
-                        deltaQty: +req.Qty,
-                        type: StockMovementType.TransferIn,
-                        refDocType: nameof(Transfer),
-                        refDocId: tr.Id,
-                        unitCost: null,
-                        note: tr.ExternalRef
-                    );
-                    _db.StockLedger.Add(led);
+                    try
+                    {
+                        // ثبت در دفتر انبار
+                        var led = StockLedgerEntry.Create(
+                            timestampUtc: DateTime.UtcNow,
+                            productId: destItem.ProductId,
+                            variantId: destItem.VariantId,
+                            warehouseId: destItem.WarehouseId, // مقصد
+                            lotNumber: destItem.LotNumber,
+                            expiryDate: destItem.ExpiryDate,
+                            deltaQty: +req.Qty,
+                            type: StockMovementType.TransferIn,
+                            refDocType: nameof(Transfer),
+                            refDocId: tr.Id,
+                            unitCost: null,
+                            note: tr.ExternalRef
+                        );
+                        _db.StockLedger.Add(led);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            $"خطا در ایجاد رکورد کاردکس برای StockItem مقصد {destItem.Id} (SKU: {destItem.Sku}): {ex.Message}. " +
+                            $"(TransferId: {tr.Id}, SegmentId: {segment.Id})",
+                            ex
+                        );
+                    }
 
-                    // به‌روز کردن سگمنت در دامنه
-                    tr.ReceiveOnSegment(segment.Id, req.Qty);
-                    tr.AfterReceiveEvaluateCompletion();
+                    try
+                    {
+                        // به‌روز کردن سگمنت در دامنه
+                        tr.ReceiveOnSegment(segment.Id, req.Qty);
+                        tr.AfterReceiveEvaluateCompletion();
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        throw new InvalidOperationException(
+                            $"خطا در ثبت دریافت سگمنت {segment.Id}: {ex.Message}. " +
+                            $"(TransferId: {tr.Id}, SegmentId: {segment.Id}, Qty: {req.Qty}, " +
+                            $"RemainingToReceive: {segment.RemainingToReceive})",
+                            ex
+                        );
+                    }
 
                     await _db.SaveChangesAsync(ct);
                     await tx.CommitAsync(ct);
                     break;
                 }
-                catch (DbUpdateConcurrencyException)
+                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
                 {
                     await tx.RollbackAsync(ct);
                     _db.ChangeTracker.Clear();
-
-                    // re-load برای تلاش بعدی
-                    tr = await _db.Transfers
-                        .Include(t => t.Lines)
-                        .ThenInclude(l => l.Segments)
-                        .FirstOrDefaultAsync(t => t.Id == req.TransferId, ct)
-                        ?? throw new InvalidOperationException("سند انتقال در تلاش مجدد یافت نشد.");
-
-                    segment = tr.Lines.SelectMany(l => l.Segments)
-                               .FirstOrDefault(s => s.Id == req.SegmentId)
-                               ?? throw new InvalidOperationException("سگمنت در تلاش مجدد یافت نشد.");
-
-                    srcItem = await _db.StockItems.FirstOrDefaultAsync(x => x.Id == segment.StockItemId, ct)
-                              ?? throw new InvalidOperationException("StockItem مبدا در تلاش مجدد یافت نشد.");
-
-                    if (attempt == maxAttempts)
-                        throw;
+                    // Continue to next attempt - reload will happen at the beginning of the loop
+                }
+                catch (InvalidOperationException)
+                {
+                    // Re-throw business logic errors as-is
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
+                    throw;
+                }
+                catch (ArgumentException)
+                {
+                    // Re-throw argument errors as-is
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
+                    throw;
+                }
+                catch (Exception) when (attempt < maxAttempts)
+                {
+                    // Log and retry for other exceptions
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
+                    // Continue to next attempt
+                }
+                catch (Exception ex)
+                {
+                    // Last attempt failed, wrap and throw
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
+                    throw new InvalidOperationException(
+                        $"خطا در ثبت دریافت سند انتقال {req.TransferId} برای سگمنت {req.SegmentId} پس از {maxAttempts} تلاش: {ex.Message}",
+                        ex
+                    );
                 }
             }
         });
@@ -128,3 +217,4 @@ public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferComm
         return Unit.Value;
     }
 }
+

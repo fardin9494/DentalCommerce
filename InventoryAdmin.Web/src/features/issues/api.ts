@@ -1,5 +1,21 @@
 import { fetchJson } from '@/lib/api/client'
-import { IssueDetailSchema, CreateIssueSchema, AddIssueLineSchema, UpdateIssueHeaderSchema, UpdateIssueLineSchema, type IssueDetail, type CreateIssueDto, type AddIssueLineDto, type UpdateIssueHeaderDto, type UpdateIssueLineDto } from './types'
+import { IssueDetailSchema, CreateIssueSchema, AddIssueLineSchema, UpdateIssueHeaderSchema, UpdateIssueLineSchema, IssuesListResultSchema, type IssueDetail, type CreateIssueDto, type AddIssueLineDto, type UpdateIssueHeaderDto, type UpdateIssueLineDto, type IssuesListResult, type IssuesListFilters } from './types'
+
+export async function getIssuesList(filters: IssuesListFilters = {}): Promise<IssuesListResult> {
+  const params = new URLSearchParams()
+  if (filters.page) params.set('page', filters.page.toString())
+  if (filters.pageSize) params.set('pageSize', filters.pageSize.toString())
+  if (filters.warehouseId) params.set('warehouseId', filters.warehouseId)
+  if (filters.status !== undefined) params.set('status', filters.status.toString())
+  if (filters.fromDate) params.set('fromDate', filters.fromDate)
+  if (filters.toDate) params.set('toDate', filters.toDate)
+  if (filters.search) params.set('search', filters.search)
+
+  const queryString = params.toString()
+  const url = `/issues${queryString ? `?${queryString}` : ''}`
+  const data = await fetchJson<unknown>(url)
+  return IssuesListResultSchema.parse(data)
+}
 
 export async function getIssue(id: string): Promise<IssueDetail> {
   const data = await fetchJson<unknown>(`/issues/${id}`)
@@ -30,8 +46,25 @@ export async function updateIssueLine(issueId: string, lineId: string, dto: Upda
   return fetchJson<void>(`/issues/${issueId}/lines/${lineId}`, { method: 'PUT', json: payload })
 }
 
-export async function allocateIssueLineFefo(issueId: string, lineId: string): Promise<unknown> {
-  return fetchJson<unknown>(`/issues/${issueId}/lines/${lineId}/allocate-fefo`, { method: 'POST' })
+export async function allocateIssueLineFefo(issueId: string, lineId: string, preferredWarehouseId?: string): Promise<unknown> {
+  return fetchJson<unknown>(`/issues/${issueId}/lines/${lineId}/allocate-fefo`, { 
+    method: 'POST', 
+    json: preferredWarehouseId || null 
+  })
+}
+
+export async function allocateIssueLineFifo(issueId: string, lineId: string, preferredWarehouseId?: string): Promise<unknown> {
+  return fetchJson<unknown>(`/issues/${issueId}/lines/${lineId}/allocate-fifo`, { 
+    method: 'POST', 
+    json: preferredWarehouseId || null 
+  })
+}
+
+export async function allocateIssueLineLifo(issueId: string, lineId: string, preferredWarehouseId?: string): Promise<unknown> {
+  return fetchJson<unknown>(`/issues/${issueId}/lines/${lineId}/allocate-lifo`, { 
+    method: 'POST', 
+    json: preferredWarehouseId || null 
+  })
 }
 
 export async function postIssue(issueId: string, whenUtc?: string): Promise<void> {
@@ -41,5 +74,7 @@ export async function postIssue(issueId: string, whenUtc?: string): Promise<void
 export async function cancelIssue(issueId: string): Promise<void> {
   return fetchJson<void>(`/issues/${issueId}/cancel`, { method: 'POST' })
 }
+
+
 
 

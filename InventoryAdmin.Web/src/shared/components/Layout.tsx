@@ -21,7 +21,11 @@ export function Layout() {
             <Link to="/transfers" className={navCls(loc.pathname.startsWith('/transfers'))}>انتقالات</Link>
             <Link to="/adjustments" className={navCls(loc.pathname.startsWith('/adjustments'))}>اصلاحات</Link>
             <Link to="/warehouses" className={navCls(loc.pathname.startsWith('/warehouses'))}>انبارها</Link>
+            <Link to="/shelves" className={navCls(loc.pathname.startsWith('/shelves'))}>قفسه‌ها</Link>
+            <Link to="/put-away" className={navCls(loc.pathname.startsWith('/put-away'))}>چیدن کالا</Link>
+            <Link to="/shelf-transfer" className={navCls(loc.pathname.startsWith('/shelf-transfer'))}>انتقال کالا</Link>
             <Link to="/stock-items" className={navCls(loc.pathname.startsWith('/stock-items'))}>موجودی‌ها</Link>
+            <Link to="/stock-ledger" className={navCls(loc.pathname.startsWith('/stock-ledger'))}>کاردکس</Link>
             <button onClick={logout} className="px-3 py-1.5 rounded-md hover:bg-gray-100 text-sm">
               خروج
             </button>

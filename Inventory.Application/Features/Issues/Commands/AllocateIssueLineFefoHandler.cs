@@ -36,8 +36,20 @@ public sealed class AllocateIssueLineFefoHandler : IRequestHandler<AllocateIssue
                     var line = issue.Lines.FirstOrDefault(l => l.Id == req.LineId);
                     if (line is null) throw new InvalidOperationException("خط سند مورد نظر یافت نشد.");
 
-                    // مقدار مورد نیاز برای تخصیص
-                    decimal qtyNeeded = line.RemainingQty;
+                    // آزاد کردن تخصیص‌های قبلی
+                    foreach (var alloc in line.Allocations.ToList())
+                    {
+                        var stock = await _db.StockItems.FirstOrDefaultAsync(x => x.Id == alloc.StockItemId, ct);
+                        if (stock != null)
+                        {
+                            stock.Release(alloc.Qty);
+                        }
+                    }
+                    issue.ClearAllocations(req.LineId);
+                    await _db.SaveChangesAsync(ct);
+
+                    // مقدار مورد نیاز برای تخصیص (حالا باید کل RequestedQty باشد)
+                    decimal qtyNeeded = line.RequestedQty;
 
                     // لیست خروجی برای نمایش به کلاینت (که چه چیزهایی رزرو شد)
                     var allocatedResult = new List<AllocationDto>();
@@ -50,14 +62,24 @@ public sealed class AllocateIssueLineFefoHandler : IRequestHandler<AllocateIssue
                     }
 
                     // 2. استراتژی FEFO: پیدا کردن کاندیداها
-                    // شرط مهم: ShelfId != null (فقط از کالاهای چیده شده در قفسه بردار)
-                    var candidates = await _db.StockItems
+                    // اگر PreferredWarehouseId مشخص شده باشد، فقط از آن انبار استفاده می‌کنیم
+                    // در غیر اینصورت از تمام انبارها جستجو می‌کنیم
+                    var query = _db.StockItems
                         .Where(si => si.ProductId == line.ProductId
                                      && si.VariantId == line.VariantId
-                                     && si.WarehouseId == issue.WarehouseId
                                      && si.ShelfId != null
-                                     && (si.OnHand - si.Reserved - si.Blocked) > 0) // موجودی آزاد دارد
-                        .OrderBy(si => si.ExpiryDate) // اولویت با تاریخ نزدیک‌تر
+                                     && (si.OnHand - si.Reserved - si.Blocked) > 0); // موجودی آزاد دارد
+
+                    // اگر PreferredWarehouseId مشخص شده باشد، فقط از آن انبار استفاده می‌کنیم
+                    if (req.PreferredWarehouseId.HasValue)
+                    {
+                        query = query.Where(si => si.WarehouseId == req.PreferredWarehouseId.Value);
+                    }
+                    // در غیر اینصورت از تمام انبارها جستجو می‌کنیم (بدون فیلتر WarehouseId)
+
+                    var candidates = await query
+                        .OrderBy(si => si.ExpiryDate.HasValue ? 0 : 1) // اولویت با مواردی که تاریخ انقضا دارند
+                        .ThenBy(si => si.ExpiryDate) // سپس بر اساس تاریخ انقضا (نزدیک‌تر اول)
                         .ToListAsync(ct);
 
                     // 3. حلقه تخصیص

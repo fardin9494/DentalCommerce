@@ -1,0 +1,186 @@
+import { useState, useEffect } from 'react'
+import { Spinner } from '@/shared/components/Spinner'
+import { useActiveShelves } from '../../shelves/queries'
+import type { UnassignedStockItem } from '../api'
+
+interface AssignShelfModalProps {
+  isOpen: boolean
+  stockItem: UnassignedStockItem | null
+  onClose: () => void
+  onSubmit: (data: { shelfId: string; qty: number; note?: string }) => void
+  isSubmitting?: boolean
+}
+
+export function AssignShelfModal({ isOpen, stockItem, onClose, onSubmit, isSubmitting }: AssignShelfModalProps) {
+  const { data: shelves, isLoading: loadingShelves } = useActiveShelves(stockItem?.warehouseId)
+  const [shelfId, setShelfId] = useState('')
+  const [qty, setQty] = useState('')
+  const [note, setNote] = useState('')
+
+  // Initialize form when stockItem changes
+  useEffect(() => {
+    if (stockItem) {
+      setQty(stockItem.available.toString())
+      setNote('')
+      setShelfId('')
+    }
+  }, [stockItem])
+
+  if (!isOpen || !stockItem) return null
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!shelfId || !qty) return
+
+    const qtyNum = parseFloat(qty)
+    if (isNaN(qtyNum) || qtyNum <= 0 || qtyNum > stockItem.available) return
+
+    onSubmit({
+      shelfId,
+      qty: qtyNum,
+      note: note.trim() || undefined,
+    })
+  }
+
+  function handleClose() {
+    onClose()
+  }
+
+  const maxQty = stockItem.available
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
+
+      {/* Modal */}
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900">انتساب به قفسه</h2>
+          <button
+            onClick={handleClose}
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Stock Item Info */}
+        <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <div className="text-sm font-medium text-emerald-800">کالای انتخابی</div>
+          <div className="mt-1 font-medium text-slate-900">
+            {stockItem.productName || 'نامشخص'}
+            {stockItem.variantValue && <span className="text-emerald-600"> - {stockItem.variantValue}</span>}
+          </div>
+          <div className="mt-0.5 flex items-center gap-4 text-xs text-slate-600">
+            <span className="font-mono">SKU: {stockItem.sku}</span>
+            <span>•</span>
+            <span>موجودی آزاد: {stockItem.available.toLocaleString('fa-IR')}</span>
+          </div>
+          {stockItem.lotNumber && (
+            <div className="mt-1 text-xs text-slate-500">لات: {stockItem.lotNumber}</div>
+          )}
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Shelf Select */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              انتخاب قفسه <span className="text-red-500">*</span>
+            </label>
+            {loadingShelves ? (
+              <div className="flex items-center justify-center py-4">
+                <Spinner className="h-5 w-5 text-emerald-600" />
+              </div>
+            ) : !shelves || shelves.length === 0 ? (
+              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+                هیچ قفسه فعالی در این انبار یافت نشد.
+              </div>
+            ) : (
+              <select
+                value={shelfId}
+                onChange={(e) => setShelfId(e.target.value)}
+                required
+                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              >
+                <option value="">انتخاب کنید...</option>
+                {shelves.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} {s.description && `- ${s.description}`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Quantity */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              تعداد <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              min="0.01"
+              max={maxQty}
+              step="0.01"
+              required
+              className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              حداکثر: {maxQty.toLocaleString('fa-IR')} (موجودی آزاد)
+            </p>
+          </div>
+
+          {/* Note */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">یادداشت (اختیاری)</label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="یادداشت انتقال..."
+              rows={2}
+              className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm placeholder-slate-400 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={isSubmitting}
+              className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
+            >
+              انصراف
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || !shelfId || !qty || parseFloat(qty) <= 0 || parseFloat(qty) > maxQty || loadingShelves}
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  در حال انتقال...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 0 0 2.25-2.25V6a2.25 2.25 0 0 0-2.25-2.25H6A2.25 2.25 0 0 0 3.75 6v2.25A2.25 2.25 0 0 0 6 10.5Zm0 9.75h2.25A2.25 2.25 0 0 0 10.5 18v-2.25a2.25 2.25 0 0 0-2.25-2.25H6a2.25 2.25 0 0 0-2.25 2.25V18A2.25 2.25 0 0 0 6 19.5Zm9.75-9.75H18a2.25 2.25 0 0 0 2.25-2.25V6A2.25 2.25 0 0 0 18 3.75h-2.25A2.25 2.25 0 0 0 13.5 6v2.25a2.25 2.25 0 0 0 2.25 2.25Z" />
+                  </svg>
+                  انتقال به قفسه
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+

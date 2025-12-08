@@ -42,11 +42,13 @@ public sealed class StockLedgerEntry : AggregateRoot<Guid>
         // گارد سازگاری نوع/علامت
         bool mustBePositive = type is StockMovementType.Receipt
             or StockMovementType.TransferIn
-            or StockMovementType.AdjustmentPlus;
+            or StockMovementType.AdjustmentPlus
+            or StockMovementType.ShelfTransferIn;
 
         bool mustBeNegative = type is StockMovementType.Issue
             or StockMovementType.TransferOut
-            or StockMovementType.AdjustmentMinus;
+            or StockMovementType.AdjustmentMinus
+            or StockMovementType.ShelfTransferOut;
 
         if (mustBePositive && deltaQty <= 0)
             throw new InvalidOperationException("deltaQty باید مثبت باشد برای این نوع حرکت.");

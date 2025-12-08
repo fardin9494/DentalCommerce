@@ -13,7 +13,7 @@ public sealed class CancelAdjustmentHandler : IRequestHandler<CancelAdjustmentCo
     public async Task<Unit> Handle(CancelAdjustmentCommand req, CancellationToken ct)
     {
         var adj = await _db.Adjustments.FirstOrDefaultAsync(a => a.Id == req.AdjustmentId, ct)
-                  ?? throw new InvalidOperationException("Adjustment پیدا نشد.");
+                  ?? throw new InvalidOperationException("سند اصلاح موجودی یافت نشد.");
 
         adj.Cancel();
         await _db.SaveChangesAsync(ct);

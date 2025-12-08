@@ -12,7 +12,7 @@ public sealed class UpdateAdjustmentHeaderHandler : IRequestHandler<UpdateAdjust
     public async Task<Unit> Handle(UpdateAdjustmentHeaderCommand req, CancellationToken ct)
     {
         var adj = await _db.Adjustments.FirstOrDefaultAsync(a => a.Id == req.AdjustmentId, ct)
-                  ?? throw new InvalidOperationException("سند اصلاح پیدا نشد.");
+                  ?? throw new InvalidOperationException("سند اصلاح موجودی یافت نشد.");
         adj.UpdateHeader(req.Note, req.DocDateUtc);
         await _db.SaveChangesAsync(ct);
         return Unit.Value;

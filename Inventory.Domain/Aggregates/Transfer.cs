@@ -76,13 +76,27 @@ public sealed class Transfer : AggregateRoot<Guid>
     {
         if (Lines.SelectMany(x => x.Segments).All(s => s.RemainingToReceive <= 0))
         {
-            Status = TransferStatus.Completed;
-            CompletedAt = DateTime.UtcNow;
+            Status = TransferStatus.PartiallyReceived; // فقط به PartiallyReceived تغییر می‌دهد، نه Completed
         }
         else
         {
             Status = TransferStatus.PartiallyReceived;
         }
+        Touch();
+    }
+
+    public void Complete(DateTime? whenUtc = null)
+    {
+        // فقط در وضعیت PartiallyReceived قابل تایید نهایی است
+        if (Status != TransferStatus.PartiallyReceived)
+            throw new InvalidOperationException("فقط انتقالی که تمام کالاهایش دریافت شده‌اند قابل تایید نهایی است.");
+
+        // بررسی اینکه تمام segments دریافت شده‌اند
+        if (Lines.SelectMany(x => x.Segments).Any(s => s.RemainingToReceive > 0))
+            throw new InvalidOperationException("همه‌ی کالاها باید دریافت شوند قبل از تایید نهایی.");
+
+        Status = TransferStatus.Completed;
+        CompletedAt = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
         Touch();
     }
 

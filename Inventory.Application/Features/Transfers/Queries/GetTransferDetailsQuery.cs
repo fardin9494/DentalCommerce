@@ -33,8 +33,13 @@ public sealed record TransferLineDto(
 public sealed record TransferSegmentDto(
     Guid Id,
     Guid StockItemId,
+    string? Sku,
+    string? LotNumber,
+    DateTime? ExpiryDate,
+    string? ShelfName,
     decimal Qty,
-    decimal ReceivedQty
+    decimal ReceivedQty,
+    decimal RemainingToReceive
 );
 
 public sealed class GetTransferDetailsHandler : IRequestHandler<TransferDetailsQuery, TransferDetailsDto?>
@@ -52,6 +57,42 @@ public sealed class GetTransferDetailsHandler : IRequestHandler<TransferDetailsQ
 
         if (tr is null) return null;
 
+        // Get all stock item IDs from segments
+        var stockItemIds = tr.Lines
+            .SelectMany(l => l.Segments)
+            .Select(s => s.StockItemId)
+            .Distinct()
+            .ToList();
+
+        // Load stock items with their details
+        var stockItems = await _db.StockItems
+            .AsNoTracking()
+            .Where(si => stockItemIds.Contains(si.Id))
+            .Select(si => new
+            {
+                si.Id,
+                si.Sku,
+                si.LotNumber,
+                si.ExpiryDate,
+                si.ShelfId
+            })
+            .ToListAsync(ct);
+
+        // Get shelf names
+        var shelfIds = stockItems.Where(si => si.ShelfId.HasValue).Select(si => si.ShelfId!.Value).Distinct().ToList();
+        var shelves = await _db.StockShelves
+            .AsNoTracking()
+            .Where(s => shelfIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+
+        var stockItemsDict = stockItems.ToDictionary(si => si.Id, si => new
+        {
+            si.Sku,
+            si.LotNumber,
+            si.ExpiryDate,
+            ShelfName = si.ShelfId.HasValue && shelves.TryGetValue(si.ShelfId.Value, out var name) ? name : null
+        });
+
         var lines = tr.Lines
             .OrderBy(l => l.LineNo)
             .Select(l => new TransferLineDto(
@@ -63,7 +104,21 @@ public sealed class GetTransferDetailsHandler : IRequestHandler<TransferDetailsQ
                 l.AllocatedQty,
                 l.RemainingQty,
                 l.Segments
-                    .Select(s => new TransferSegmentDto(s.Id, s.StockItemId, s.Qty, s.ReceivedQty))
+                    .Select(s =>
+                    {
+                        var stockInfo = stockItemsDict.TryGetValue(s.StockItemId, out var info) ? info : null;
+                        return new TransferSegmentDto(
+                            s.Id,
+                            s.StockItemId,
+                            stockInfo?.Sku,
+                            stockInfo?.LotNumber,
+                            stockInfo?.ExpiryDate,
+                            stockInfo?.ShelfName,
+                            s.Qty,
+                            s.ReceivedQty,
+                            s.RemainingToReceive
+                        );
+                    })
                     .ToList()
             ))
             .ToList();

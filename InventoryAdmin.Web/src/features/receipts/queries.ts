@@ -1,6 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/shared/components/toast/ToastProvider'
 import * as api from './api'
+import type { ReceiptsListFilters } from './types'
+
+export function useReceiptsList(filters: ReceiptsListFilters = {}) {
+  return useQuery({
+    queryKey: ['receipts', 'list', filters],
+    queryFn: () => api.getReceiptsList(filters),
+  })
+}
 
 export function useReceipt(id?: string) {
   return useQuery({

@@ -1,6 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/shared/components/toast/ToastProvider'
 import * as api from './api'
+import type { IssuesListFilters } from './types'
+
+export function useIssuesList(filters: IssuesListFilters = {}) {
+  return useQuery({
+    queryKey: ['issues', 'list', filters],
+    queryFn: () => api.getIssuesList(filters),
+  })
+}
 
 export function useIssue(id?: string) {
   return useQuery({
@@ -60,13 +68,46 @@ export function useAllocateIssueLineFefo(issueId: string) {
   const qc = useQueryClient()
   const toast = useToast()
   return useMutation({
-    mutationFn: (lineId: string) => api.allocateIssueLineFefo(issueId, lineId),
+    mutationFn: ({ lineId, preferredWarehouseId }: { lineId: string; preferredWarehouseId?: string }) => 
+      api.allocateIssueLineFefo(issueId, lineId, preferredWarehouseId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['issues', 'detail', issueId] })
-      toast.success('تخصیص با موفقیت انجام شد')
+      toast.success('تخصیص FEFO با موفقیت انجام شد')
     },
     onError: (err: any) => {
-      toast.error(err.message || 'خطا در تخصیص')
+      toast.error(err.message || 'خطا در تخصیص FEFO')
+    },
+  })
+}
+
+export function useAllocateIssueLineFifo(issueId: string) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: ({ lineId, preferredWarehouseId }: { lineId: string; preferredWarehouseId?: string }) => 
+      api.allocateIssueLineFifo(issueId, lineId, preferredWarehouseId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['issues', 'detail', issueId] })
+      toast.success('تخصیص FIFO با موفقیت انجام شد')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'خطا در تخصیص FIFO')
+    },
+  })
+}
+
+export function useAllocateIssueLineLifo(issueId: string) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: ({ lineId, preferredWarehouseId }: { lineId: string; preferredWarehouseId?: string }) => 
+      api.allocateIssueLineLifo(issueId, lineId, preferredWarehouseId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['issues', 'detail', issueId] })
+      toast.success('تخصیص LIFO با موفقیت انجام شد')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'خطا در تخصیص LIFO')
     },
   })
 }
@@ -100,5 +141,7 @@ export function useCancelIssue(issueId: string) {
     },
   })
 }
+
+
 
 

@@ -12,9 +12,9 @@ public sealed class UpdateAdjustmentLineHandler : IRequestHandler<UpdateAdjustme
     public async Task<Unit> Handle(UpdateAdjustmentLineCommand req, CancellationToken ct)
     {
         var adj = await _db.Adjustments.Include(a => a.Lines).FirstOrDefaultAsync(a => a.Id == req.AdjustmentId, ct)
-                  ?? throw new InvalidOperationException("سند اصلاح پیدا نشد.");
+                  ?? throw new InvalidOperationException("سند اصلاح موجودی یافت نشد.");
         var line = adj.Lines.FirstOrDefault(l => l.Id == req.LineId)
-                   ?? throw new InvalidOperationException("خط سند اصلاح پیدا نشد.");
+                   ?? throw new InvalidOperationException($"خط با شناسه {req.LineId} در سند اصلاح موجودی یافت نشد.");
         line.UpdateQtyDelta(req.QtyDelta);
         await _db.SaveChangesAsync(ct);
         return Unit.Value;

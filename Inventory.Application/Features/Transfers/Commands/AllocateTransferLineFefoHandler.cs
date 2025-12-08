@@ -32,6 +32,21 @@ public sealed class AllocateTransferLineFefoHandler
                     var line = tr.Lines.FirstOrDefault(l => l.Id == req.LineId)
                                ?? throw new InvalidOperationException("خط انتقال پیدا نشد.");
 
+                    // Save existing segments before clearing (for return value if already fully allocated)
+                    var existingSegments = line.Segments.Select(s => new TransferAllocationDto(s.StockItemId, s.Qty)).ToList();
+                    
+                    // Calculate need before clearing
+                    var need = line.RemainingQty;
+                    
+                    if (need <= 0)
+                    {
+                        // Already fully allocated, return existing segments
+                        result = existingSegments;
+                        await tx.CommitAsync(ct);
+                        break;
+                    }
+
+                    // Clear existing segments and release reservations
                     if (line.Segments.Count > 0)
                     {
                         foreach (var s in line.Segments)
@@ -41,14 +56,6 @@ public sealed class AllocateTransferLineFefoHandler
                         }
                         tr.ClearSegments(line.Id);
                         await _db.SaveChangesAsync(ct);
-                    }
-
-                    var need = line.RemainingQty;
-                    if (need <= 0)
-                    {
-                        result = line.Segments.Select(s => new TransferAllocationDto(s.StockItemId, s.Qty)).ToList();
-                        await tx.CommitAsync(ct);
-                        break;
                     }
 
                     var candidates = await _db.StockItems.AsNoTracking()

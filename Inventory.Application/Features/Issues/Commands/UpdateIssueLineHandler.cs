@@ -11,10 +11,30 @@ public sealed class UpdateIssueLineHandler : IRequestHandler<UpdateIssueLineComm
 
     public async Task<Unit> Handle(UpdateIssueLineCommand req, CancellationToken ct)
     {
-        var issue = await _db.Issues.Include(i => i.Lines).FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
-                    ?? throw new InvalidOperationException("سند خروج پیدا نشد.");
+        var issue = await _db.Issues
+            .Include(i => i.Lines)
+            .ThenInclude(l => l.Allocations)
+            .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
+            ?? throw new InvalidOperationException("سند خروج پیدا نشد.");
+        
         var line = issue.Lines.FirstOrDefault(l => l.Id == req.LineId)
                    ?? throw new InvalidOperationException("خط سند خروج پیدا نشد.");
+
+        // اگر مقدار جدید کمتر از مقدار تخصیص داده شده است، باید تخصیص‌ها را آزاد کنیم
+        if (req.Qty < line.AllocatedQty)
+        {
+            // آزاد کردن تمام تخصیص‌ها
+            foreach (var alloc in line.Allocations)
+            {
+                var stock = await _db.StockItems.FirstOrDefaultAsync(x => x.Id == alloc.StockItemId, ct);
+                if (stock != null)
+                {
+                    stock.Release(alloc.Qty);
+                }
+            }
+            issue.ClearAllocations(req.LineId);
+        }
+
         line.UpdateQty(req.Qty);
         await _db.SaveChangesAsync(ct);
         return Unit.Value;
