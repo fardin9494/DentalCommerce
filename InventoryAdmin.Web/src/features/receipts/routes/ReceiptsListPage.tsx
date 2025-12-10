@@ -159,7 +159,7 @@ export function ReceiptsListPage() {
       />
 
       {/* Filters */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-md">
         <form onSubmit={handleSearch} className="flex flex-wrap items-end gap-4">
           {/* Search */}
           <div className="flex-1 min-w-[200px]">
@@ -194,7 +194,7 @@ export function ReceiptsListPage() {
             <select
               value={statusFilter}
               onChange={(e) => handleStatusChange(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full rounded-lg border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
             >
               <option value="">همه</option>
               <option value="1">پیش‌نویس</option>
@@ -210,7 +210,7 @@ export function ReceiptsListPage() {
             <select
               value={reasonFilter}
               onChange={(e) => handleReasonChange(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full rounded-lg border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
             >
               <option value="">همه</option>
               <option value="1">خرید</option>
@@ -224,7 +224,7 @@ export function ReceiptsListPage() {
           <div className="flex gap-2">
             <button
               type="submit"
-              className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200"
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
             >
               اعمال
             </button>
@@ -232,7 +232,7 @@ export function ReceiptsListPage() {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 border border-slate-200"
               >
                 پاک کردن
               </button>
@@ -283,24 +283,24 @@ export function ReceiptsListPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-right">
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">شناسه</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">انبار</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">نوع</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">وضعیت</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تاریخ سند</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">مرجع</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تعداد آیتم</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">مجموع تعداد</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تاریخ دریافت</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">عملیات</th>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-right text-xs uppercase tracking-wide text-slate-600">
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">شناسه</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">انبار</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">نوع</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">وضعیت</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">تاریخ سند</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">مرجع</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">تعداد آیتم</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">مجموع تعداد</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">تاریخ دریافت</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">عملیات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {data.items.map((receipt) => (
                     <tr
                       key={receipt.id}
-                      className="transition-colors hover:bg-slate-50 cursor-pointer"
+                      className="transition-colors hover:bg-slate-50 cursor-pointer even:bg-slate-50/60"
                       onClick={() => navigate(`/receipts/${receipt.id}`)}
                     >
                       <td className="whitespace-nowrap px-4 py-3">

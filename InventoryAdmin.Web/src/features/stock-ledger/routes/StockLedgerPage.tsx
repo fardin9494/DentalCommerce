@@ -169,7 +169,7 @@ export function StockLedgerPage() {
       <PageHeader title="کاردکس انبار">مشاهده و بررسی تمام عملیات‌های انبار</PageHeader>
 
       {/* Filters */}
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-md">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">فیلترها</h2>
           {hasActiveFilters && (
@@ -227,7 +227,7 @@ export function StockLedgerPage() {
               ))}
             </select>
           </div>
-          <div>
+          <div className="space-y-2">
             <label className="mb-1 block text-sm font-medium text-slate-700">از تاریخ (شمسی)</label>
             <DatePicker
               value={fromDateFilter}
@@ -237,12 +237,12 @@ export function StockLedgerPage() {
               calendarPosition="bottom-center"
               editable={false}
               portal
-              inputClass="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              inputClass="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
               placeholder="انتخاب تاریخ"
               format="YYYY/MM/DD"
             />
           </div>
-          <div>
+          <div className="space-y-2">
             <label className="mb-1 block text-sm font-medium text-slate-700">تا تاریخ (شمسی)</label>
             <DatePicker
               value={toDateFilter}
@@ -252,7 +252,7 @@ export function StockLedgerPage() {
               calendarPosition="bottom-center"
               editable={false}
               portal
-              inputClass="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              inputClass="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
               placeholder="انتخاب تاریخ"
               format="YYYY/MM/DD"
             />
@@ -262,18 +262,18 @@ export function StockLedgerPage() {
 
       {/* Table */}
       {data && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white shadow-md">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="border-b border-slate-200 bg-slate-50">
+              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
                 <tr>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">تاریخ و زمان</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">نوع عملیات</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">مقدار</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">نوع سند</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">لات</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">تاریخ انقضا</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">یادداشت</th>
+                  <th className="px-4 py-3 text-right font-semibold">تاریخ و زمان</th>
+                  <th className="px-4 py-3 text-right font-semibold">نوع عملیات</th>
+                  <th className="px-4 py-3 text-right font-semibold">مقدار</th>
+                  <th className="px-4 py-3 text-right font-semibold">نوع سند</th>
+                  <th className="px-4 py-3 text-right font-semibold">لات</th>
+                  <th className="px-4 py-3 text-right font-semibold">تاریخ انقضا</th>
+                  <th className="px-4 py-3 text-right font-semibold">یادداشت</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -287,7 +287,7 @@ export function StockLedgerPage() {
                   data.items.map((entry) => (
                     <tr
                       key={entry.id}
-                      className="cursor-pointer hover:bg-slate-50 transition-colors"
+                      className="cursor-pointer hover:bg-slate-50 transition-colors even:bg-slate-50/60"
                       onClick={() => setSelectedEntryId(entry.id)}
                     >
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">

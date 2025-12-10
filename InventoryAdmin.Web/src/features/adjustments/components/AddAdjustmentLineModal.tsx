@@ -1,6 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { StockProductSelect, type StockProductSelection } from '@/shared/components/StockProductSelect'
 import { Spinner } from '@/shared/components/Spinner'
+import DatePicker from 'react-multi-date-picker'
+import DateObject from 'react-date-object'
+import persian from 'react-date-object/calendars/persian'
+import persian_fa from 'react-date-object/locales/persian_fa'
+import { useStockItems } from '@/features/stock-items/queries'
+import type { StockItem } from '@/features/stock-items/api'
 
 interface AddAdjustmentLineModalProps {
   isOpen: boolean
@@ -25,15 +31,32 @@ export function AddAdjustmentLineModal({
 }: AddAdjustmentLineModalProps) {
   const [step, setStep] = useState<'product' | 'details'>('product')
   const [selectedProduct, setSelectedProduct] = useState<StockProductSelection | null>(null)
-  const [qtyDelta, setQtyDelta] = useState('0')
+  const [qtyDelta, setQtyDelta] = useState('1')
+  const [direction, setDirection] = useState<'increase' | 'decrease'>('increase')
   const [lotNumber, setLotNumber] = useState('')
-  const [expiryDate, setExpiryDate] = useState('')
+  const [expiryDate, setExpiryDate] = useState<DateObject | null>(null)
+  const [selectedStockItem, setSelectedStockItem] = useState<StockItem | null>(null)
+
+  const stockFilters = useMemo(() => {
+    if (!selectedProduct) return null
+    return {
+      warehouseId,
+      productId: selectedProduct.productId,
+      variantId: selectedProduct.variantId || undefined,
+      pageSize: 50,
+    }
+  }, [selectedProduct, warehouseId])
+
+  const { data: stockItemsData, isLoading: loadingStock } = useStockItems(stockFilters || {}, { enabled: !!stockFilters })
 
   if (!isOpen) return null
 
   function handleProductSelect(selection: StockProductSelection) {
     setSelectedProduct(selection)
     setStep('details')
+    setSelectedStockItem(null)
+    setLotNumber('')
+    setExpiryDate(null)
   }
 
   function handleBack() {
@@ -46,23 +69,31 @@ export function AddAdjustmentLineModal({
     if (!selectedProduct) return
 
     const qtyDeltaNum = parseFloat(qtyDelta)
-    if (isNaN(qtyDeltaNum) || qtyDeltaNum === 0) return
+    if (isNaN(qtyDeltaNum) || qtyDeltaNum <= 0) return
+
+    // برای کاهش یا افزایش موجودی، باید یک موجودی انتخاب شود تا لات/انقضا مشخص باشد
+    if (!selectedStockItem) return
+
+    const signedQty = direction === 'increase' ? qtyDeltaNum : -qtyDeltaNum
+    const expiryDateUtc = expiryDate ? expiryDate.toDate().toISOString() : undefined
 
     onSubmit({
       productId: selectedProduct.productId,
       variantId: selectedProduct.variantId,
-      lotNumber: lotNumber.trim() || undefined,
-      expiryDateUtc: expiryDate ? new Date(expiryDate).toISOString() : undefined,
-      qtyDelta: qtyDeltaNum,
+      lotNumber: lotNumber.trim() || selectedStockItem.lotNumber || undefined,
+      expiryDateUtc: expiryDateUtc ?? selectedStockItem.expiryDate ?? undefined,
+      qtyDelta: signedQty,
     })
   }
 
   function handleClose() {
     setStep('product')
     setSelectedProduct(null)
-    setQtyDelta('0')
+    setQtyDelta('1')
+    setDirection('increase')
     setLotNumber('')
-    setExpiryDate('')
+    setExpiryDate(null)
+    setSelectedStockItem(null)
     onClose()
   }
 
@@ -124,48 +155,133 @@ export function AddAdjustmentLineModal({
               </div>
             </div>
 
+            {/* Select stock item (lot) */}
+            <div className="space-y-3">
+              <div className="text-sm font-medium text-slate-700">انتخاب موجودی (لات)</div>
+              <div className="rounded-lg border border-slate-200">
+                <div className="p-3 border-b border-slate-100 bg-slate-50 text-xs text-slate-500">
+                  موجودی‌های همین انبار برای محصول انتخاب‌شده
+                </div>
+                <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                  {loadingStock ? (
+                    <div className="flex items-center justify-center py-6">
+                      <Spinner className="h-5 w-5 text-emerald-600" />
+                    </div>
+                  ) : (stockItemsData?.items?.length || 0) === 0 ? (
+                    <div className="py-6 text-center text-sm text-slate-500">موجودی‌ای یافت نشد</div>
+                  ) : (
+                    stockItemsData!.items.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedStockItem(item)
+                          setLotNumber(item.lotNumber || '')
+                          setExpiryDate(
+                            item.expiryDate
+                              ? new DateObject({ date: new Date(item.expiryDate), calendar: persian, locale: persian_fa })
+                              : null
+                          )
+                        }}
+                        className={`w-full text-right px-4 py-3 transition-colors ${
+                          selectedStockItem?.id === item.id ? 'bg-emerald-50 border-l-4 border-emerald-500' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium text-slate-900">
+                              لات: {item.lotNumber || 'نامشخص'}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-0.5">
+                              انقضا: {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('fa-IR') : 'نامشخص'}
+                            </div>
+                          </div>
+                          <div className="text-right text-xs text-slate-600">
+                            موجودی: {item.onHand.toLocaleString('fa-IR')}
+                            <div className="text-emerald-600">آزاد: {item.available.toLocaleString('fa-IR')}</div>
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Qty Delta */}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
-                تغییر موجودی <span className="text-red-500">*</span>
+                نوع اصلاح و مقدار <span className="text-red-500">*</span>
               </label>
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <input
+                    id="adj-inc"
+                    type="radio"
+                    name="adjustment-direction"
+                    value="increase"
+                    checked={direction === 'increase'}
+                    onChange={() => setDirection('increase')}
+                    className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <label htmlFor="adj-inc" className="text-sm font-medium text-slate-800">
+                    افزایش موجودی
+                  </label>
+                </div>
+                <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <input
+                    id="adj-dec"
+                    type="radio"
+                    name="adjustment-direction"
+                    value="decrease"
+                    checked={direction === 'decrease'}
+                    onChange={() => setDirection('decrease')}
+                    className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <label htmlFor="adj-dec" className="text-sm font-medium text-slate-800">
+                    کاهش موجودی
+                  </label>
+                </div>
+              </div>
+              <div className="mt-3">
                 <input
                   type="number"
                   value={qtyDelta}
                   onChange={(e) => setQtyDelta(e.target.value)}
                   step="0.01"
+                  min="0.01"
                   required
-                  placeholder="مثبت برای افزایش، منفی برای کاهش"
+                  placeholder="مثال: 10"
                   className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
-                <p className="text-xs text-slate-500">
-                  عدد مثبت برای افزایش موجودی، عدد منفی برای کاهش موجودی
+                <p className="mt-1 text-xs text-slate-500">
+                  ابتدا نوع اصلاح را انتخاب کنید، سپس مقدار مثبت وارد کنید.
                 </p>
               </div>
             </div>
 
             {/* Lot Number */}
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">شماره لات (اختیاری)</label>
+              <label className="mb-2 block text-sm font-medium text-slate-700">شماره لات</label>
               <input
                 type="text"
                 value={lotNumber}
-                onChange={(e) => setLotNumber(e.target.value)}
-                placeholder="مثال: LOT-2024-001"
-                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm placeholder-slate-400 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                readOnly
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600"
               />
+              <p className="mt-1 text-xs text-slate-500">از موجودی انتخاب‌شده خوانده می‌شود.</p>
             </div>
 
             {/* Expiry Date */}
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">تاریخ انقضا (اختیاری)</label>
+              <label className="mb-2 block text-sm font-medium text-slate-700">تاریخ انقضا</label>
               <input
-                type="date"
-                value={expiryDate}
-                onChange={(e) => setExpiryDate(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                type="text"
+                readOnly
+                value={expiryDate ? expiryDate.format('YYYY/MM/DD') : 'نامشخص'}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600"
               />
+              <p className="mt-1 text-xs text-slate-500">از موجودی انتخاب‌شده خوانده می‌شود.</p>
             </div>
 
             {/* Actions */}
