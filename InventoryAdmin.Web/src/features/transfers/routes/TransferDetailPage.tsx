@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Spinner } from '@/shared/components/Spinner'
@@ -24,6 +24,7 @@ import { ReceiveSegmentModal } from '../components/ReceiveSegmentModal'
 import type { TransferLine, TransferSegment } from '../types'
 import { TransferStatusLabels, TransferStatusColors, type TransferStatus } from '../types'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
+import { useProductNames } from '@/shared/hooks/useProductNames'
 
 export function TransferDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -48,6 +49,10 @@ export function TransferDetailPage() {
     null
   )
   const [allocatingLineId, setAllocatingLineId] = useState<string | null>(null)
+
+  // جمع‌آوری productId های تمام خطوط برای fetch کردن نام محصولات
+  const productIds = useMemo(() => transfer?.lines.map((line) => line.productId) || [], [transfer?.lines])
+  const { getProductName, getVariantName } = useProductNames(productIds)
 
   if (isLoading) {
     return (
@@ -471,11 +476,11 @@ export function TransferDetailPage() {
                   <tr key={line.id} className="transition-colors hover:bg-slate-50">
                     <td className="whitespace-nowrap px-4 py-3 text-slate-700">{line.lineNo}</td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <span className="font-mono text-xs text-slate-600">{line.productId.substring(0, 8)}...</span>
+                      <div className="font-medium text-slate-900">{getProductName(line.productId)}</div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       {line.variantId ? (
-                        <span className="font-mono text-xs text-slate-600">{line.variantId.substring(0, 8)}...</span>
+                        <div className="text-sm text-emerald-600">{getVariantName(line.variantId) || line.variantId.substring(0, 8) + '...'}</div>
                       ) : (
                         <span className="text-slate-400">-</span>
                       )}

@@ -6,6 +6,10 @@ import { useStockLedger } from '../queries'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
 import { StockMovementTypeLabels, StockMovementTypeColors, type StockLedgerFilters } from '../types'
 import { StockLedgerEntryDetailsModal } from '../components/StockLedgerEntryDetailsModal'
+import DatePicker from 'react-multi-date-picker'
+import DateObject from 'react-date-object'
+import persian from 'react-date-object/calendars/persian'
+import persian_fa from 'react-date-object/locales/persian_fa'
 
 export function StockLedgerPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -34,8 +38,12 @@ export function StockLedgerPage() {
   const [warehouseFilter, setWarehouseFilter] = useState<string>(filters.warehouseId || '')
   const [movementTypeFilter, setMovementTypeFilter] = useState<string>(filters.movementType?.toString() || '')
   const [refDocTypeFilter, setRefDocTypeFilter] = useState<string>(filters.refDocType || '')
-  const [fromDateFilter, setFromDateFilter] = useState<string>(filters.fromDate || '')
-  const [toDateFilter, setToDateFilter] = useState<string>(filters.toDate || '')
+  const [fromDateFilter, setFromDateFilter] = useState<DateObject | null>(
+    filters.fromDate ? new DateObject({ date: new Date(filters.fromDate), calendar: persian, locale: persian_fa }) : null
+  )
+  const [toDateFilter, setToDateFilter] = useState<DateObject | null>(
+    filters.toDate ? new DateObject({ date: new Date(filters.toDate), calendar: persian, locale: persian_fa }) : null
+  )
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
 
   function updateFilters(newFilters: Partial<StockLedgerFilters>) {
@@ -71,14 +79,16 @@ export function StockLedgerPage() {
     updateFilters({ refDocType: value || undefined })
   }
 
-  function handleFromDateChange(value: string) {
-    setFromDateFilter(value)
-    updateFilters({ fromDate: value || undefined })
+  function handleFromDateChange(date: DateObject | DateObject[] | null) {
+    const d = Array.isArray(date) ? (date[0] as DateObject | null) : (date as DateObject | null)
+    setFromDateFilter(d)
+    updateFilters({ fromDate: d ? d.toDate().toISOString() : undefined })
   }
 
-  function handleToDateChange(value: string) {
-    setToDateFilter(value)
-    updateFilters({ toDate: value || undefined })
+  function handleToDateChange(date: DateObject | DateObject[] | null) {
+    const d = Array.isArray(date) ? (date[0] as DateObject | null) : (date as DateObject | null)
+    setToDateFilter(d)
+    updateFilters({ toDate: d ? d.toDate().toISOString() : undefined })
   }
 
   function handlePageChange(newPage: number) {
@@ -89,8 +99,8 @@ export function StockLedgerPage() {
     setWarehouseFilter('')
     setMovementTypeFilter('')
     setRefDocTypeFilter('')
-    setFromDateFilter('')
-    setToDateFilter('')
+    setFromDateFilter(null)
+    setToDateFilter(null)
     setSearchParams(new URLSearchParams())
   }
 
@@ -218,21 +228,33 @@ export function StockLedgerPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">از تاریخ</label>
-            <input
-              type="date"
+            <label className="mb-1 block text-sm font-medium text-slate-700">از تاریخ (شمسی)</label>
+            <DatePicker
               value={fromDateFilter}
-              onChange={(e) => handleFromDateChange(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              onChange={handleFromDateChange}
+              calendar={persian}
+              locale={persian_fa}
+              calendarPosition="bottom-center"
+              editable={false}
+              portal
+              inputClass="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              placeholder="انتخاب تاریخ"
+              format="YYYY/MM/DD"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">تا تاریخ</label>
-            <input
-              type="date"
+            <label className="mb-1 block text-sm font-medium text-slate-700">تا تاریخ (شمسی)</label>
+            <DatePicker
               value={toDateFilter}
-              onChange={(e) => handleToDateChange(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              onChange={handleToDateChange}
+              calendar={persian}
+              locale={persian_fa}
+              calendarPosition="bottom-center"
+              editable={false}
+              portal
+              inputClass="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              placeholder="انتخاب تاریخ"
+              format="YYYY/MM/DD"
             />
           </div>
         </div>

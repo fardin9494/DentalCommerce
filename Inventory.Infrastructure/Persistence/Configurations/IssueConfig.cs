@@ -11,7 +11,7 @@ public sealed class IssueConfig : IEntityTypeConfiguration<Issue>
         b.ToTable("Issue");
         b.HasKey(x => x.Id);
 
-        b.Property(x => x.WarehouseId).IsRequired();
+        b.Property(x => x.WarehouseId).IsRequired(false);
         b.Property(x => x.DocDate).HasColumnType("datetime2").IsRequired();
         b.Property(x => x.ExternalRef).HasMaxLength(64);
         b.Property(x => x.Status).IsRequired();

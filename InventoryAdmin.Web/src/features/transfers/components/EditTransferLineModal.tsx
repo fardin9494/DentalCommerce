@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Spinner } from '@/shared/components/Spinner'
+import { useProductNames } from '@/shared/hooks/useProductNames'
 import type { TransferLine } from '../types'
 
 interface EditTransferLineModalProps {
@@ -12,6 +13,8 @@ interface EditTransferLineModalProps {
 
 export function EditTransferLineModal({ isOpen, line, onClose, onSubmit, isSubmitting }: EditTransferLineModalProps) {
   const [qty, setQty] = useState('')
+  
+  const { getProductName, getVariantName } = useProductNames(line ? [line.productId] : [])
 
   // Initialize form when line changes
   useEffect(() => {
@@ -66,10 +69,12 @@ export function EditTransferLineModal({ isOpen, line, onClose, onSubmit, isSubmi
         {/* Line Info */}
         <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 p-3">
           <div className="text-xs text-slate-500">ردیف {line.lineNo}</div>
-          <div className="mt-1 font-mono text-sm text-slate-700">
-            محصول: {line.productId.substring(0, 8)}...
+          <div className="mt-1 text-sm text-slate-700">
+            <div className="font-medium text-slate-900">محصول: {getProductName(line.productId)}</div>
             {line.variantId && (
-              <span className="text-slate-500"> | واریانت: {line.variantId.substring(0, 8)}...</span>
+              <div className="mt-0.5 text-sm text-emerald-600">
+                واریانت: {getVariantName(line.variantId) || line.variantId.substring(0, 8) + '...'}
+              </div>
             )}
           </div>
           {line.allocatedQty > 0 && (

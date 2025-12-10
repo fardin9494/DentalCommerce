@@ -12,8 +12,12 @@ public sealed class CreateIssueDraftHandler : IRequestHandler<CreateIssueDraftCo
 
     public async Task<Guid> Handle(CreateIssueDraftCommand req, CancellationToken ct)
     {
-        var existsWh = await _db.Warehouses.AnyAsync(w => w.Id == req.WarehouseId, ct);
-        if (!existsWh) throw new InvalidOperationException("انبار یافت نشد.");
+        // اگر انبار مشخص شده باشد، بررسی می‌کنیم که وجود دارد
+        if (req.WarehouseId.HasValue)
+        {
+            var existsWh = await _db.Warehouses.AnyAsync(w => w.Id == req.WarehouseId.Value, ct);
+            if (!existsWh) throw new InvalidOperationException("انبار یافت نشد.");
+        }
 
         var issue = Issue.Create(req.WarehouseId, req.DocDateUtc, req.ExternalRef);
         _db.Issues.Add(issue);

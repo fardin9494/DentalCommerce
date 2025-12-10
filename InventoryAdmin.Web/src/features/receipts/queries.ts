@@ -140,4 +140,36 @@ export function useCancelReceipt(receiptId: string) {
   })
 }
 
+export function useApproveReceiptLinePartial(receiptId: string) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: ({ lineId, qty }: { lineId: string; qty: number }) =>
+      api.approveReceiptLinePartial(receiptId, lineId, qty),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['receipts', 'detail', receiptId] })
+      toast.success('خط با موفقیت تایید شد')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'خطا در تایید خط')
+    },
+  })
+}
+
+export function useRejectReceiptLine(receiptId: string) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: ({ lineId, qty, reason }: { lineId: string; qty: number; reason?: string }) =>
+      api.rejectReceiptLine(receiptId, lineId, qty, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['receipts', 'detail', receiptId] })
+      toast.success('خط با موفقیت رد شد')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'خطا در رد خط')
+    },
+  })
+}
+
 

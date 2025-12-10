@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Spinner } from '@/shared/components/Spinner'
@@ -11,11 +11,14 @@ import {
   useReceiveReceipt,
   useApproveReceipt,
   useCancelReceipt,
+  useApproveReceiptLinePartial,
+  useRejectReceiptLine,
 } from '../queries'
 import { useConfirm } from '@/shared/components/confirm/ConfirmProvider'
 import { swalPrompt } from '@/shared/utils/swal'
 import { AddReceiptLineModal } from '../components/AddReceiptLineModal'
 import { EditReceiptLineModal } from '../components/EditReceiptLineModal'
+import { ApproveRejectLineModal } from '../components/ApproveRejectLineModal'
 import type { ReceiptLine } from '../types'
 import {
   ReceiptStatusLabels,
@@ -24,6 +27,8 @@ import {
   type ReceiptStatus,
   type ReceiptReason,
 } from '../types'
+import { useProductNames } from '@/shared/hooks/useProductNames'
+import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
 
 export function ReceiptDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -38,7 +43,15 @@ export function ReceiptDetailPage() {
   const confirm = useConfirm()
   const [showAddLineModal, setShowAddLineModal] = useState(false)
   const [editingLine, setEditingLine] = useState<ReceiptLine | null>(null)
+  const [approveRejectLine, setApproveRejectLine] = useState<{ line: ReceiptLine; mode: 'approve' | 'reject' } | null>(null)
   const updateLine = useUpdateReceiptLine(id!)
+  const approveLinePartial = useApproveReceiptLinePartial(id!)
+  const rejectLine = useRejectReceiptLine(id!)
+
+  // جمع‌آوری productId های تمام خطوط (در صورت وجود) برای دریافت نام محصولات
+  const productIds = useMemo(() => receipt?.lines.map((line) => line.productId) || [], [receipt?.lines])
+  const { getProductName, getVariantName } = useProductNames(productIds)
+  const { getWarehouseName } = useWarehouseNames()
 
   if (isLoading) {
     return (
@@ -144,8 +157,8 @@ export function ReceiptDetailPage() {
 
   async function handleApprove() {
     const ok = await confirm.confirm({
-      title: 'تایید رسید',
-      message: 'آیا می‌خواهید این رسید را تایید کنید؟ کالاها برای فروش در دسترس خواهند بود.',
+      title: 'تایید نهایی رسید',
+      message: 'آیا از تایید نهایی این رسید مطمئن هستید؟ فقط مقادیر تایید شده برای فروش در دسترس خواهند بود.',
     })
     if (!ok) return
     await approve.mutateAsync()
@@ -158,6 +171,16 @@ export function ReceiptDetailPage() {
     })
     if (!ok) return
     await cancel.mutateAsync()
+  }
+
+  async function handleApproveRejectLine(qty: number, reason?: string) {
+    if (!approveRejectLine) return
+    if (approveRejectLine.mode === 'approve') {
+      await approveLinePartial.mutateAsync({ lineId: approveRejectLine.line.id, qty })
+    } else {
+      await rejectLine.mutateAsync({ lineId: approveRejectLine.line.id, qty, reason })
+    }
+    setApproveRejectLine(null)
   }
 
   function formatDate(dateStr: string) {
@@ -189,6 +212,10 @@ export function ReceiptDetailPage() {
 
   const isDraft = receipt.status === 'Draft'
   const isReceived = receipt.status === 'Received'
+  const isApproved = receipt.status === 'Approved'
+  
+  // بررسی اینکه آیا همه خطوط تکلیفشان مشخص شده است
+  const allLinesCompleted = isReceived && receipt.lines.every((line) => line.remainingQty === 0)
 
   return (
     <div className="space-y-6">
@@ -244,16 +271,17 @@ export function ReceiptDetailPage() {
                 </button>
               </>
             )}
-            {isReceived && (
+            {isReceived && allLinesCompleted && (
               <button
                 onClick={handleApprove}
                 disabled={approve.isPending}
                 className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-green-700 disabled:opacity-50"
+                title="تایید نهایی رسید - همه خطوط تکلیفشان مشخص شده است"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                 </svg>
-                تایید نهایی
+                تایید نهایی رسید
               </button>
             )}
             <button
@@ -319,8 +347,8 @@ export function ReceiptDetailPage() {
             <div className="mt-1 font-mono text-sm text-slate-700">{receipt.id}</div>
           </div>
           <div>
-            <div className="text-sm text-slate-500">شناسه انبار</div>
-            <div className="mt-1 font-mono text-sm text-slate-700">{receipt.warehouseId}</div>
+            <div className="text-sm text-slate-500">انبار</div>
+            <div className="mt-1 text-sm font-semibold text-slate-900">{getWarehouseName(receipt.warehouseId)}</div>
           </div>
           <div>
             <div className="text-sm text-slate-500">تاریخ دریافت</div>
@@ -375,12 +403,20 @@ export function ReceiptDetailPage() {
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-right">
                   <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">ردیف</th>
-                  <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">شناسه محصول</th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">محصول</th>
                   <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">واریانت</th>
                   <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تعداد</th>
                   <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">شماره لات</th>
                   <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تاریخ انقضا</th>
                   <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">هزینه واحد</th>
+                  {(isReceived || isApproved) && (
+                    <>
+                      <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تایید شده</th>
+                      <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">رد شده</th>
+                      <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">باقیمانده</th>
+                      {isReceived && <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">عملیات</th>}
+                    </>
+                  )}
                   {isDraft && <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">عملیات</th>}
                 </tr>
               </thead>
@@ -389,11 +425,11 @@ export function ReceiptDetailPage() {
                   <tr key={line.id} className="transition-colors hover:bg-slate-50">
                     <td className="whitespace-nowrap px-4 py-3 text-slate-700">{line.lineNo}</td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <span className="font-mono text-xs text-slate-600">{line.productId.substring(0, 8)}...</span>
+                      <div className="font-medium text-slate-900">{getProductName(line.productId)}</div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       {line.variantId ? (
-                        <span className="font-mono text-xs text-slate-600">{line.variantId.substring(0, 8)}...</span>
+                        <div className="text-sm text-emerald-600">{getVariantName(line.variantId) || line.variantId.substring(0, 8) + '...'}</div>
                       ) : (
                         <span className="text-slate-400">-</span>
                       )}
@@ -408,6 +444,71 @@ export function ReceiptDetailPage() {
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {line.unitCost ? `${line.unitCost.toLocaleString('fa-IR')} ریال` : '-'}
                     </td>
+                    {(isReceived || isApproved) && (
+                      <>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                            {line.approvedQty.toLocaleString('fa-IR')}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {line.rejectedQty > 0 ? (
+                            <div>
+                              <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
+                                {line.rejectedQty.toLocaleString('fa-IR')}
+                              </span>
+                              {line.rejectionReason && (
+                                <div className="mt-1 text-xs text-red-600" title={line.rejectionReason}>
+                                  <span className="font-medium">دلیل:</span>{' '}
+                                  {line.rejectionReason.length > 40
+                                    ? `${line.rejectionReason.substring(0, 40)}...`
+                                    : line.rejectionReason}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                              line.remainingQty > 0
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {line.remainingQty.toLocaleString('fa-IR')}
+                          </span>
+                        </td>
+                        {isReceived && (
+                          <td className="whitespace-nowrap px-4 py-3">
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => setApproveRejectLine({ line, mode: 'approve' })}
+                                disabled={approveLinePartial.isPending || rejectLine.isPending}
+                                className="rounded-lg p-1.5 text-emerald-600 transition-colors hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-50"
+                                title="ویرایش مقدار تایید شده (می‌توانید کم یا زیاد کنید)"
+                              >
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => setApproveRejectLine({ line, mode: 'reject' })}
+                                disabled={approveLinePartial.isPending || rejectLine.isPending}
+                                className="rounded-lg p-1.5 text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
+                                title="ویرایش مقدار رد شده (می‌توانید کم یا زیاد کنید)"
+                              >
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </>
+                    )}
                     {isDraft && (
                       <td className="whitespace-nowrap px-4 py-3">
                         <div className="flex items-center gap-1">
@@ -446,10 +547,24 @@ export function ReceiptDetailPage() {
                   <td colSpan={3} className="px-4 py-3 text-left font-semibold text-slate-700">
                     جمع کل
                   </td>
-                  <td className="px-4 py-3 font-bold text-emerald-600">
+                  <td className="px-4 py-3 font-bold text-slate-900">
                     {receipt.lines.reduce((sum, l) => sum + l.qty, 0).toLocaleString('fa-IR')}
                   </td>
-                  <td colSpan={isDraft ? 4 : 3}></td>
+                  {(isReceived || isApproved) && (
+                    <>
+                      <td className="px-4 py-3 font-bold text-green-600">
+                        {receipt.lines.reduce((sum, l) => sum + l.approvedQty, 0).toLocaleString('fa-IR')}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-red-600">
+                        {receipt.lines.reduce((sum, l) => sum + l.rejectedQty, 0).toLocaleString('fa-IR')}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-blue-600">
+                        {receipt.lines.reduce((sum, l) => sum + l.remainingQty, 0).toLocaleString('fa-IR')}
+                      </td>
+                      {isReceived && <td></td>}
+                    </>
+                  )}
+                  {isDraft && <td colSpan={4}></td>}
                 </tr>
               </tfoot>
             </table>
@@ -472,6 +587,16 @@ export function ReceiptDetailPage() {
         onClose={() => setEditingLine(null)}
         onSubmit={handleUpdateLine}
         isSubmitting={updateLine.isPending}
+      />
+
+      {/* Approve/Reject Line Modal */}
+      <ApproveRejectLineModal
+        isOpen={!!approveRejectLine}
+        line={approveRejectLine?.line || null}
+        mode={approveRejectLine?.mode || 'approve'}
+        onClose={() => setApproveRejectLine(null)}
+        onSubmit={handleApproveRejectLine}
+        isSubmitting={approveLinePartial.isPending || rejectLine.isPending}
       />
     </div>
   )

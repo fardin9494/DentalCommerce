@@ -17,6 +17,11 @@ public sealed class ReceiptLineConfig : IEntityTypeConfiguration<ReceiptLine>
         b.Property(x => x.UnitCost).HasPrecision(18, 2);
         b.Property(x => x.LotNumber).HasMaxLength(64);
         b.Property(x => x.ExpiryDate).HasColumnType("datetime2");
+        
+        // فیلدهای جدید برای تایید/رد جزئی
+        b.Property(x => x.ApprovedQty).HasPrecision(18, 3).IsRequired().HasDefaultValue(0);
+        b.Property(x => x.RejectedQty).HasPrecision(18, 3).IsRequired().HasDefaultValue(0);
+        b.Property(x => x.RejectionReason).HasMaxLength(1000);
 
         b.HasIndex(x => new { x.ReceiptId, x.LineNo }).IsUnique();
 

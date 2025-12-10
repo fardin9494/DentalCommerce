@@ -59,6 +59,14 @@ public sealed class PostIssueHandler : IRequestHandler<PostIssueCommand, Unit>
                                 );
                             }
 
+                            // فقط کالاهای Available قابل فروش هستند
+                            if (stock.Status != StockStatus.Available)
+                            {
+                                throw new InvalidOperationException(
+                                    $"کالا با شناسه {stock.Id} (خط {line.LineNo}) در وضعیت {stock.Status} است و قابل فروش نیست. فقط کالاهای آزاد قابل فروش هستند."
+                                );
+                            }
+
                             // بررسی موجودی رزرو شده
                             if (stock.Reserved < alloc.Qty)
                             {
@@ -100,7 +108,7 @@ public sealed class PostIssueHandler : IRequestHandler<PostIssueCommand, Unit>
                                     timestampUtc: when,
                                     productId: line.ProductId,
                                     variantId: line.VariantId,
-                                    warehouseId: issue.WarehouseId,
+                                    warehouseId: issue.WarehouseId ?? stock.WarehouseId, // استفاده از warehouseId موجود در StockItem اگر Issue.WarehouseId null باشد
                                     lotNumber: stock.LotNumber,
                                     expiryDate: stock.ExpiryDate,
                                     deltaQty: -alloc.Qty,

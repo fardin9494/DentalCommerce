@@ -14,12 +14,13 @@ import {
   type AdjustmentReason,
   type AdjustmentsListFilters,
 } from '../types'
-import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
+import { useActiveWarehouses, useWarehouseNames } from '@/shared/hooks/useWarehouses'
 
 export function AdjustmentsListPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { data: warehouses } = useActiveWarehouses()
+  const { getWarehouseName } = useWarehouseNames()
   const createAdjustment = useCreateAdjustment()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -338,11 +339,7 @@ export function AdjustmentsListPage() {
                         <span className="font-mono text-xs text-slate-500">{adjustment.id.substring(0, 8)}...</span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-                        {adjustment.warehouseName || (
-                          <span className="font-mono text-xs text-slate-400">
-                            {adjustment.warehouseId.substring(0, 8)}...
-                          </span>
-                        )}
+                        {adjustment.warehouseName || getWarehouseName(adjustment.warehouseId)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">

@@ -6,6 +6,10 @@ export const ShelfSchema = z.object({
   warehouseId: z.string().uuid(),
   warehouseName: z.string().nullable().optional(),
   name: z.string(),
+  code: z.string(),
+  rowNumber: z.number(),
+  columnNumber: z.number(),
+  levelNumber: z.number(),
   description: z.string().nullable().optional(),
   isActive: z.boolean(),
   createdAt: z.string(),
@@ -18,6 +22,15 @@ export const ShelvesListSchema = z.array(ShelfSchema)
 export interface CreateShelfDto {
   warehouseId: string
   name: string
+  description?: string
+}
+
+export interface CreateShelvesBatchDto {
+  warehouseId: string
+  rows: number
+  columns: number
+  levels?: number
+  prefix?: string
   description?: string
 }
 
@@ -36,8 +49,16 @@ export async function createShelf(dto: CreateShelfDto): Promise<{ id: string }> 
   return fetchJson<{ id: string }>('/shelves', { method: 'POST', json: dto })
 }
 
+export async function createShelvesBatch(dto: CreateShelvesBatchDto): Promise<{ created: number }> {
+  return fetchJson<{ created: number }>('/shelves/batch', { method: 'POST', json: dto })
+}
+
 export async function updateShelf(id: string, dto: UpdateShelfDto): Promise<void> {
   return fetchJson<void>(`/shelves/${id}`, { method: 'PUT', json: dto })
+}
+
+export async function activateShelf(id: string): Promise<void> {
+  return fetchJson<void>(`/shelves/${id}/activate`, { method: 'POST' })
 }
 
 export async function deactivateShelf(id: string): Promise<void> {

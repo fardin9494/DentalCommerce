@@ -18,6 +18,19 @@ export function useAllWarehouses() {
   return useWarehouses(undefined)
 }
 
+// Helper hook برای گرفتن نام انبار بر اساس شناسه
+export function useWarehouseNames() {
+  const { data, isLoading, isError } = useAllWarehouses()
+
+  const getWarehouseName = (id?: string | null) => {
+    if (!id) return 'نامشخص'
+    const found = data?.find((w) => w.id === id)
+    return found?.name || `${id.substring(0, 8)}...`
+  }
+
+  return { getWarehouseName, isLoading, isError }
+}
+
 export function useCreateWarehouse() {
   const qc = useQueryClient()
   const toast = useToast()

@@ -30,19 +30,44 @@ public sealed class ApproveReceiptHandler : IRequestHandler<ApproveReceiptComman
                         .FirstOrDefaultAsync(r => r.Id == req.ReceiptId, ct)
                         ?? throw new InvalidOperationException("رسید پیدا نشد.");
 
-                    rec.Approve();
+                    // تایید نهایی - فقط وقتی همه خطوط تکلیفشان مشخص شده باشد
+                    rec.FinalApprove();
 
+                    // آزاد کردن فقط مقادیر تایید شده از قرنطینه
+                    // توجه: ممکن است بخشی از مقادیر قبلاً در ApproveReceiptLinePartialHandler آزاد شده باشند
                     foreach (var l in rec.Lines)
                     {
-                        var stock = await _db.StockItems.FirstOrDefaultAsync(si =>
-                            si.ProductId == l.ProductId &&
-                            si.VariantId == l.VariantId &&
-                            si.WarehouseId == rec.WarehouseId &&
-                            si.LotNumber == l.LotNumber &&
-                            si.ExpiryDate == l.ExpiryDate, ct)
-                            ?? throw new InvalidOperationException($"موجودی مربوط به خط {l.LineNo} یافت نشد.");
+                        if (l.ApprovedQty > 0)
+                        {
+                            var stock = await _db.StockItems.FirstOrDefaultAsync(si =>
+                                si.ProductId == l.ProductId &&
+                                si.VariantId == l.VariantId &&
+                                si.WarehouseId == rec.WarehouseId &&
+                                si.LotNumber == l.LotNumber &&
+                                si.ExpiryDate == l.ExpiryDate, ct)
+                                ?? throw new InvalidOperationException($"موجودی مربوط به خط {l.LineNo} یافت نشد.");
 
-                        stock.Unblock(l.Qty);
+                            // آزاد کردن فقط مقدار باقیمانده Blocked (ممکن است بخشی قبلاً در ApproveReceiptLinePartialHandler آزاد شده باشد)
+                            var remainingBlocked = stock.Blocked;
+                            if (remainingBlocked > 0)
+                            {
+                                // آزاد کردن از Blocked
+                                stock.Unblock(remainingBlocked);
+                                
+                                // اگر در قفسه است → Available می‌شود
+                                // اگر در قفسه نیست → AwaitingShelving می‌شود (تا زمانی که در قفسه چیده شود)
+                                if (stock.ShelfId.HasValue)
+                                {
+                                    // در قفسه است → Available (Unblock کافی است)
+                                }
+                                else
+                                {
+                                    // در قفسه نیست → AwaitingShelving می‌شود
+                                    stock.Block(remainingBlocked, "Awaiting Shelving");
+                                }
+                            }
+                            // اگر remainingBlocked == 0، یعنی همه مقادیر قبلاً آزاد شده‌اند و نیازی به Unblock نیست
+                        }
                     }
 
                     await _db.SaveChangesAsync(ct);
@@ -53,6 +78,15 @@ public sealed class ApproveReceiptHandler : IRequestHandler<ApproveReceiptComman
                 {
                     await tx.RollbackAsync(ct);
                     _db.ChangeTracker.Clear();
+                }
+                catch (Exception ex) when (attempt < maxAttempts)
+                {
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
+                    // Log the exception for debugging
+                    throw new InvalidOperationException(
+                        $"خطا در تایید نهایی رسید (تلاش {attempt}/{maxAttempts}): {ex.Message}. " +
+                        $"Inner: {ex.InnerException?.Message}", ex);
                 }
             }
         });

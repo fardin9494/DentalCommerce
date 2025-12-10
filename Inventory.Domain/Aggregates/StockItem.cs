@@ -1,4 +1,5 @@
 ﻿using BuildingBlocks.Domain;
+using Inventory.Domain.Enums;
 
 namespace Inventory.Domain.Aggregates;
 
@@ -24,6 +25,31 @@ public sealed class StockItem : AggregateRoot<Guid>
     public decimal Reserved { get; private set; }
     public decimal Blocked { get; private set; }
     public string? BlockReason { get; private set; }
+    
+    /// <summary>
+    /// وضعیت موجودی - محاسبه شده بر اساس OnHand, Reserved, Blocked, ShelfId
+    /// </summary>
+    public StockStatus Status
+    {
+        get
+        {
+            if (Blocked > 0)
+            {
+                // اگر BlockReason "Awaiting Shelving" باشد، وضعیت AwaitingShelving است
+                if (BlockReason == "Awaiting Shelving")
+                    return StockStatus.AwaitingShelving;
+                return StockStatus.Blocked;
+            }
+            if (Reserved > 0 && Available == 0)
+                return StockStatus.Reserved;
+            if (ShelfId.HasValue && Available > 0)
+                return StockStatus.Available;
+            // اگر در قفسه نیست ولی Blocked هم نیست، باید AwaitingShelving باشد
+            if (!ShelfId.HasValue && OnHand > 0 && Blocked == 0)
+                return StockStatus.AwaitingShelving;
+            return StockStatus.Available;
+        }
+    }
 
     private StockItem() { }
 
@@ -104,6 +130,70 @@ public sealed class StockItem : AggregateRoot<Guid>
         if (qty <= 0) throw new ArgumentOutOfRangeException(nameof(qty));
         if (qty > Blocked) throw new InvalidOperationException("مقدار مسدود کافی برای آزادسازی نیست.");
         Blocked -= qty;
+        if (Blocked == 0) BlockReason = null;
+        Touch();
+    }
+
+    /// <summary>
+    /// کاهش موجودی از مقدار مسدود شده (برای رد کردن کالاهای قرنطینه)
+    /// این متد مستقیماً از OnHand و Blocked کم می‌کند بدون نیاز به Available
+    /// </summary>
+    public void DecreaseFromBlocked(decimal qty)
+    {
+        if (qty <= 0) throw new ArgumentOutOfRangeException(nameof(qty));
+        if (qty > Blocked) throw new InvalidOperationException("مقدار مسدود کافی برای کاهش نیست.");
+        if (qty > OnHand) throw new InvalidOperationException("موجودی کل کافی نیست.");
+
+        OnHand -= qty;
+        Blocked -= qty;
+        if (Blocked == 0) BlockReason = null;
+        Touch();
+    }
+
+    /// <summary>
+    /// مسدود کردن موجودی مستقیماً از OnHand (بدون نیاز به Available)
+    /// این متد برای مواقعی استفاده می‌شود که می‌خواهیم موجودی را از حالت تایید شده به مسدود تبدیل کنیم
+    /// </summary>
+    public void BlockFromOnHand(decimal qty, string reason)
+    {
+        if (qty <= 0) throw new ArgumentOutOfRangeException(nameof(qty));
+        if (qty > OnHand) throw new InvalidOperationException("موجودی کل کافی برای مسدودسازی نیست.");
+
+        // ابتدا اگر Reserved است، Release می‌کنیم
+        var qtyToRelease = Math.Min(qty, Reserved);
+        if (qtyToRelease > 0)
+        {
+            Reserved -= qtyToRelease;
+        }
+
+        // سپس Block می‌کنیم
+        Blocked += qty;
+        BlockReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        Touch();
+    }
+
+    /// <summary>
+    /// تنظیم مقدار Blocked به مقدار مشخص (برای منطق ساده تایید/رد)
+    /// این متد Blocked را به مقدار جدید تنظیم می‌کند و BlockReason را به‌روز می‌کند
+    /// اگر Reserved است، ابتدا Release می‌کند تا Available منفی نشود
+    /// </summary>
+    public void SetBlocked(decimal newBlocked, string? reason = null)
+    {
+        if (newBlocked < 0) throw new ArgumentOutOfRangeException(nameof(newBlocked));
+        if (newBlocked > OnHand) throw new InvalidOperationException("مقدار مسدود نمی‌تواند از موجودی کل بیشتر باشد.");
+
+        // محاسبه مقدار تغییر
+        var delta = newBlocked - Blocked;
+        
+        // اگر باید Blocked را افزایش دهیم و Reserved وجود دارد، ابتدا Release می‌کنیم
+        if (delta > 0 && Reserved > 0)
+        {
+            var qtyToRelease = Math.Min(Reserved, delta);
+            Reserved -= qtyToRelease;
+        }
+
+        Blocked = newBlocked;
+        BlockReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
         if (Blocked == 0) BlockReason = null;
         Touch();
     }

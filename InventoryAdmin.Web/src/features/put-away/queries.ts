@@ -20,7 +20,14 @@ export function useMoveStockToShelf() {
       toast.success('کالا با موفقیت به قفسه منتقل شد')
     },
     onError: (err: any) => {
-      toast.error(err.message || 'خطا در انتقال کالا به قفسه')
+      // نمایش پیام خطای مناسب
+      // err ممکن است ApiError باشد که از fetchJson throw شده
+      const errorMessage = err.details?.detail || err.details?.title || err.message || 'خطا در انتقال کالا به قفسه'
+      if (errorMessage.includes('تایید نهایی') || errorMessage.includes('رسید مربوطه')) {
+        toast.error(errorMessage)
+      } else {
+        toast.error(errorMessage)
+      }
     },
   })
 }

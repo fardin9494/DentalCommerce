@@ -1,5 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Spinner } from '@/shared/components/Spinner'
+import { useProductNames } from '@/shared/hooks/useProductNames'
+import DatePicker from 'react-multi-date-picker'
+import DateObject from 'react-date-object'
+import persian from 'react-date-object/calendars/persian'
+import persian_fa from 'react-date-object/locales/persian_fa'
 import type { ReceiptLine } from '../types'
 
 interface EditReceiptLineModalProps {
@@ -18,15 +23,23 @@ interface EditReceiptLineModalProps {
 export function EditReceiptLineModal({ isOpen, line, onClose, onSubmit, isSubmitting }: EditReceiptLineModalProps) {
   const [qty, setQty] = useState('')
   const [lotNumber, setLotNumber] = useState('')
-  const [expiryDate, setExpiryDate] = useState('')
+  const [expiryDate, setExpiryDate] = useState<DateObject | null>(null)
   const [unitCost, setUnitCost] = useState('')
+  
+  const productIds = useMemo(() => (line ? [line.productId] : []), [line?.productId])
+  const { getProductName, getVariantName } = useProductNames(productIds)
 
   // Initialize form when line changes
   useEffect(() => {
     if (line) {
       setQty(line.qty.toString())
       setLotNumber(line.lotNumber || '')
-      setExpiryDate(line.expiryDateUtc ? line.expiryDateUtc.split('T')[0] : '')
+      if (line.expiryDateUtc) {
+        const g = new Date(line.expiryDateUtc)
+        setExpiryDate(new DateObject({ date: g, calendar: persian, locale: persian_fa }))
+      } else {
+        setExpiryDate(null)
+      }
       setUnitCost(line.unitCost?.toString() || '')
     }
   }, [line])
@@ -39,10 +52,12 @@ export function EditReceiptLineModal({ isOpen, line, onClose, onSubmit, isSubmit
     const qtyNum = parseFloat(qty)
     if (isNaN(qtyNum) || qtyNum <= 0) return
 
+    const expiryDateUtc = expiryDate ? expiryDate.toDate().toISOString() : null
+
     onSubmit({
       qty: qtyNum,
       lotNumber: lotNumber.trim() || null,
-      expiryDateUtc: expiryDate ? new Date(expiryDate).toISOString() : null,
+      expiryDateUtc,
       unitCost: unitCost ? parseFloat(unitCost) : null,
     })
   }
@@ -74,10 +89,12 @@ export function EditReceiptLineModal({ isOpen, line, onClose, onSubmit, isSubmit
         {/* Line Info */}
         <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 p-3">
           <div className="text-xs text-slate-500">ردیف {line.lineNo}</div>
-          <div className="mt-1 font-mono text-sm text-slate-700">
-            محصول: {line.productId.substring(0, 8)}...
+          <div className="mt-1 text-sm text-slate-700">
+            <div className="font-medium text-slate-900">محصول: {getProductName(line.productId)}</div>
             {line.variantId && (
-              <span className="text-slate-500"> | واریانت: {line.variantId.substring(0, 8)}...</span>
+              <div className="mt-0.5 text-sm text-emerald-600">
+                واریانت: {getVariantName(line.variantId) || line.variantId.substring(0, 8) + '...'}
+              </div>
             )}
           </div>
         </div>
@@ -113,13 +130,26 @@ export function EditReceiptLineModal({ isOpen, line, onClose, onSubmit, isSubmit
 
           {/* Expiry Date */}
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">تاریخ انقضا</label>
-            <input
-              type="date"
+            <label className="mb-2 block text-sm font-medium text-slate-700">تاریخ انقضا (شمسی)</label>
+            <DatePicker
               value={expiryDate}
-              onChange={(e) => setExpiryDate(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              onChange={(date) => {
+                if (Array.isArray(date)) {
+                  setExpiryDate((date[0] as DateObject | null) ?? null)
+                } else {
+                  setExpiryDate(date as DateObject | null)
+                }
+              }}
+              calendar={persian}
+              locale={persian_fa}
+              calendarPosition="bottom-center"
+              portal
+              editable={false}
+              inputClass="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              placeholder="انتخاب تاریخ"
+              format="YYYY/MM/DD"
             />
+            <p className="mt-1 text-xs text-slate-500">انتخاب از تقویم شمسی؛ در سیستم به میلادی ذخیره می‌شود.</p>
           </div>
 
           {/* Unit Cost */}

@@ -12,6 +12,7 @@ import {
   type ReceiptReason,
   type ReceiptsListFilters,
 } from '../types'
+import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
 
 export function ReceiptsListPage() {
   const navigate = useNavigate()
@@ -19,6 +20,7 @@ export function ReceiptsListPage() {
   const createReceipt = useCreateReceipt()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
+  const { getWarehouseName } = useWarehouseNames()
 
   // Get filters from URL
   const filters: ReceiptsListFilters = useMemo(() => ({
@@ -307,11 +309,7 @@ export function ReceiptsListPage() {
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-                        {receipt.warehouseName || (
-                          <span className="font-mono text-xs text-slate-400">
-                            {receipt.warehouseId.substring(0, 8)}...
-                          </span>
-                        )}
+                        {receipt.warehouseName || getWarehouseName(receipt.warehouseId)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">

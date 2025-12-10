@@ -4,6 +4,7 @@ using Inventory.Application.Features.Issues.Commands;
 using Inventory.Application.Features.Pricing.Commands;
 using Inventory.Application.Features.Pricing.Queries;
 using Inventory.Application.Features.Receipts.Commands;
+using Inventory.Api.Contracts.Receipts;
 using Inventory.Application.Features.Stock.Commands; // ???????? ????
 using Inventory.Application.Features.Shelves.Commands; // ???????? ????
 using Inventory.Application.Features.Transfers.Commands;
@@ -246,10 +247,23 @@ receipts.MapPost("/", async (CreateReceiptDraftCommand cmd, IMediator m) =>
     return Results.Created($"/api/inventory/receipts/{id}", new { id });
 });
 
-receipts.MapPost("/{id:guid}/lines", async (Guid id, AddReceiptLineCommand body, IMediator m) =>
+receipts.MapPost("/{id:guid}/lines", async (Guid id, AddReceiptLineCommand body, IMediator m, ILogger<Program> logger) =>
 {
-    var lineId = await m.Send(body with { ReceiptId = id });
-    return Results.Created($"/api/inventory/receipts/{id}/lines/{lineId}", new { id = lineId });
+    try
+    {
+        var lineId = await m.Send(body with { ReceiptId = id });
+        return Results.Created($"/api/inventory/receipts/{id}/lines/{lineId}", new { id = lineId });
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to add receipt line for {ReceiptId}", id);
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error adding receipt line for {ReceiptId}", id);
+        return Results.Problem(detail: ex.Message, title: "خطا در افزودن خط رسید");
+    }
 });
 
 receipts.MapDelete("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMediator m) =>
@@ -295,6 +309,46 @@ receipts.MapPost("/{id:guid}/approve", async (Guid id, IMediator m) =>
 {
     await m.Send(new ApproveReceiptCommand { ReceiptId = id });
     return Results.NoContent();
+});
+
+// تایید جزئی یک خط از رسید
+receipts.MapPost("/{id:guid}/lines/{lineId:guid}/approve-partial", async (Guid id, Guid lineId, [FromBody] ApproveReceiptLinePartialBody body, IMediator m, ILogger<Program> logger) =>
+{
+    try
+    {
+        await m.Send(new ApproveReceiptLinePartialCommand(id, lineId, body.Qty));
+        return Results.NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to approve receipt line {ReceiptId}/{LineId}", id, lineId);
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error approving receipt line {ReceiptId}/{LineId}", id, lineId);
+        return Results.Problem(detail: ex.Message, title: "خطا در تایید خط رسید");
+    }
+});
+
+// رد کردن یک خط از رسید
+receipts.MapPost("/{id:guid}/lines/{lineId:guid}/reject", async (Guid id, Guid lineId, [FromBody] RejectReceiptLineBody body, IMediator m, ILogger<Program> logger) =>
+{
+    try
+    {
+        await m.Send(new RejectReceiptLineCommand(id, lineId, body.Qty, body.Reason));
+        return Results.NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to reject receipt line {ReceiptId}/{LineId}", id, lineId);
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error rejecting receipt line {ReceiptId}/{LineId}", id, lineId);
+        return Results.Problem(detail: ex.Message, title: "خطا در رد خط رسید");
+    }
 });
 
 receipts.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
@@ -979,9 +1033,34 @@ shelves.MapPost("/", async (CreateStockShelfCommand cmd, IMediator m) =>
     return Results.Created($"/api/inventory/shelves/{id}", new { id });
 });
 
+shelves.MapPost("/batch", async (Inventory.Application.Features.Shelves.Commands.CreateStockShelvesBatchCommand cmd, IMediator m, ILogger<Program> logger) =>
+{
+    try
+    {
+        var created = await m.Send(cmd);
+        return Results.Ok(new { created });
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to batch create shelves for warehouse {WarehouseId}", cmd.WarehouseId);
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error batch creating shelves for warehouse {WarehouseId}", cmd.WarehouseId);
+        return Results.Problem(detail: ex.Message, title: "خطا در ایجاد گروهی قفسه‌ها");
+    }
+});
+
 shelves.MapPut("/{id:guid}", async (Guid id, Inventory.Application.Features.Shelves.Commands.UpdateStockShelfCommand body, IMediator m) =>
 {
     await m.Send(body with { Id = id });
+    return Results.NoContent();
+});
+
+shelves.MapPost("/{id:guid}/activate", async (Guid id, IMediator m) =>
+{
+    await m.Send(new Inventory.Application.Features.Shelves.Commands.ActivateStockShelfCommand(id));
     return Results.NoContent();
 });
 
@@ -999,10 +1078,29 @@ ops.MapPost("/shelves", async (CreateStockShelfCommand cmd, IMediator m) =>
 });
 
 // ??????? ???? (Put-away / Internal Move)
-ops.MapPost("/move-stock", async (MoveStockItemCommand cmd, IMediator m) =>
+ops.MapPost("/move-stock", async (MoveStockItemCommand cmd, IMediator m, ILogger<Program> logger) =>
 {
-    await m.Send(cmd);
-    return Results.NoContent();
+    try
+    {
+        await m.Send(cmd);
+        return Results.NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to move stock to shelf");
+        return Results.Problem(
+            title: "خطا در انتقال کالا",
+            detail: ex.Message,
+            statusCode: StatusCodes.Status400BadRequest);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error moving stock to shelf");
+        return Results.Problem(
+            title: "خطا در انتقال کالا",
+            detail: ex.Message,
+            statusCode: StatusCodes.Status500InternalServerError);
+    }
 });
 
 

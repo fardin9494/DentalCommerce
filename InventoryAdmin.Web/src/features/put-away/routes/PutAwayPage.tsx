@@ -6,11 +6,13 @@ import { useUnassignedStockItems, useMoveStockToShelf } from '../queries'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
 import { AssignShelfModal } from '../components/AssignShelfModal'
 import type { UnassignedStockItem, UnassignedStockItemsFilters } from '../api'
+import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
 
 export function PutAwayPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { data: warehouses } = useActiveWarehouses()
   const moveToShelf = useMoveStockToShelf()
+  const { getWarehouseName } = useWarehouseNames()
 
   // Get filters from URL
   const filters: UnassignedStockItemsFilters = useMemo(
@@ -115,7 +117,8 @@ export function PutAwayPage() {
   }
 
   const hasActiveFilters = warehouseFilter || searchInput
-  const totalUnassigned = data?.items.reduce((sum, item) => sum + item.available, 0) ?? 0
+  // برای موجودی‌های جدید (مسدود)، باید از Blocked استفاده کنیم
+  const totalUnassigned = data?.items.reduce((sum, item) => sum + (item.blocked > 0 ? item.blocked : item.available), 0) ?? 0
 
   return (
     <div className="space-y-6">
@@ -280,19 +283,26 @@ export function PutAwayPage() {
                         <span className="font-mono text-sm font-medium text-slate-700">{item.sku}</span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-                        {item.warehouseName || (
-                          <span className="font-mono text-xs text-slate-400">{item.warehouseId.substring(0, 8)}...</span>
-                        )}
+                        {item.warehouseName || getWarehouseName(item.warehouseId)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">{item.lotNumber || '-'}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(item.expiryDate)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-center">
-                        <span className="font-semibold text-emerald-600">{item.available.toLocaleString('fa-IR')}</span>
+                        {item.blocked > 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700">
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                            </svg>
+                            {item.blocked.toLocaleString('fa-IR')} (مسدود)
+                          </span>
+                        ) : (
+                          <span className="font-semibold text-emerald-600">{item.available.toLocaleString('fa-IR')}</span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <button
                           onClick={() => setAssigningItem(item)}
-                          disabled={item.available <= 0}
+                          disabled={item.blocked === 0 && item.available <= 0}
                           className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">

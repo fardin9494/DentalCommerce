@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Spinner } from '@/shared/components/Spinner'
+import { useProductNames } from '@/shared/hooks/useProductNames'
 import type { AdjustmentLine } from '../types'
 
 interface EditAdjustmentLineModalProps {
@@ -18,6 +19,8 @@ export function EditAdjustmentLineModal({
   isSubmitting,
 }: EditAdjustmentLineModalProps) {
   const [qtyDelta, setQtyDelta] = useState('0')
+  
+  const { getProductName, getVariantName } = useProductNames([line.productId])
 
   useEffect(() => {
     if (line) {
@@ -63,9 +66,13 @@ export function EditAdjustmentLineModal({
           {/* Line Info */}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <div className="text-sm font-medium text-slate-700">ردیف: {line.lineNo}</div>
-            <div className="mt-1 text-xs text-slate-500">
-              <div className="font-mono">Product: {line.productId.substring(0, 8)}...</div>
-              {line.variantId && <div className="font-mono">Variant: {line.variantId.substring(0, 8)}...</div>}
+            <div className="mt-1 text-sm text-slate-700">
+              <div className="font-medium text-slate-900">محصول: {getProductName(line.productId)}</div>
+              {line.variantId && (
+                <div className="mt-0.5 text-sm text-emerald-600">
+                  واریانت: {getVariantName(line.variantId) || line.variantId.substring(0, 8) + '...'}
+                </div>
+              )}
             </div>
           </div>
 

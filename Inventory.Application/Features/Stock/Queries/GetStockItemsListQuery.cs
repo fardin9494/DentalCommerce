@@ -87,6 +87,20 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
             query = query.Where(si => si.OnHand > 0);
         }
 
+        // Get warehouses for names (before pagination to avoid multiple queries)
+        var warehouseIds = await query.Select(si => si.WarehouseId).Distinct().ToListAsync(ct);
+        var warehouses = await _db.Warehouses
+            .AsNoTracking()
+            .Where(w => warehouseIds.Contains(w.Id))
+            .ToDictionaryAsync(w => w.Id, w => w.Name, ct);
+
+        // Get shelves for names (before pagination to avoid multiple queries)
+        var shelfIds = await query.Where(si => si.ShelfId != null).Select(si => si.ShelfId!.Value).Distinct().ToListAsync(ct);
+        var shelves = await _db.StockShelves
+            .AsNoTracking()
+            .Where(s => shelfIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+
         // Get total count
         var totalCount = await query.CountAsync(ct);
 
@@ -95,21 +109,7 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
         var page = Math.Clamp(req.Page, 1, Math.Max(1, totalPages));
 
-        // Get warehouses for names
-        var warehouseIds = await query.Select(si => si.WarehouseId).Distinct().ToListAsync(ct);
-        var warehouses = await _db.Warehouses
-            .AsNoTracking()
-            .Where(w => warehouseIds.Contains(w.Id))
-            .ToDictionaryAsync(w => w.Id, w => w.Name, ct);
-
-        // Get shelves for names
-        var shelfIds = await query.Where(si => si.ShelfId != null).Select(si => si.ShelfId!.Value).Distinct().ToListAsync(ct);
-        var shelves = await _db.StockShelves
-            .AsNoTracking()
-            .Where(s => shelfIds.Contains(s.Id))
-            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
-
-        // Get paginated results
+        // Get paginated results (ordered)
         var rawItems = await query
             .OrderByDescending(si => si.UpdatedAt)
             .ThenByDescending(si => si.CreatedAt)
@@ -134,94 +134,96 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
             })
             .ToListAsync(ct);
 
-        // Validate products exist in catalog and get product/variant names
-        // Also filter by product name if search term is provided
+        // Get product names from catalog (اختیاری؛ اگر کاتالوگ در دسترس نباشد، آیتم را حذف نمی‌کنیم)
         var searchTermLower = !string.IsNullOrWhiteSpace(req.Search) ? req.Search.Trim().ToLower() : null;
         var validItems = new List<StockItemListItemDto>();
         
         foreach (var item in rawItems)
         {
+            string? productName = null;
+            string? variantValue = null;
+
+            // Get product name from catalog (with timeout)
+            using var catalogTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, catalogTimeoutCts.Token);
+
             try
             {
                 // Get product name (without variant)
-                var productInfo = await _catalogGateway.GetCatalogItemAsync(item.ProductId, null, ct);
-                if (productInfo is null)
-                    continue; // Skip invalid products
-
-                string? variantValue = null;
-                string? productName = productInfo.Name;
+                var productInfo = await _catalogGateway.GetCatalogItemAsync(item.ProductId, null, linkedCts.Token);
+                productName = productInfo?.Name;
 
                 // If variant exists, get variant-specific name
                 if (item.VariantId.HasValue)
                 {
-                    var variantInfo = await _catalogGateway.GetCatalogItemAsync(item.ProductId, item.VariantId, ct);
-                    if (variantInfo is null)
-                        continue; // Skip if variant not found
-
-                    // Extract variant value from name (format: "ProductName - VariantValue")
-                    if (variantInfo.Name.Contains(" - "))
+                    var variantInfo = await _catalogGateway.GetCatalogItemAsync(item.ProductId, item.VariantId, linkedCts.Token);
+                    if (variantInfo?.Name != null)
                     {
-                        var parts = variantInfo.Name.Split(" - ", 2);
-                        productName = parts[0];
-                        variantValue = parts.Length > 1 ? parts[1] : null;
-                    }
-                    else
-                    {
-                        variantValue = variantInfo.Name;
+                        // Extract variant value from name (format: "ProductName - VariantValue")
+                        if (variantInfo.Name.Contains(" - "))
+                        {
+                            var parts = variantInfo.Name.Split(" - ", 2);
+                            productName ??= parts[0];
+                            variantValue = parts.Length > 1 ? parts[1] : null;
+                        }
+                        else
+                        {
+                            variantValue = variantInfo.Name;
+                        }
                     }
                 }
-
-                // Filter by search term if provided - check all fields
-                if (searchTermLower != null)
-                {
-                    var matchesSku = item.Sku.ToLower().Contains(searchTermLower);
-                    var matchesLot = item.LotNumber != null && item.LotNumber.ToLower().Contains(searchTermLower);
-                    var matchesProductName = productName != null && productName.ToLower().Contains(searchTermLower);
-                    var matchesVariant = variantValue != null && variantValue.ToLower().Contains(searchTermLower);
-
-                    // If search term doesn't match any field, skip this item
-                    if (!matchesSku && !matchesLot && !matchesProductName && !matchesVariant)
-                        continue;
-                }
-
-                var available = item.OnHand - item.Reserved - item.Blocked;
-                validItems.Add(new StockItemListItemDto(
-                    item.Id,
-                    item.ProductId,
-                    item.VariantId,
-                    item.WarehouseId,
-                    warehouses.TryGetValue(item.WarehouseId, out var name) ? name : null,
-                    item.Sku,
-                    productName,
-                    variantValue,
-                    item.LotNumber,
-                    item.ExpiryDate,
-                    item.OnHand,
-                    item.Reserved,
-                    item.Blocked,
-                    available,
-                    item.BlockReason,
-                    item.ShelfId,
-                    item.ShelfId.HasValue && shelves.TryGetValue(item.ShelfId.Value, out var shelfName) ? shelfName : null,
-                    item.CreatedAt,
-                    item.UpdatedAt
-                ));
+            }
+            catch (OperationCanceledException)
+            {
+                // Timeout - continue without catalog info
             }
             catch
             {
-                // Skip if catalog validation fails
-                continue;
+                // در صورت خطا در کاتالوگ، ادامه می‌دهیم و آیتم را حذف نمی‌کنیم
             }
+
+            // Filter by search term if provided - check all fields
+            if (searchTermLower != null)
+            {
+                var matchesSku = item.Sku.ToLower().Contains(searchTermLower);
+                var matchesLot = item.LotNumber != null && item.LotNumber.ToLower().Contains(searchTermLower);
+                var matchesProductName = productName != null && productName.ToLower().Contains(searchTermLower);
+                var matchesVariant = variantValue != null && variantValue.ToLower().Contains(searchTermLower);
+
+                // If search term doesn't match any field, skip this item
+                if (!matchesSku && !matchesLot && !matchesProductName && !matchesVariant)
+                    continue;
+            }
+
+            var available = item.OnHand - item.Reserved - item.Blocked;
+            validItems.Add(new StockItemListItemDto(
+                item.Id,
+                item.ProductId,
+                item.VariantId,
+                item.WarehouseId,
+                warehouses.TryGetValue(item.WarehouseId, out var name) ? name : null,
+                item.Sku,
+                productName,
+                variantValue,
+                item.LotNumber,
+                item.ExpiryDate,
+                item.OnHand,
+                item.Reserved,
+                item.Blocked,
+                available,
+                item.BlockReason,
+                item.ShelfId,
+                item.ShelfId.HasValue && shelves.TryGetValue(item.ShelfId.Value, out var shelfName) ? shelfName : null,
+                item.CreatedAt,
+                item.UpdatedAt
+            ));
         }
 
-        // Adjust total count (we filtered out invalid items)
-        var adjustedTotal = validItems.Count < pageSize && page == 1
-            ? validItems.Count
-            : totalCount; // Approximation - in production you might want to count valid items separately
-
+        // Return results with original total count and total pages
+        // Note: totalCount and totalPages are based on database query, not filtered by catalog
         return new StockItemsListResult(
             validItems,
-            adjustedTotal,
+            totalCount,
             page,
             pageSize,
             totalPages

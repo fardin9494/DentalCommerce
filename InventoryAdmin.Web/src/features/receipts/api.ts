@@ -48,4 +48,18 @@ export async function cancelReceipt(receiptId: string): Promise<void> {
   return fetchJson<void>(`/receipts/${receiptId}/cancel`, { method: 'POST' })
 }
 
+export async function approveReceiptLinePartial(receiptId: string, lineId: string, qty: number): Promise<void> {
+  return fetchJson<void>(`/receipts/${receiptId}/lines/${lineId}/approve-partial`, {
+    method: 'POST',
+    json: { qty },
+  })
+}
+
+export async function rejectReceiptLine(receiptId: string, lineId: string, qty: number, reason?: string): Promise<void> {
+  return fetchJson<void>(`/receipts/${receiptId}/lines/${lineId}/reject`, {
+    method: 'POST',
+    json: { qty, reason: reason || null },
+  })
+}
+
 

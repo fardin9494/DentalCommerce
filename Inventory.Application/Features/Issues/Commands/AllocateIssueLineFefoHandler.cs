@@ -64,10 +64,12 @@ public sealed class AllocateIssueLineFefoHandler : IRequestHandler<AllocateIssue
                     // 2. استراتژی FEFO: پیدا کردن کاندیداها
                     // اگر PreferredWarehouseId مشخص شده باشد، فقط از آن انبار استفاده می‌کنیم
                     // در غیر اینصورت از تمام انبارها جستجو می‌کنیم
+                    // فقط کالاهای Available قابل تخصیص هستند (در قفسه و آزاد)
                     var query = _db.StockItems
                         .Where(si => si.ProductId == line.ProductId
                                      && si.VariantId == line.VariantId
-                                     && si.ShelfId != null
+                                     && si.ShelfId != null  // باید در قفسه باشد
+                                     && si.Blocked == 0     // نباید Blocked باشد
                                      && (si.OnHand - si.Reserved - si.Blocked) > 0); // موجودی آزاد دارد
 
                     // اگر PreferredWarehouseId مشخص شده باشد، فقط از آن انبار استفاده می‌کنیم

@@ -4,6 +4,8 @@ import { PageHeader } from '@/shared/components/PageHeader'
 import { Spinner } from '@/shared/components/Spinner'
 import { useStockItems } from '../queries'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
+import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
+import { useProductNames } from '@/shared/hooks/useProductNames'
 import type { StockItemsListFilters } from '../api'
 
 export function StockItemsPage() {
@@ -59,6 +61,11 @@ export function StockItemsPage() {
   const [hasStockFilter, setHasStockFilter] = useState<string>(
     filters.hasStock === false ? 'false' : 'true' // Default to 'true'
   )
+
+  // جمع‌آوری productId های تمام آیتم‌ها برای fetch کردن نام محصولات
+  const productIds = useMemo(() => data?.items.map((item) => item.productId) || [], [data?.items])
+  const { getVariantName } = useProductNames(productIds)
+  const { getWarehouseName } = useWarehouseNames()
 
   function updateFilters(newFilters: Partial<StockItemsListFilters>) {
     const params = new URLSearchParams(searchParams)
@@ -306,8 +313,8 @@ export function StockItemsPage() {
                             <div className="mt-0.5 text-sm text-emerald-600">واریانت: {truncateProductName(item.variantValue, 15)}</div>
                           )}
                           {!item.variantValue && item.variantId && (
-                            <div className="mt-0.5 text-xs text-slate-400 font-mono">
-                              Variant: {item.variantId.substring(0, 8)}...
+                            <div className="mt-0.5 text-sm text-emerald-600">
+                              واریانت: {getVariantName(item.variantId) || item.variantId.substring(0, 8) + '...'}
                             </div>
                           )}
                         </div>
@@ -316,9 +323,7 @@ export function StockItemsPage() {
                         <span className="font-mono text-sm font-medium text-slate-700">{item.sku}</span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-                        {item.warehouseName || (
-                          <span className="font-mono text-xs text-slate-400">{item.warehouseId.substring(0, 8)}...</span>
-                        )}
+                        {item.warehouseName || getWarehouseName(item.warehouseId)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         {item.shelfName ? (

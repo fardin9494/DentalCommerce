@@ -21,10 +21,28 @@ public class CreateStockShelfHandler : IRequestHandler<CreateStockShelfCommand, 
 
         if (exists) throw new InvalidOperationException($"قفسه با نام {req.Name} در این انبار وجود دارد.");
 
-        var shelf = StockShelf.Create(req.WarehouseId, req.Name, req.Description);
+        // کد پیشنهادی: بر اساس نام و حروف/اعداد مجاز
+        var code = NormalizeCode(req.Name);
+
+        var shelf = StockShelf.Create(
+            warehouseId: req.WarehouseId,
+            name: req.Name,
+            code: code,
+            rowNumber: 1,
+            columnNumber: 1,
+            levelNumber: 1,
+            description: req.Description);
         _db.StockShelves.Add(shelf);
         await _db.SaveChangesAsync(ct);
 
         return shelf.Id;
+    }
+
+    private static string NormalizeCode(string name)
+    {
+        var chars = name.Trim().ToUpperInvariant()
+            .Where(ch => char.IsLetterOrDigit(ch) || ch == '-' || ch == '_')
+            .ToArray();
+        return chars.Length == 0 ? Guid.NewGuid().ToString("N")[..8].ToUpperInvariant() : new string(chars);
     }
 }

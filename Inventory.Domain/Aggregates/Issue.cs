@@ -7,7 +7,7 @@ public sealed class Issue : AggregateRoot<Guid>
 {
     private readonly List<IssueLine> _lines = new();
 
-    public Guid WarehouseId { get; private set; }
+    public Guid? WarehouseId { get; private set; }
     public string? ExternalRef { get; private set; }
     public DateTime DocDate { get; private set; }       // UTC
     public IssueStatus Status { get; private set; } = IssueStatus.Draft;
@@ -17,7 +17,7 @@ public sealed class Issue : AggregateRoot<Guid>
 
     private Issue() { }
 
-    public static Issue Create(Guid warehouseId, DateTime? docDateUtc = null, string? externalRef = null)
+    public static Issue Create(Guid? warehouseId = null, DateTime? docDateUtc = null, string? externalRef = null)
         => new()
         {
             Id = Guid.NewGuid(),

@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Spinner } from '@/shared/components/Spinner'
 import { useIssue, useAddIssueLine, useRemoveIssueLine, useAllocateIssueLineFefo, useAllocateIssueLineFifo, useAllocateIssueLineLifo, usePostIssue, useCancelIssue } from '../queries'
 import { useConfirm } from '@/shared/components/confirm/ConfirmProvider'
-import { swalPrompt } from '@/shared/utils/swal'
 import { AllocateMethodModal } from '../components/AllocateMethodModal'
+import { AddIssueLineModal } from '../components/AddIssueLineModal'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
+import { useProductNames } from '@/shared/hooks/useProductNames'
+import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
 
 const statusLabels: Record<string, string> = {
   Draft: 'پیش‌نویس',
@@ -19,6 +21,7 @@ export function IssueDetailPage() {
   const navigate = useNavigate()
   const { data: issue, isLoading } = useIssue(id)
   const { data: warehouses } = useActiveWarehouses()
+  const { getWarehouseName } = useWarehouseNames()
   const addLine = useAddIssueLine(id!)
   const removeLine = useRemoveIssueLine(id!)
   const allocateFefo = useAllocateIssueLineFefo(id!)
@@ -28,8 +31,13 @@ export function IssueDetailPage() {
   const cancel = useCancelIssue(id!)
   const confirm = useConfirm()
   const [allocateModalOpen, setAllocateModalOpen] = useState(false)
+  const [addLineModalOpen, setAddLineModalOpen] = useState(false)
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
   const [expandedLineId, setExpandedLineId] = useState<string | null>(null)
+
+  // جمع‌آوری productId های تمام خطوط برای fetch کردن نام محصولات
+  const productIds = useMemo(() => issue?.lines.map((line) => line.productId) || [], [issue?.lines])
+  const { getProductName, getVariantName } = useProductNames(productIds)
 
   if (isLoading) return <Spinner />
 
@@ -41,20 +49,8 @@ export function IssueDetailPage() {
     )
   }
 
-  async function handleAddLine() {
-    const productId = await swalPrompt({ title: 'شناسه محصول (UUID)', required: true })
-    if (!productId) return
-    const variantId = await swalPrompt({ title: 'شناسه واریانت (UUID) - اختیاری', required: false })
-    const qtyStr = await swalPrompt({ title: 'مقدار', placeholder: '1', defaultValue: '1', required: true })
-    if (!qtyStr) return
-    const qty = parseFloat(qtyStr)
-    if (isNaN(qty) || qty <= 0) return
-
-    await addLine.mutateAsync({
-      productId,
-      variantId: variantId || null,
-      qty,
-    })
+  async function handleAddLine(data: { productId: string; variantId: string | null; qty: number }) {
+    await addLine.mutateAsync(data)
   }
 
   async function handleRemoveLine(lineId: string) {
@@ -128,7 +124,7 @@ export function IssueDetailPage() {
           <div className="flex gap-2">
             {issue.status === 'Draft' && (
               <>
-                <button onClick={handleAddLine} className="btn-secondary">افزودن خط</button>
+                <button onClick={() => setAddLineModalOpen(true)} className="btn-secondary">افزودن خط</button>
                 <button onClick={handlePost} className="btn-green">ثبت</button>
                 <button onClick={handleCancel} className="btn-red">لغو</button>
               </>
@@ -146,7 +142,9 @@ export function IssueDetailPage() {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="font-medium">انبار:</span>{' '}
-              {warehouses?.find((w) => w.id === issue.warehouseId)?.name || issue.warehouseId.slice(0, 8) + '...'}
+              {issue.warehouseId 
+                ? (warehouses?.find((w) => w.id === issue.warehouseId)?.name || getWarehouseName(issue.warehouseId))
+                : 'انتخاب نشده (در تخصیص انتخاب می‌شود)'}
             </div>
             <div>
               <span className="font-medium">تاریخ سند:</span> {new Date(issue.docDate).toLocaleString('fa-IR')}
@@ -174,8 +172,8 @@ export function IssueDetailPage() {
                     <div className="flex items-center gap-4 text-sm">
                       <span className="font-semibold">خط {line.lineNo}</span>
                       <span className="text-gray-600">
-                        محصول: {line.productId.slice(0, 8)}...
-                        {line.variantId && ` | واریانت: ${line.variantId.slice(0, 8)}...`}
+                        محصول: {getProductName(line.productId)}
+                        {line.variantId && ` | واریانت: ${getVariantName(line.variantId) || line.variantId.slice(0, 8) + '...'}`}
                       </span>
                       <span className="text-gray-600">
                         درخواستی: <span className="font-medium">{line.requestedQty.toLocaleString('fa-IR')}</span>
@@ -226,6 +224,7 @@ export function IssueDetailPage() {
                             <th className="text-right p-2">SKU</th>
                             <th className="text-right p-2">شماره لات</th>
                             <th className="text-right p-2">تاریخ انقضا</th>
+                            <th className="text-right p-2">انبار</th>
                             <th className="text-right p-2">قفسه</th>
                             <th className="text-right p-2">مقدار</th>
                           </tr>
@@ -238,7 +237,24 @@ export function IssueDetailPage() {
                               <td className="p-2">
                                 {alloc.expiryDate ? new Date(alloc.expiryDate).toLocaleDateString('fa-IR') : '-'}
                               </td>
-                              <td className="p-2">{alloc.shelfName || '-'}</td>
+                              <td className="p-2">
+                                {alloc.warehouseName ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                    {alloc.warehouseName}
+                                  </span>
+                                ) : (
+                                  '-'
+                                )}
+                              </td>
+                              <td className="p-2">
+                                {alloc.shelfName ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                                    {alloc.shelfName}
+                                  </span>
+                                ) : (
+                                  '-'
+                                )}
+                              </td>
                               <td className="p-2 font-medium">{alloc.qty.toLocaleString('fa-IR')}</td>
                             </tr>
                           ))}
@@ -253,6 +269,13 @@ export function IssueDetailPage() {
         )}
       </div>
 
+      <AddIssueLineModal
+        isOpen={addLineModalOpen}
+        onClose={() => setAddLineModalOpen(false)}
+        onSubmit={handleAddLine}
+        isSubmitting={addLine.isPending}
+      />
+
       {selectedLineId && (
         <AllocateMethodModal
           isOpen={allocateModalOpen}
@@ -263,7 +286,7 @@ export function IssueDetailPage() {
           onSelect={handleAllocate}
           lineNo={issue?.lines.find(l => l.id === selectedLineId)?.lineNo || 0}
           isAllocating={allocateFefo.isPending || allocateFifo.isPending || allocateLifo.isPending}
-          defaultWarehouseId={issue?.warehouseId}
+          defaultWarehouseId={issue?.warehouseId || undefined}
         />
       )}
     </div>

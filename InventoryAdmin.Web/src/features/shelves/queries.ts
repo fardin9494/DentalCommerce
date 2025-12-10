@@ -33,6 +33,21 @@ export function useCreateShelf() {
   })
 }
 
+export function useCreateShelvesBatch() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: api.createShelvesBatch,
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['shelves'] })
+      toast.success(`قفسه‌ها با موفقیت ایجاد شدند (تعداد: ${res.created})`)
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'خطا در ایجاد گروهی قفسه‌ها')
+    },
+  })
+}
+
 export function useUpdateShelf() {
   const qc = useQueryClient()
   const toast = useToast()
@@ -44,6 +59,21 @@ export function useUpdateShelf() {
     },
     onError: (err: any) => {
       toast.error(err.message || 'خطا در به‌روزرسانی قفسه')
+    },
+  })
+}
+
+export function useActivateShelf() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: api.activateShelf,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['shelves'] })
+      toast.success('قفسه فعال شد')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'خطا در فعال‌سازی قفسه')
     },
   })
 }

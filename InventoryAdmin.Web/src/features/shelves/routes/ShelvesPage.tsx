@@ -4,24 +4,31 @@ import { Spinner } from '@/shared/components/Spinner'
 import {
   useAllShelves,
   useCreateShelf,
+  useCreateShelvesBatch,
   useUpdateShelf,
+  useActivateShelf,
   useDeactivateShelf,
 } from '../queries'
-import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
+import { useActiveWarehouses, useWarehouseNames } from '@/shared/hooks/useWarehouses'
 import { useConfirm } from '@/shared/components/confirm/ConfirmProvider'
 import { CreateShelfModal } from '../components/CreateShelfModal'
+import { CreateShelvesBatchModal } from '../components/CreateShelvesBatchModal'
 import { EditShelfModal } from '../components/EditShelfModal'
 import type { Shelf } from '../api'
 
 export function ShelvesPage() {
   const { data: shelves, isLoading, error } = useAllShelves()
   const { data: warehouses } = useActiveWarehouses()
+  const { getWarehouseName } = useWarehouseNames()
   const createShelf = useCreateShelf()
+  const createShelvesBatch = useCreateShelvesBatch()
   const updateShelf = useUpdateShelf()
+  const activateShelf = useActivateShelf()
   const deactivateShelf = useDeactivateShelf()
   const confirm = useConfirm()
 
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showBatchModal, setShowBatchModal] = useState(false)
   const [editingShelf, setEditingShelf] = useState<Shelf | null>(null)
   const [warehouseFilter, setWarehouseFilter] = useState<string>('')
 
@@ -30,10 +37,32 @@ export function ShelvesPage() {
     setShowCreateModal(false)
   }
 
+  async function handleCreateBatch(data: {
+    warehouseId: string
+    rows: number
+    columns: number
+    levels?: number
+    prefix?: string
+    description?: string
+  }) {
+    await createShelvesBatch.mutateAsync(data)
+    setShowBatchModal(false)
+  }
+
   async function handleUpdate(data: { name: string; description?: string }) {
     if (!editingShelf) return
     await updateShelf.mutateAsync({ id: editingShelf.id, dto: data })
     setEditingShelf(null)
+  }
+
+  async function handleActivate(shelf: Shelf) {
+    const ok = await confirm.confirm({
+      title: 'فعال کردن قفسه',
+      message: `آیا می‌خواهید قفسه "${shelf.name}" را فعال کنید؟`,
+    })
+    if (ok) {
+      await activateShelf.mutateAsync(shelf.id)
+    }
   }
 
   async function handleDeactivate(shelf: Shelf) {
@@ -59,13 +88,13 @@ export function ShelvesPage() {
         title="قفسه‌ها"
         actions={
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => setShowBatchModal(true)}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            قفسه جدید
+            ایجاد گروهی قفسه
           </button>
         }
       >
@@ -189,9 +218,7 @@ export function ShelvesPage() {
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-slate-700">
-                      {shelf.warehouseName || (
-                        <span className="font-mono text-xs text-slate-400">{shelf.warehouseId.substring(0, 8)}...</span>
-                      )}
+                      {shelf.warehouseName || getWarehouseName(shelf.warehouseId)}
                     </td>
                     <td className="px-6 py-4 text-slate-600">{shelf.description || '-'}</td>
                     <td className="whitespace-nowrap px-6 py-4">
@@ -208,7 +235,7 @@ export function ShelvesPage() {
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
                       <div className="flex items-center gap-1">
-                        {shelf.isActive && (
+                        {shelf.isActive ? (
                           <>
                             <button
                               onClick={() => setEditingShelf(shelf)}
@@ -238,6 +265,21 @@ export function ShelvesPage() {
                               </svg>
                             </button>
                           </>
+                        ) : (
+                          <button
+                            onClick={() => handleActivate(shelf)}
+                            disabled={activateShelf.isPending}
+                            className="rounded-lg p-2 text-emerald-500 transition-colors hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-50"
+                            title="فعال کردن"
+                          >
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                              />
+                            </svg>
+                          </button>
                         )}
                       </div>
                     </td>
@@ -248,6 +290,14 @@ export function ShelvesPage() {
           </div>
         )}
       </div>
+
+      {/* Create Batch Modal */}
+      <CreateShelvesBatchModal
+        isOpen={showBatchModal}
+        onClose={() => setShowBatchModal(false)}
+        onSubmit={handleCreateBatch}
+        isSubmitting={createShelvesBatch.isPending}
+      />
 
       {/* Create Modal */}
       <CreateShelfModal

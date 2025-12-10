@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { ProductSearchSelect, type ProductSelection } from '@/shared/components/ProductSearchSelect'
 import { Spinner } from '@/shared/components/Spinner'
+import DatePicker from 'react-multi-date-picker'
+import DateObject from 'react-date-object'
+import persian from 'react-date-object/calendars/persian'
+import persian_fa from 'react-date-object/locales/persian_fa'
 
 interface AddReceiptLineModalProps {
   isOpen: boolean
@@ -21,7 +25,7 @@ export function AddReceiptLineModal({ isOpen, onClose, onSubmit, isSubmitting }:
   const [selectedProduct, setSelectedProduct] = useState<ProductSelection | null>(null)
   const [qty, setQty] = useState('1')
   const [lotNumber, setLotNumber] = useState('')
-  const [expiryDate, setExpiryDate] = useState('')
+  const [expiryDate, setExpiryDate] = useState<DateObject | null>(null)
   const [unitCost, setUnitCost] = useState('')
 
   if (!isOpen) return null
@@ -43,12 +47,15 @@ export function AddReceiptLineModal({ isOpen, onClose, onSubmit, isSubmitting }:
     const qtyNum = parseFloat(qty)
     if (isNaN(qtyNum) || qtyNum <= 0) return
 
+    const expiryDateUtc = expiryDate ? expiryDate.toDate().toISOString() : undefined
+
     onSubmit({
       productId: selectedProduct.productId,
       variantId: selectedProduct.variantId,
       qty: qtyNum,
       lotNumber: lotNumber.trim() || undefined,
-      expiryDateUtc: expiryDate ? new Date(expiryDate).toISOString() : undefined,
+      // در صورت عدم انتخاب تاریخ، فیلد ارسال نمی‌شود
+      ...(expiryDateUtc !== undefined ? { expiryDateUtc } : {}),
       unitCost: unitCost ? parseFloat(unitCost) : undefined,
     })
   }
@@ -58,7 +65,7 @@ export function AddReceiptLineModal({ isOpen, onClose, onSubmit, isSubmitting }:
     setSelectedProduct(null)
     setQty('1')
     setLotNumber('')
-    setExpiryDate('')
+    setExpiryDate(null)
     setUnitCost('')
     onClose()
   }
@@ -150,13 +157,26 @@ export function AddReceiptLineModal({ isOpen, onClose, onSubmit, isSubmitting }:
 
             {/* Expiry Date */}
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">تاریخ انقضا (اختیاری)</label>
-              <input
-                type="date"
+              <label className="mb-2 block text-sm font-medium text-slate-700">تاریخ انقضا (شمسی / اختیاری)</label>
+              <DatePicker
                 value={expiryDate}
-                onChange={(e) => setExpiryDate(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                onChange={(date) => {
+                  if (Array.isArray(date)) {
+                    setExpiryDate((date[0] as DateObject | null) ?? null)
+                  } else {
+                    setExpiryDate(date as DateObject | null)
+                  }
+                }}
+                calendar={persian}
+                locale={persian_fa}
+                calendarPosition="bottom-center"
+                portal
+                editable={false}
+                inputClass="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                placeholder="انتخاب تاریخ"
+                format="YYYY/MM/DD"
               />
+              <p className="mt-1 text-xs text-slate-500">انتخاب از تقویم شمسی؛ در سیستم به میلادی ذخیره می‌شود.</p>
             </div>
 
             {/* Unit Cost */}

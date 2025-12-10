@@ -27,7 +27,11 @@ public sealed record ReceiptLineDto(
     decimal Qty,
     string? LotNumber,
     DateTime? ExpiryDateUtc,
-    decimal? UnitCost
+    decimal? UnitCost,
+    decimal ApprovedQty,
+    decimal RejectedQty,
+    string? RejectionReason,
+    decimal RemainingQty
 );
 
 public sealed class GetReceiptDetailsHandler : IRequestHandler<ReceiptDetailsQuery, ReceiptDetailsDto?>
@@ -54,7 +58,11 @@ public sealed class GetReceiptDetailsHandler : IRequestHandler<ReceiptDetailsQue
                 l.Qty,
                 l.LotNumber,
                 l.ExpiryDate,
-                l.UnitCost
+                l.UnitCost,
+                l.ApprovedQty,
+                l.RejectedQty,
+                l.RejectionReason,
+                l.RemainingQty
             ))
             .ToList();
 

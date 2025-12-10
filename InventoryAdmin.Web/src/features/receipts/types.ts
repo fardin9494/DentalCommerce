@@ -53,6 +53,10 @@ export const ReceiptLineSchema = z.object({
   lotNumber: z.string().nullable().optional(),
   expiryDateUtc: z.string().nullable().optional(),
   unitCost: z.number().nullable().optional(),
+  approvedQty: z.number().default(0),
+  rejectedQty: z.number().default(0),
+  rejectionReason: z.string().nullable().optional(),
+  remainingQty: z.number().default(0),
 })
 export type ReceiptLine = z.infer<typeof ReceiptLineSchema>
 

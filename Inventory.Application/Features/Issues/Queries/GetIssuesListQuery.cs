@@ -25,7 +25,7 @@ public sealed record IssuesListResult(
 
 public sealed record IssueListItemDto(
     Guid Id,
-    Guid WarehouseId,
+    Guid? WarehouseId,
     string? WarehouseName,
     string Status,
     string? ExternalRef,
@@ -81,12 +81,18 @@ public sealed class GetIssuesListHandler : IRequestHandler<GetIssuesListQuery, I
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
         var page = Math.Clamp(req.Page, 1, Math.Max(1, totalPages));
 
-        // Get warehouses for names
-        var warehouseIds = await query.Select(i => i.WarehouseId).Distinct().ToListAsync(ct);
-        var warehouses = await _db.Warehouses
-            .AsNoTracking()
-            .Where(w => warehouseIds.Contains(w.Id))
-            .ToDictionaryAsync(w => w.Id, w => w.Name, ct);
+        // Get warehouses for names (only for non-null warehouseIds)
+        var warehouseIds = await query
+            .Where(i => i.WarehouseId.HasValue)
+            .Select(i => i.WarehouseId!.Value)
+            .Distinct()
+            .ToListAsync(ct);
+        var warehouses = warehouseIds.Count > 0
+            ? await _db.Warehouses
+                .AsNoTracking()
+                .Where(w => warehouseIds.Contains(w.Id))
+                .ToDictionaryAsync(w => w.Id, w => w.Name, ct)
+            : new Dictionary<Guid, string>();
 
         // Get paginated results - fetch raw data first
         var rawItems = await query
@@ -100,7 +106,7 @@ public sealed class GetIssuesListHandler : IRequestHandler<GetIssuesListQuery, I
         var items = rawItems.Select(i => new IssueListItemDto(
             i.Id,
             i.WarehouseId,
-            warehouses.TryGetValue(i.WarehouseId, out var name) ? name : null,
+            i.WarehouseId.HasValue && warehouses.TryGetValue(i.WarehouseId.Value, out var name) ? name : null,
             Enum.IsDefined(typeof(IssueStatus), i.Status) ? i.Status.ToString() : "Draft",
             i.ExternalRef,
             i.DocDate,
@@ -121,4 +127,5 @@ public sealed class GetIssuesListHandler : IRequestHandler<GetIssuesListQuery, I
         );
     }
 }
+
 

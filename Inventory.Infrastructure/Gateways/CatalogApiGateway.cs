@@ -98,12 +98,17 @@ public sealed class CatalogApiGateway
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Error calling Catalog API for product {ProductId}", productId);
-            throw new InvalidOperationException($"Failed to fetch product {productId} from Catalog service", ex);
+            return null; // Return null instead of throwing to allow query to continue
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
-            _logger.LogError(ex, "Timeout calling Catalog API for product {ProductId}", productId);
-            throw new InvalidOperationException($"Timeout while fetching product {productId} from Catalog service", ex);
+            _logger.LogWarning(ex, "Timeout calling Catalog API for product {ProductId}", productId);
+            return null; // Return null instead of throwing to allow query to continue
+        }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            _logger.LogWarning("Request cancelled for product {ProductId}", productId);
+            return null; // Return null instead of throwing to allow query to continue
         }
     }
 

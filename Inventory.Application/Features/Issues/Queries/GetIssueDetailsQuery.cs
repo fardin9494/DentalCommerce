@@ -9,7 +9,7 @@ public sealed record IssueDetailsQuery(Guid Id) : IRequest<IssueDetailsDto?>;
 
 public sealed record IssueDetailsDto(
     Guid Id,
-    Guid WarehouseId,
+    Guid? WarehouseId,
     IssueStatus Status,
     string? ExternalRef,
     DateTime DocDate,
@@ -36,7 +36,9 @@ public sealed record IssueAllocationDto(
     string? LotNumber,
     DateTime? ExpiryDate,
     Guid? ShelfId,
-    string? ShelfName
+    string? ShelfName,
+    Guid? WarehouseId, // Changed to nullable
+    string? WarehouseName
 );
 
 public sealed class GetIssueDetailsHandler : IRequestHandler<IssueDetailsQuery, IssueDetailsDto?>
@@ -61,6 +63,34 @@ public sealed class GetIssueDetailsHandler : IRequestHandler<IssueDetailsQuery, 
             .Distinct()
             .ToList();
 
+        if (stockItemIds.Count == 0)
+        {
+            // اگر تخصیصی وجود ندارد، خطوط را بدون تخصیص برمی‌گردانیم
+            var emptyLines = issue.Lines
+                .OrderBy(l => l.LineNo)
+                .Select(l => new IssueLineDto(
+                    l.Id,
+                    l.LineNo,
+                    l.ProductId,
+                    l.VariantId,
+                    l.RequestedQty,
+                    l.AllocatedQty,
+                    l.RemainingQty,
+                    Array.Empty<IssueAllocationDto>()
+                ))
+                .ToList();
+
+            return new IssueDetailsDto(
+                issue.Id,
+                issue.WarehouseId,
+                issue.Status,
+                issue.ExternalRef,
+                issue.DocDate,
+                issue.PostedAt,
+                emptyLines
+            );
+        }
+
         // Load stock items with their details
         var stockItems = await _db.StockItems
             .AsNoTracking()
@@ -71,7 +101,8 @@ public sealed class GetIssueDetailsHandler : IRequestHandler<IssueDetailsQuery, 
                 si.Sku,
                 si.LotNumber,
                 si.ExpiryDate,
-                si.ShelfId
+                si.ShelfId,
+                si.WarehouseId
             })
             .ToListAsync(ct);
 
@@ -84,13 +115,24 @@ public sealed class GetIssueDetailsHandler : IRequestHandler<IssueDetailsQuery, 
                 .ToDictionaryAsync(s => s.Id, s => s.Name, ct)
             : new Dictionary<Guid, string>();
 
+        // Get warehouse names
+        var warehouseIds = stockItems.Select(si => si.WarehouseId).Distinct().ToList();
+        var warehouses = warehouseIds.Count > 0
+            ? await _db.Warehouses
+                .AsNoTracking()
+                .Where(w => warehouseIds.Contains(w.Id))
+                .ToDictionaryAsync(w => w.Id, w => w.Name, ct)
+            : new Dictionary<Guid, string>();
+
         var stockItemsDict = stockItems.ToDictionary(si => si.Id, si => new
         {
             si.Sku,
             si.LotNumber,
             si.ExpiryDate,
             si.ShelfId,
-            ShelfName = si.ShelfId.HasValue && shelves.TryGetValue(si.ShelfId.Value, out var name) ? name : null
+            si.WarehouseId,
+            ShelfName = si.ShelfId.HasValue && shelves.TryGetValue(si.ShelfId.Value, out var shelfName) ? shelfName : null,
+            WarehouseName = warehouses.TryGetValue(si.WarehouseId, out var warehouseName) ? warehouseName : null
         });
 
         var lines = issue.Lines
@@ -106,16 +148,34 @@ public sealed class GetIssueDetailsHandler : IRequestHandler<IssueDetailsQuery, 
                 l.Allocations
                     .Select(a =>
                     {
-                        var stockInfo = stockItemsDict.TryGetValue(a.StockItemId, out var info) ? info : null;
+                        if (!stockItemsDict.TryGetValue(a.StockItemId, out var stockInfo))
+                        {
+                            // اگر StockItem پیدا نشد، اطلاعات محدود برمی‌گردانیم
+                            return new IssueAllocationDto(
+                                a.Id,
+                                a.StockItemId,
+                                a.Qty,
+                                null, // Sku
+                                null, // LotNumber
+                                null, // ExpiryDate
+                                null, // ShelfId
+                                null, // ShelfName
+                                null, // WarehouseId (null instead of Guid.Empty)
+                                null // WarehouseName
+                            );
+                        }
+
                         return new IssueAllocationDto(
                             a.Id,
                             a.StockItemId,
                             a.Qty,
-                            stockInfo?.Sku,
-                            stockInfo?.LotNumber,
-                            stockInfo?.ExpiryDate,
-                            stockInfo?.ShelfId,
-                            stockInfo?.ShelfName
+                            stockInfo.Sku,
+                            stockInfo.LotNumber,
+                            stockInfo.ExpiryDate,
+                            stockInfo.ShelfId,
+                            stockInfo.ShelfName,
+                            stockInfo.WarehouseId, // Already nullable
+                            stockInfo.WarehouseName
                         );
                     })
                     .ToList()

@@ -20,7 +20,9 @@ export function AssignShelfModal({ isOpen, stockItem, onClose, onSubmit, isSubmi
   // Initialize form when stockItem changes
   useEffect(() => {
     if (stockItem) {
-      setQty(stockItem.available.toString())
+      // برای موجودی‌های جدید (مسدود)، باید از Blocked استفاده کنیم
+      const qtyToShow = stockItem.blocked > 0 ? stockItem.blocked : stockItem.available
+      setQty(qtyToShow.toString())
       setNote('')
       setShelfId('')
     }
@@ -33,7 +35,9 @@ export function AssignShelfModal({ isOpen, stockItem, onClose, onSubmit, isSubmi
     if (!shelfId || !qty) return
 
     const qtyNum = parseFloat(qty)
-    if (isNaN(qtyNum) || qtyNum <= 0 || qtyNum > stockItem.available) return
+    // برای موجودی‌های جدید (مسدود)، باید از Blocked استفاده کنیم
+    const maxQty = stockItem.blocked > 0 ? stockItem.blocked : stockItem.available
+    if (isNaN(qtyNum) || qtyNum <= 0 || qtyNum > maxQty) return
 
     onSubmit({
       shelfId,
@@ -46,7 +50,8 @@ export function AssignShelfModal({ isOpen, stockItem, onClose, onSubmit, isSubmi
     onClose()
   }
 
-  const maxQty = stockItem.available
+  // برای موجودی‌های جدید (مسدود)، باید از Blocked استفاده کنیم
+  const maxQty = stockItem.blocked > 0 ? stockItem.blocked : stockItem.available
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -78,7 +83,16 @@ export function AssignShelfModal({ isOpen, stockItem, onClose, onSubmit, isSubmi
           <div className="mt-0.5 flex items-center gap-4 text-xs text-slate-600">
             <span className="font-mono">SKU: {stockItem.sku}</span>
             <span>•</span>
-            <span>موجودی آزاد: {stockItem.available.toLocaleString('fa-IR')}</span>
+            {stockItem.blocked > 0 ? (
+              <span className="inline-flex items-center gap-1 text-orange-600">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                </svg>
+                موجودی مسدود: {stockItem.blocked.toLocaleString('fa-IR')}
+              </span>
+            ) : (
+              <span>موجودی آزاد: {stockItem.available.toLocaleString('fa-IR')}</span>
+            )}
           </div>
           {stockItem.lotNumber && (
             <div className="mt-1 text-xs text-slate-500">لات: {stockItem.lotNumber}</div>
@@ -132,7 +146,7 @@ export function AssignShelfModal({ isOpen, stockItem, onClose, onSubmit, isSubmi
               className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
             />
             <p className="mt-1 text-xs text-slate-500">
-              حداکثر: {maxQty.toLocaleString('fa-IR')} (موجودی آزاد)
+              حداکثر: {maxQty.toLocaleString('fa-IR')} {stockItem.blocked > 0 ? '(موجودی مسدود)' : '(موجودی آزاد)'}
             </p>
           </div>
 

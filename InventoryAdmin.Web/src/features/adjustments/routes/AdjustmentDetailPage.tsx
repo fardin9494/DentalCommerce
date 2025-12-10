@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Spinner } from '@/shared/components/Spinner'
@@ -23,6 +23,7 @@ import {
   type AdjustmentStatus,
   type AdjustmentReason,
 } from '../types'
+import { useProductNames } from '@/shared/hooks/useProductNames'
 
 export function AdjustmentDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -37,6 +38,10 @@ export function AdjustmentDetailPage() {
   const confirm = useConfirm()
   const [showAddLineModal, setShowAddLineModal] = useState(false)
   const [editingLine, setEditingLine] = useState<AdjustmentLine | null>(null)
+
+  // جمع‌آوری productId های تمام خطوط برای fetch کردن نام محصولات
+  const productIds = useMemo(() => adjustment?.lines.map((line) => line.productId) || [], [adjustment?.lines])
+  const { getProductName, getVariantName } = useProductNames(productIds)
 
   if (isLoading) {
     return (
@@ -360,15 +365,12 @@ export function AdjustmentDetailPage() {
                   <tr key={line.id} className="transition-colors hover:bg-slate-50">
                     <td className="whitespace-nowrap px-4 py-3 text-slate-700">{line.lineNo}</td>
                     <td className="px-4 py-3">
-                      <div className="font-mono text-xs text-slate-500">
-                        Product: {line.productId.substring(0, 8)}...
-                        {line.variantId && (
-                          <>
-                            <br />
-                            Variant: {line.variantId.substring(0, 8)}...
-                          </>
-                        )}
-                      </div>
+                      <div className="font-medium text-slate-900">{getProductName(line.productId)}</div>
+                      {line.variantId && (
+                        <div className="mt-0.5 text-sm text-emerald-600">
+                          واریانت: {getVariantName(line.variantId) || line.variantId.substring(0, 8) + '...'}
+                        </div>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">{line.lotNumber || '-'}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">

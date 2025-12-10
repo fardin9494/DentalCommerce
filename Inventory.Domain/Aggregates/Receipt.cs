@@ -72,7 +72,7 @@ public sealed class Receipt : AggregateRoot<Guid>
         Touch();
     }
 
-    // متد جدید: مرحله دوم - تایید توسط مدیر
+    // متد جدید: مرحله دوم - تایید توسط مدیر (تایید کلی - برای سازگاری با کد قدیمی)
     public void Approve(DateTime? whenUtc = null)
     {
         EnsureStatus(ReceiptStatus.Received); // فقط رسید دریافت شده قابل تایید است
@@ -81,6 +81,36 @@ public sealed class Receipt : AggregateRoot<Guid>
         ApprovedAt = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
         Touch();
     }
+
+    /// <summary>
+    /// بررسی می‌کند که آیا همه خطوط به طور کامل تایید یا رد شده‌اند
+    /// این متد فقط بررسی می‌کند و وضعیت را تغییر نمی‌دهد
+    /// </summary>
+    public bool IsReadyForFinalApproval()
+    {
+        if (Status != ReceiptStatus.Received) return false;
+        return _lines.All(l => l.IsFullyApproved);
+    }
+
+    /// <summary>
+    /// تایید نهایی رسید - فقط وقتی همه خطوط تکلیفشان مشخص شده باشد
+    /// </summary>
+    public void FinalApprove(DateTime? whenUtc = null)
+    {
+        EnsureStatus(ReceiptStatus.Received);
+        
+        if (!IsReadyForFinalApproval())
+            throw new InvalidOperationException("همه خطوط باید به طور کامل تایید یا رد شده باشند.");
+        
+        Status = ReceiptStatus.Approved;
+        ApprovedAt = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
+        Touch();
+    }
+
+    /// <summary>
+    /// پیدا کردن خط بر اساس شناسه
+    /// </summary>
+    public ReceiptLine? FindLine(Guid lineId) => _lines.FirstOrDefault(l => l.Id == lineId);
 
     // تغییر کوچک در Cancel برای سازگاری
     public void Cancel()
@@ -114,6 +144,11 @@ public sealed class ReceiptLine : BaseEntity<Guid>
     public string? LotNumber { get; private set; }
     public DateTime? ExpiryDate { get; private set; } // UTC
     public decimal? UnitCost { get; private set; }
+    
+    // فیلدهای جدید برای تایید/رد جزئی
+    public decimal ApprovedQty { get; private set; } = 0;      // مقدار تایید شده
+    public decimal RejectedQty { get; private set; } = 0;      // مقدار رد شده
+    public string? RejectionReason { get; private set; }      // دلیل رد
 
     private ReceiptLine() { }
 
@@ -143,4 +178,78 @@ public sealed class ReceiptLine : BaseEntity<Guid>
     {
         UnitCost = unitCost;
     }
+
+    public void UpdateLotNumber(string? lotNumber)
+    {
+        LotNumber = string.IsNullOrWhiteSpace(lotNumber) ? null : lotNumber.Trim();
+    }
+
+    public void UpdateExpiryDate(DateTime? expiryDateUtc)
+    {
+        ExpiryDate = expiryDateUtc is null ? null : DateTime.SpecifyKind(expiryDateUtc.Value, DateTimeKind.Utc);
+    }
+
+    /// <summary>
+    /// تایید جزئی یک خط - مقدار مشخصی را تایید می‌کند (می‌تواند افزایش یا کاهش باشد)
+    /// </summary>
+    public void ApprovePartial(decimal newApprovedQty)
+    {
+        if (newApprovedQty < 0) throw new ArgumentOutOfRangeException(nameof(newApprovedQty), "مقدار تایید نمی‌تواند منفی باشد.");
+        if (newApprovedQty + RejectedQty > Qty)
+            throw new InvalidOperationException($"مجموع مقادیر تایید شده و رد شده نمی‌تواند از مقدار کل خط ({Qty}) بیشتر باشد.");
+        
+        ApprovedQty = newApprovedQty;
+    }
+
+    /// <summary>
+    /// رد کردن یک خط - مقدار مشخصی را رد می‌کند و دلیل رد را ثبت می‌کند (می‌تواند افزایش یا کاهش باشد)
+    /// </summary>
+    public void Reject(decimal newRejectedQty, string? reason = null)
+    {
+        if (newRejectedQty < 0) throw new ArgumentOutOfRangeException(nameof(newRejectedQty), "مقدار رد نمی‌تواند منفی باشد.");
+        if (ApprovedQty + newRejectedQty > Qty)
+            throw new InvalidOperationException($"مجموع مقادیر تایید شده و رد شده نمی‌تواند از مقدار کل خط ({Qty}) بیشتر باشد.");
+        
+        RejectedQty = newRejectedQty;
+        if (!string.IsNullOrWhiteSpace(reason))
+        {
+            // اگر مقدار رد شده افزایش یافته، دلیل جدید را اضافه می‌کنیم
+            // اگر کاهش یافته، دلیل را پاک می‌کنیم (یا می‌توانیم نگه داریم)
+            if (newRejectedQty > 0)
+            {
+                RejectionReason = string.IsNullOrWhiteSpace(RejectionReason)
+                    ? reason.Trim()
+                    : $"{RejectionReason}\n{reason.Trim()}";
+            }
+            else
+            {
+                RejectionReason = null;
+            }
+        }
+        else if (newRejectedQty == 0)
+        {
+            // اگر مقدار رد شده صفر شد، دلیل را پاک می‌کنیم
+            RejectionReason = null;
+        }
+    }
+
+    /// <summary>
+    /// محاسبه مقدار تغییر (افزایش یا کاهش) برای تایید
+    /// </summary>
+    public decimal GetApproveDelta(decimal newApprovedQty) => newApprovedQty - ApprovedQty;
+
+    /// <summary>
+    /// محاسبه مقدار تغییر (افزایش یا کاهش) برای رد
+    /// </summary>
+    public decimal GetRejectDelta(decimal newRejectedQty) => newRejectedQty - RejectedQty;
+
+    /// <summary>
+    /// بررسی می‌کند که آیا خط به طور کامل تایید شده است یا نه
+    /// </summary>
+    public bool IsFullyApproved => ApprovedQty + RejectedQty >= Qty;
+
+    /// <summary>
+    /// مقدار باقیمانده برای تایید/رد
+    /// </summary>
+    public decimal RemainingQty => Qty - ApprovedQty - RejectedQty;
 }

@@ -19,6 +19,8 @@ export const IssueAllocationSchema = z.object({
   expiryDate: z.string().nullable().optional(),
   shelfId: z.string().uuid().nullable().optional(),
   shelfName: z.string().nullable().optional(),
+  warehouseId: z.string().uuid().nullable().optional(), // اختیاری برای سازگاری با رکوردهای قدیمی
+  warehouseName: z.string().nullable().optional(),
 })
 export type IssueAllocation = z.infer<typeof IssueAllocationSchema>
 
@@ -36,7 +38,7 @@ export type IssueLine = z.infer<typeof IssueLineSchema>
 
 export const IssueDetailSchema = z.object({
   id: z.string().uuid(),
-  warehouseId: z.string().uuid(),
+  warehouseId: z.string().uuid().nullable().optional(),
   status: IssueStatusSchema,
   externalRef: z.string().nullable().optional(),
   docDate: z.string(), // API returns DateTime as string, not ISO datetime
@@ -46,7 +48,7 @@ export const IssueDetailSchema = z.object({
 export type IssueDetail = z.infer<typeof IssueDetailSchema>
 
 export const CreateIssueSchema = z.object({
-  warehouseId: z.string().uuid(),
+  warehouseId: z.string().uuid().optional().nullable(),
   externalRef: z.string().optional().nullable(),
   docDateUtc: z.string().optional().nullable(), // Accept any string format, API will parse it
 })
@@ -73,7 +75,7 @@ export type UpdateIssueLineDto = z.infer<typeof UpdateIssueLineSchema>
 // List types
 export const IssueListItemSchema = z.object({
   id: z.string().uuid(),
-  warehouseId: z.string().uuid(),
+  warehouseId: z.string().uuid().nullable().optional(),
   warehouseName: z.string().nullable().optional(),
   status: z.string(),
   externalRef: z.string().nullable().optional(),

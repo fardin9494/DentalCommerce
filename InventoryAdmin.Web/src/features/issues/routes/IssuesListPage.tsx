@@ -9,6 +9,7 @@ import {
   IssueStatusColors,
   type IssuesListFilters,
 } from '../types'
+import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
 
 export function IssuesListPage() {
   const navigate = useNavigate()
@@ -16,6 +17,7 @@ export function IssuesListPage() {
   const createIssue = useCreateIssue()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
+  const { getWarehouseName } = useWarehouseNames()
 
   // Get filters from URL
   const filters: IssuesListFilters = useMemo(() => ({
@@ -73,11 +75,11 @@ export function IssuesListPage() {
     setSearchParams(new URLSearchParams())
   }
 
-  async function handleCreateIssue(data: { warehouseId: string; externalRef?: string }) {
+  async function handleCreateIssue(data: { warehouseId?: string; externalRef?: string }) {
     setCreating(true)
     try {
       const result = await createIssue.mutateAsync({
-        warehouseId: data.warehouseId,
+        warehouseId: data.warehouseId || null,
         externalRef: data.externalRef || null,
         docDateUtc: new Date().toISOString(),
       })
@@ -200,7 +202,11 @@ export function IssuesListPage() {
                   {issues.map((issue) => (
                     <tr key={issue.id} className="border-b hover:bg-gray-50">
                       <td className="p-2 font-mono text-xs">{issue.id.slice(0, 8)}...</td>
-                      <td className="p-2">{issue.warehouseName || issue.warehouseId.slice(0, 8)}...</td>
+                      <td className="p-2">
+                        {issue.warehouseId 
+                          ? (issue.warehouseName || getWarehouseName(issue.warehouseId))
+                          : 'انتخاب نشده'}
+                      </td>
                       <td className="p-2">
                         <span className={`badge ${IssueStatusColors[issue.status] || 'bg-gray-100 text-gray-800'}`}>
                           {IssueStatusLabels[issue.status] || issue.status}
