@@ -28,6 +28,7 @@ public sealed class AllocateTransferLineLifoHandler
                 try
                 {
                     var tr = await _db.Transfers
+                        .AsSplitQuery()
                         .Include(t => t.Lines).ThenInclude(l => l.Segments)
                         .FirstOrDefaultAsync(t => t.Id == req.TransferId, ct)
                         ?? throw new InvalidOperationException("انتقال پیدا نشد.");

@@ -113,6 +113,7 @@ public sealed class GetStockLedgerEntryDetailsHandler : IRequestHandler<GetStock
             case "Issue":
                 var issue = await _db.Issues
                     .AsNoTracking()
+                    .AsSplitQuery()
                     .Include(i => i.Lines)
                     .ThenInclude(l => l.Allocations)
                     .Where(i => i.Id == entry.RefDocId)
@@ -146,6 +147,7 @@ public sealed class GetStockLedgerEntryDetailsHandler : IRequestHandler<GetStock
             case "Transfer":
                 var transfer = await _db.Transfers
                     .AsNoTracking()
+                    .AsSplitQuery()
                     .Include(t => t.Lines)
                     .ThenInclude(l => l.Segments)
                     .Where(t => t.Id == entry.RefDocId)

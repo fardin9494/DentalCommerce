@@ -5,6 +5,7 @@ import { ReceiptsListPage } from '../features/receipts/routes/ReceiptsListPage'
 import { ReceiptDetailPage } from '../features/receipts/routes/ReceiptDetailPage'
 import { IssuesListPage } from '../features/issues/routes/IssuesListPage'
 import { IssueDetailPage } from '../features/issues/routes/IssueDetailPage'
+import { PickingPlanPage } from '../features/issues/routes/PickingPlanPage'
 import { TransfersListPage } from '../features/transfers/routes/TransfersListPage'
 import { TransferDetailPage } from '../features/transfers/routes/TransferDetailPage'
 import { AdjustmentsListPage } from '../features/adjustments/routes/AdjustmentsListPage'
@@ -27,6 +28,7 @@ const router = createBrowserRouter([
       { path: 'receipts/:id', element: <ReceiptDetailPage /> },
       { path: 'issues', element: <IssuesListPage /> },
       { path: 'issues/:id', element: <IssueDetailPage /> },
+      { path: 'issues/picking-plan', element: <PickingPlanPage /> },
       { path: 'transfers', element: <TransfersListPage /> },
       { path: 'transfers/:id', element: <TransferDetailPage /> },
       { path: 'adjustments', element: <AdjustmentsListPage /> },

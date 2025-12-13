@@ -9,6 +9,7 @@ public sealed record GetStockItemsListQuery(
     Guid? WarehouseId = null,
     Guid? ProductId = null,
     Guid? VariantId = null,
+    Guid? ShelfId = null,
     string? Search = null,
     bool? HasStock = null, // true = فقط موجودی > 0
     int Page = 1,
@@ -68,6 +69,9 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
 
         if (req.VariantId.HasValue)
             query = query.Where(si => si.VariantId == req.VariantId.Value);
+
+        if (req.ShelfId.HasValue)
+            query = query.Where(si => si.ShelfId == req.ShelfId.Value);
 
         // Note: Product name search will be done after fetching product names from catalog
         // We don't filter by search term here - we'll filter after getting product names

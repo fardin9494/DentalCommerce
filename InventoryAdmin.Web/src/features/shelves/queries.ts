@@ -2,11 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/shared/components/toast/ToastProvider'
 import * as api from './api'
 
-export function useShelves(warehouseId?: string, isActive?: boolean) {
+export function useShelves(warehouseId?: string, isActive?: boolean, enabled: boolean = true) {
   return useQuery({
     queryKey: ['shelves', { warehouseId, isActive }],
     queryFn: () => api.getShelves(warehouseId, isActive),
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    enabled,
   })
 }
 

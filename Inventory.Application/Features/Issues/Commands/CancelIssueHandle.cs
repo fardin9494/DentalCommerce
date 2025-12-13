@@ -1,4 +1,4 @@
-﻿using Inventory.Infrastructure.Persistence;
+using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,6 +22,7 @@ public sealed class CancelIssueHandler : IRequestHandler<CancelIssueCommand, Uni
                 try
                 {
                     var issue = await _db.Issues
+                                    .AsSplitQuery()
                                     .Include(i => i.Lines).ThenInclude(l => l.Allocations)
                                     .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
                                 ?? throw new InvalidOperationException("سند خروج پیدا نشد.");

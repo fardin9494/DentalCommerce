@@ -47,6 +47,7 @@ public sealed class GetIssuesListHandler : IRequestHandler<GetIssuesListQuery, I
     {
         var query = _db.Issues
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(i => i.Lines)
             .ThenInclude(l => l.Allocations)
             .AsQueryable();

@@ -37,6 +37,7 @@ export interface StockItemsListFilters {
   warehouseId?: string
   productId?: string
   variantId?: string
+  shelfId?: string
   search?: string
   hasStock?: boolean
   page?: number

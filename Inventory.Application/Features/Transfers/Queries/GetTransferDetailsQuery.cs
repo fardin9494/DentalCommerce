@@ -51,6 +51,7 @@ public sealed class GetTransferDetailsHandler : IRequestHandler<TransferDetailsQ
     {
         var tr = await _db.Transfers
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(t => t.Lines)
             .ThenInclude(l => l.Segments)
             .FirstOrDefaultAsync(t => t.Id == req.Id, ct);

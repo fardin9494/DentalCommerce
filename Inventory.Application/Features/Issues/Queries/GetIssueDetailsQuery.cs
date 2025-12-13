@@ -50,6 +50,7 @@ public sealed class GetIssueDetailsHandler : IRequestHandler<IssueDetailsQuery, 
     {
         var issue = await _db.Issues
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(i => i.Lines)
             .ThenInclude(l => l.Allocations)
             .FirstOrDefaultAsync(i => i.Id == req.Id, ct);

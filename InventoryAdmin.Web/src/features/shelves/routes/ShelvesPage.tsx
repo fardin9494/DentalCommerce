@@ -14,6 +14,8 @@ import { useConfirm } from '@/shared/components/confirm/ConfirmProvider'
 import { CreateShelfModal } from '../components/CreateShelfModal'
 import { CreateShelvesBatchModal } from '../components/CreateShelvesBatchModal'
 import { EditShelfModal } from '../components/EditShelfModal'
+import { ShelfProductsModal } from '../components/ShelfProductsModal'
+import { VisualShelvesView } from '../components/VisualShelvesView'
 import type { Shelf } from '../api'
 
 export function ShelvesPage() {
@@ -29,7 +31,9 @@ export function ShelvesPage() {
 
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showBatchModal, setShowBatchModal] = useState(false)
+  const [showVisualView, setShowVisualView] = useState(false)
   const [editingShelf, setEditingShelf] = useState<Shelf | null>(null)
+  const [viewingProductsShelf, setViewingProductsShelf] = useState<Shelf | null>(null)
   const [warehouseFilter, setWarehouseFilter] = useState<string>('')
 
   async function handleCreate(data: { warehouseId: string; name: string; description?: string }) {
@@ -87,15 +91,31 @@ export function ShelvesPage() {
       <PageHeader
         title="قفسه‌ها"
         actions={
-          <button
-            onClick={() => setShowBatchModal(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            ایجاد گروهی قفسه
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowVisualView(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"
+                />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+              </svg>
+              نمای بصری
+            </button>
+            <button
+              onClick={() => setShowBatchModal(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              ایجاد گروهی قفسه
+            </button>
+          </div>
         }
       >
         مدیریت قفسه‌های انبار
@@ -235,6 +255,20 @@ export function ShelvesPage() {
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
                       <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setViewingProductsShelf(shelf)}
+                          className="rounded-lg p-2 text-blue-500 transition-colors hover:bg-blue-50 hover:text-blue-700"
+                          title="مشاهده محصولات"
+                        >
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"
+                            />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                          </svg>
+                        </button>
                         {shelf.isActive ? (
                           <>
                             <button
@@ -315,6 +349,16 @@ export function ShelvesPage() {
         onSubmit={handleUpdate}
         isSubmitting={updateShelf.isPending}
       />
+
+      {/* Shelf Products Modal */}
+      <ShelfProductsModal
+        isOpen={!!viewingProductsShelf}
+        shelf={viewingProductsShelf}
+        onClose={() => setViewingProductsShelf(null)}
+      />
+
+      {/* Visual Shelves View */}
+      <VisualShelvesView isOpen={showVisualView} onClose={() => setShowVisualView(false)} />
     </div>
   )
 }

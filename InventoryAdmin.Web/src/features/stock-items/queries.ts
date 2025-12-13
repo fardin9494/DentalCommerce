@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { getStockItems, getStockProducts, type StockItemsListFilters, type StockProductsFilters } from './api'
 
-export function useStockItems(filters: StockItemsListFilters = {}) {
+export function useStockItems(filters: StockItemsListFilters = {}, enabled: boolean = true) {
   return useQuery({
     queryKey: ['stock-items', 'list', filters],
     queryFn: () => getStockItems(filters),
+    enabled,
   })
 }
 

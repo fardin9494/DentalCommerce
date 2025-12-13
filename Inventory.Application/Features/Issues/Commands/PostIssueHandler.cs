@@ -24,6 +24,7 @@ public sealed class PostIssueHandler : IRequestHandler<PostIssueCommand, Unit>
                 try
                 {
                     var issue = await _db.Issues
+                        .AsSplitQuery()
                         .Include(i => i.Lines)
                         .ThenInclude(l => l.Allocations)
                         .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
