@@ -16,9 +16,13 @@ import {
 } from '../queries'
 import { useConfirm } from '@/shared/components/confirm/ConfirmProvider'
 import { swalPrompt } from '@/shared/utils/swal'
-import { AddReceiptLineModal } from '../components/AddReceiptLineModal'
 import { EditReceiptLineModal } from '../components/EditReceiptLineModal'
 import { ApproveRejectLineModal } from '../components/ApproveRejectLineModal'
+import { ProductSearchSelect, type ProductSelection } from '@/shared/components/ProductSearchSelect'
+import DatePicker from 'react-multi-date-picker'
+import DateObject from 'react-date-object'
+import persian from 'react-date-object/calendars/persian'
+import persian_fa from 'react-date-object/locales/persian_fa'
 import type { ReceiptLine } from '../types'
 import {
   ReceiptStatusLabels,
@@ -29,6 +33,7 @@ import {
 } from '../types'
 import { useProductNames } from '@/shared/hooks/useProductNames'
 import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
+import { useProductDetail } from '@/shared/hooks/useProducts'
 
 export function ReceiptDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -41,12 +46,30 @@ export function ReceiptDetailPage() {
   const approve = useApproveReceipt(id!)
   const cancel = useCancelReceipt(id!)
   const confirm = useConfirm()
-  const [showAddLineModal, setShowAddLineModal] = useState(false)
+  const [isAddingNewLine, setIsAddingNewLine] = useState(false)
+  const [newLineData, setNewLineData] = useState<{
+    productId?: string
+    variantId?: string
+    productName?: string
+    variantValue?: string
+    qty: string
+    lotNumber: string
+    expiryDate: DateObject | null
+    unitCost: string
+  }>({
+    qty: '1',
+    lotNumber: '',
+    expiryDate: null,
+    unitCost: '',
+  })
   const [editingLine, setEditingLine] = useState<ReceiptLine | null>(null)
   const [approveRejectLine, setApproveRejectLine] = useState<{ line: ReceiptLine; mode: 'approve' | 'reject' } | null>(null)
   const updateLine = useUpdateReceiptLine(id!)
   const approveLinePartial = useApproveReceiptLinePartial(id!)
   const rejectLine = useRejectReceiptLine(id!)
+  
+  // Get product detail for variant selection when adding new line
+  const { data: newLineProductDetail } = useProductDetail(newLineData.productId, !!newLineData.productId && isAddingNewLine)
 
   // جمع‌آوری productId های تمام خطوط (در صورت وجود) برای دریافت نام محصولات
   const productIds = useMemo(() => receipt?.lines.map((line) => line.productId) || [], [receipt?.lines])
@@ -88,23 +111,68 @@ export function ReceiptDetailPage() {
     )
   }
 
-  async function handleAddLine(data: {
-    productId: string
-    variantId?: string
-    qty: number
-    lotNumber?: string
-    expiryDateUtc?: string
-    unitCost?: number
-  }) {
-    await addLine.mutateAsync({
-      productId: data.productId,
-      variantId: data.variantId || null,
-      qty: data.qty,
-      lotNumber: data.lotNumber || null,
-      expiryDateUtc: data.expiryDateUtc || null,
-      unitCost: data.unitCost || null,
+  function handleStartAddLine() {
+    setIsAddingNewLine(true)
+    setNewLineData({
+      qty: '1',
+      lotNumber: '',
+      expiryDate: null,
+      unitCost: '',
     })
-    setShowAddLineModal(false)
+  }
+
+  function handleCancelAddLine() {
+    setIsAddingNewLine(false)
+    setNewLineData({
+      qty: '1',
+      lotNumber: '',
+      expiryDate: null,
+      unitCost: '',
+    })
+  }
+
+  function handleProductSelect(selection: ProductSelection) {
+    setNewLineData((prev) => ({
+      ...prev,
+      productId: selection.productId,
+      variantId: selection.variantId,
+      productName: selection.productName,
+      variantValue: selection.variantValue,
+    }))
+  }
+
+  async function handleSaveNewLine() {
+    if (!newLineData.productId) return
+    
+    const qtyNum = parseFloat(newLineData.qty)
+    if (isNaN(qtyNum) || qtyNum <= 0) return
+
+    // Check if product has variants and one is required
+    const activeVariants = newLineProductDetail?.variants?.filter(v => v.isActive) || []
+    if (activeVariants.length > 0 && !newLineData.variantId) {
+      return // Don't allow save without variant selection
+    }
+
+    const expiryDateUtc = newLineData.expiryDate ? newLineData.expiryDate.toDate().toISOString() : undefined
+
+    await addLine.mutateAsync({
+      productId: newLineData.productId,
+      variantId: newLineData.variantId || null,
+      qty: qtyNum,
+      lotNumber: newLineData.lotNumber.trim() || null,
+      expiryDateUtc: expiryDateUtc || null,
+      unitCost: newLineData.unitCost ? parseFloat(newLineData.unitCost) : null,
+    })
+    
+    // Reset and keep adding mode open for next line
+    setNewLineData({
+      qty: '1',
+      lotNumber: '',
+      expiryDate: null,
+      unitCost: '',
+    })
+    // Optionally close after save - user can click "Add Line" again
+    setIsAddingNewLine(false)
   }
 
   async function handleRemoveLine(lineId: string) {
@@ -183,6 +251,22 @@ export function ReceiptDetailPage() {
     setApproveRejectLine(null)
   }
 
+  async function handleApproveAllRemaining(line: ReceiptLine) {
+    if (line.remainingQty <= 0) return
+    
+    // محاسبه مقدار کل تایید شده جدید: همه مقدار به جز رد شده
+    const newApprovedQty = line.qty - line.rejectedQty
+    
+    const ok = await confirm.confirm({
+      title: 'تایید همه مقدار باقیمانده',
+      message: `آیا می‌خواهید همه مقدار باقیمانده (${line.remainingQty.toLocaleString('fa-IR')}) این خط را تایید کنید؟\n\nمقدار تایید شده از ${line.approvedQty.toLocaleString('fa-IR')} به ${newApprovedQty.toLocaleString('fa-IR')} تغییر خواهد کرد.`,
+    })
+    if (!ok) return
+    
+    // ارسال مقدار کل تایید شده جدید (نه مقدار باقیمانده)
+    await approveLinePartial.mutateAsync({ lineId: line.id, qty: newApprovedQty })
+  }
+
   function formatDate(dateStr: string) {
     try {
       return new Date(dateStr).toLocaleDateString('fa-IR', {
@@ -227,8 +311,9 @@ export function ReceiptDetailPage() {
             {isDraft && (
               <>
                 <button
-                  onClick={() => setShowAddLineModal(true)}
-                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
+                  onClick={handleStartAddLine}
+                  disabled={isAddingNewLine}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-50"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -372,8 +457,9 @@ export function ReceiptDetailPage() {
           </h3>
           {isDraft && (
             <button
-              onClick={() => setShowAddLineModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+              onClick={handleStartAddLine}
+              disabled={isAddingNewLine}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -383,7 +469,7 @@ export function ReceiptDetailPage() {
           )}
         </div>
 
-        {receipt.lines.length === 0 ? (
+        {receipt.lines.length === 0 && !isAddingNewLine ? (
           <div className="py-12 text-center">
             <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-slate-100 p-3 text-slate-400">
               <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -421,6 +507,149 @@ export function ReceiptDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                {/* Inline Add New Line Row */}
+                {isDraft && isAddingNewLine && (
+                  <tr className="bg-emerald-50/50 border-2 border-emerald-200">
+                    <td className="px-4 py-3 text-slate-500 font-medium">جدید</td>
+                    {!newLineData.productId ? (
+                      <td className="px-4 py-4" colSpan={6}>
+                        <div className="min-w-[400px]">
+                          <ProductSearchSelect
+                            onSelect={handleProductSelect}
+                            onCancel={handleCancelAddLine}
+                          />
+                        </div>
+                      </td>
+                    ) : (
+                      <>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-900">{newLineData.productName}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {(() => {
+                            const activeVariants = newLineProductDetail?.variants?.filter(v => v.isActive) || []
+                            if (activeVariants.length > 0) {
+                              return (
+                                <div className="space-y-1.5">
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {activeVariants.map((variant) => (
+                                      <button
+                                        key={variant.id}
+                                        type="button"
+                                        onClick={() => setNewLineData(prev => ({ ...prev, variantId: variant.id, variantValue: variant.value }))}
+                                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                                          newLineData.variantId === variant.id
+                                            ? 'bg-emerald-600 text-white'
+                                            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                                        }`}
+                                      >
+                                        {variant.value}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )
+                            }
+                            return <span className="text-slate-400 text-sm">-</span>
+                          })()}
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            value={newLineData.qty}
+                            onChange={(e) => setNewLineData(prev => ({ ...prev, qty: e.target.value }))}
+                            min="0.01"
+                            step="0.01"
+                            className="w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                            placeholder="تعداد"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="text"
+                            value={newLineData.lotNumber}
+                            onChange={(e) => setNewLineData(prev => ({ ...prev, lotNumber: e.target.value }))}
+                            className="w-36 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                            placeholder="لات نامبر"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <DatePicker
+                            value={newLineData.expiryDate}
+                            onChange={(date) => {
+                              if (Array.isArray(date)) {
+                                setNewLineData(prev => ({ ...prev, expiryDate: (date[0] as DateObject | null) ?? null }))
+                              } else {
+                                setNewLineData(prev => ({ ...prev, expiryDate: date as DateObject | null }))
+                              }
+                            }}
+                            calendar={persian}
+                            locale={persian_fa}
+                            calendarPosition="bottom-center"
+                            portal
+                            editable={false}
+                            inputClass="w-36 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                            placeholder="تاریخ انقضا"
+                            format="YYYY/MM/DD"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="relative">
+                            <input
+                              type="number"
+                              value={newLineData.unitCost}
+                              onChange={(e) => setNewLineData(prev => ({ ...prev, unitCost: e.target.value }))}
+                              min="0"
+                              step="1"
+                              className="w-36 rounded-lg border border-slate-300 py-2 pl-12 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                              placeholder="قیمت"
+                            />
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">ریال</span>
+                          </div>
+                        </td>
+                      </>
+                    )}
+                    <td className="px-4 py-3">
+                      {newLineData.productId ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={handleSaveNewLine}
+                            disabled={addLine.isPending || !newLineData.productId || parseFloat(newLineData.qty) <= 0 || (newLineProductDetail?.variants?.filter(v => v.isActive).length || 0) > 0 && !newLineData.variantId}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            {addLine.isPending ? (
+                              <>
+                                <Spinner className="h-3 w-3" />
+                                در حال ثبت...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                </svg>
+                                ثبت
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={handleCancelAddLine}
+                            disabled={addLine.isPending}
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            انصراف
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={handleCancelAddLine}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                        >
+                          انصراف
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )}
                 {receipt.lines.map((line) => (
                   <tr key={line.id} className="transition-colors hover:bg-slate-50">
                     <td className="whitespace-nowrap px-4 py-3 text-slate-700">{line.lineNo}</td>
@@ -484,6 +713,18 @@ export function ReceiptDetailPage() {
                         {isReceived && (
                           <td className="whitespace-nowrap px-4 py-3">
                             <div className="flex items-center gap-1">
+                              {line.remainingQty > 0 && (
+                                <button
+                                  onClick={() => handleApproveAllRemaining(line)}
+                                  disabled={approveLinePartial.isPending || rejectLine.isPending}
+                                  className="rounded-lg p-1.5 text-green-600 transition-colors hover:bg-green-50 hover:text-green-700 disabled:opacity-50"
+                                  title={`تایید همه مقدار باقیمانده (${line.remainingQty.toLocaleString('fa-IR')})`}
+                                >
+                                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                  </svg>
+                                </button>
+                              )}
                               <button
                                 onClick={() => setApproveRejectLine({ line, mode: 'approve' })}
                                 disabled={approveLinePartial.isPending || rejectLine.isPending}
@@ -571,14 +812,6 @@ export function ReceiptDetailPage() {
           </div>
         )}
       </div>
-
-      {/* Add Line Modal */}
-      <AddReceiptLineModal
-        isOpen={showAddLineModal}
-        onClose={() => setShowAddLineModal(false)}
-        onSubmit={handleAddLine}
-        isSubmitting={addLine.isPending}
-      />
 
       {/* Edit Line Modal */}
       <EditReceiptLineModal
