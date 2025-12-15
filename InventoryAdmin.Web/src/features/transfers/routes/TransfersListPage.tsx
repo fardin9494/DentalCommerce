@@ -5,6 +5,8 @@ import { Spinner } from '@/shared/components/Spinner'
 import { useTransfersList, useCreateTransfer } from '../queries'
 import { CreateTransferModal } from '../components/CreateTransferModal'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
+import { useSortableTable } from '@/shared/hooks/useSortableTable'
+import { SortableHeader } from '@/shared/components/SortableHeader'
 import {
   TransferStatusLabels,
   TransferStatusColors,
@@ -12,6 +14,22 @@ import {
   type TransferStatus,
   type TransfersListFilters,
 } from '../types'
+
+// Type for transfer list item
+interface TransferListItem {
+  id: string
+  sourceWarehouseId: string
+  sourceWarehouseName?: string | null
+  destinationWarehouseId: string
+  destinationWarehouseName?: string | null
+  status: string
+  externalRef?: string | null
+  docDate: string
+  linesCount: number
+  totalQty: number
+  totalAllocatedQty: number
+  totalRemainingQty: number
+}
 
 export function TransfersListPage() {
   const navigate = useNavigate()
@@ -35,6 +53,13 @@ export function TransfersListPage() {
   )
 
   const { data, isLoading, error } = useTransfersList(filters)
+
+  // Sorting - default by docDate descending (newest first)
+  const { sortedData, requestSort, getSortIndicator, sortConfig } = useSortableTable<TransferListItem>({
+    data: (data?.items || []) as TransferListItem[],
+    defaultSortKey: 'docDate',
+    defaultDirection: 'desc',
+  })
 
   // Local filter states for UI
   const [searchInput, setSearchInput] = useState(filters.search || '')
@@ -311,18 +336,69 @@ export function TransfersListPage() {
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-right">
                     <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">شماره سند</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">انبار مبدا</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">انبار مقصد</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">وضعیت</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تاریخ</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تعداد خطوط</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600 text-center">مقدار کل</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600 text-center">تخصیص یافته</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600 text-center">باقی‌مانده</th>
+                    <SortableHeader
+                      label="انبار مبدا"
+                      sortKey="sourceWarehouseName"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('sourceWarehouseName' as keyof TransferListItem)}
+                      onSort={(key) => requestSort(key as keyof TransferListItem)}
+                    />
+                    <SortableHeader
+                      label="انبار مقصد"
+                      sortKey="destinationWarehouseName"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('destinationWarehouseName' as keyof TransferListItem)}
+                      onSort={(key) => requestSort(key as keyof TransferListItem)}
+                    />
+                    <SortableHeader
+                      label="وضعیت"
+                      sortKey="status"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('status' as keyof TransferListItem)}
+                      onSort={(key) => requestSort(key as keyof TransferListItem)}
+                    />
+                    <SortableHeader
+                      label="تاریخ"
+                      sortKey="docDate"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('docDate' as keyof TransferListItem)}
+                      onSort={(key) => requestSort(key as keyof TransferListItem)}
+                    />
+                    <SortableHeader
+                      label="تعداد خطوط"
+                      sortKey="linesCount"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('linesCount' as keyof TransferListItem)}
+                      onSort={(key) => requestSort(key as keyof TransferListItem)}
+                    />
+                    <SortableHeader
+                      label="مقدار کل"
+                      sortKey="totalQty"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('totalQty' as keyof TransferListItem)}
+                      onSort={(key) => requestSort(key as keyof TransferListItem)}
+                      className="text-center"
+                    />
+                    <SortableHeader
+                      label="تخصیص یافته"
+                      sortKey="totalAllocatedQty"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('totalAllocatedQty' as keyof TransferListItem)}
+                      onSort={(key) => requestSort(key as keyof TransferListItem)}
+                      className="text-center"
+                    />
+                    <SortableHeader
+                      label="باقی‌مانده"
+                      sortKey="totalRemainingQty"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('totalRemainingQty' as keyof TransferListItem)}
+                      onSort={(key) => requestSort(key as keyof TransferListItem)}
+                      className="text-center"
+                    />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {data.items.map((item) => {
+                  {sortedData.map((item) => {
                     const status = item.status as TransferStatus
                     return (
                       <tr
@@ -340,9 +416,8 @@ export function TransfersListPage() {
                         <td className="px-4 py-3 text-slate-700">{item.destinationWarehouseName || '-'}</td>
                         <td className="px-4 py-3">
                           <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                              TransferStatusColors[status] || 'bg-gray-100 text-gray-800'
-                            }`}
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${TransferStatusColors[status] || 'bg-gray-100 text-gray-800'
+                              }`}
                           >
                             {TransferStatusLabels[status] || item.status}
                           </span>
@@ -357,9 +432,8 @@ export function TransfersListPage() {
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span
-                            className={`font-medium ${
-                              item.totalRemainingQty > 0 ? 'text-orange-600' : 'text-emerald-600'
-                            }`}
+                            className={`font-medium ${item.totalRemainingQty > 0 ? 'text-orange-600' : 'text-emerald-600'
+                              }`}
                           >
                             {item.totalRemainingQty.toLocaleString('fa-IR')}
                           </span>
@@ -406,11 +480,10 @@ export function TransfersListPage() {
                       <button
                         key={pageNum}
                         onClick={() => handlePageChange(pageNum)}
-                        className={`min-w-[36px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                          data.page === pageNum
+                        className={`min-w-[36px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${data.page === pageNum
                             ? 'bg-emerald-600 text-white'
                             : 'text-slate-600 hover:bg-slate-200'
-                        }`}
+                          }`}
                       >
                         {pageNum.toLocaleString('fa-IR')}
                       </button>

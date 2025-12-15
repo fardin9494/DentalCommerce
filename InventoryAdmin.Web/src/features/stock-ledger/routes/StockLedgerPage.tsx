@@ -4,8 +4,16 @@ import { PageHeader } from '@/shared/components/PageHeader'
 import { Spinner } from '@/shared/components/Spinner'
 import { useStockLedger } from '../queries'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
-import { StockMovementTypeLabels, StockMovementTypeColors, type StockLedgerFilters } from '../types'
+import {
+  StockMovementTypeLabels,
+  StockMovementTypeColors,
+  type StockLedgerFilters,
+  type StockLedgerEntry,
+  type StockMovementType,
+  type StockLedgerSortField,
+} from '../types'
 import { StockLedgerEntryDetailsModal } from '../components/StockLedgerEntryDetailsModal'
+import { SortableHeader } from '@/shared/components/SortableHeader'
 import DatePicker from 'react-multi-date-picker'
 import DateObject from 'react-date-object'
 import persian from 'react-date-object/calendars/persian'
@@ -14,10 +22,15 @@ import persian_fa from 'react-date-object/locales/persian_fa'
 export function StockLedgerPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { data: warehouses } = useActiveWarehouses()
+  const defaultSortKey: StockLedgerSortField = 'timestamp'
+  const defaultSortDirection: 'asc' | 'desc' = 'desc'
 
   // Get filters from URL
-  const filters: StockLedgerFilters = useMemo(
-    () => ({
+  const filters: StockLedgerFilters = useMemo(() => {
+    const sortByParam = searchParams.get('sortBy') as StockLedgerSortField | null
+    const sortDirectionParam = searchParams.get('sortDirection') as 'asc' | 'desc' | null
+
+    return {
       page: parseInt(searchParams.get('page') || '1', 10),
       pageSize: parseInt(searchParams.get('pageSize') || '50', 10),
       warehouseId: searchParams.get('warehouseId') || undefined,
@@ -28,11 +41,15 @@ export function StockLedgerPage() {
       refDocId: searchParams.get('refDocId') || undefined,
       fromDate: searchParams.get('fromDate') || undefined,
       toDate: searchParams.get('toDate') || undefined,
-    }),
-    [searchParams]
-  )
+      sortBy: sortByParam ?? defaultSortKey,
+      sortDirection: sortDirectionParam ?? defaultSortDirection,
+    }
+  }, [defaultSortDirection, defaultSortKey, searchParams])
 
   const { data, isLoading, error } = useStockLedger(filters)
+  const items = (data?.items || []) as StockLedgerEntry[]
+  const currentSortKey: StockLedgerSortField = filters.sortBy ?? defaultSortKey
+  const currentSortDirection = filters.sortDirection ?? 'desc'
 
   // Local filter states
   const [warehouseFilter, setWarehouseFilter] = useState<string>(filters.warehouseId || '')
@@ -102,6 +119,12 @@ export function StockLedgerPage() {
     setFromDateFilter(null)
     setToDateFilter(null)
     setSearchParams(new URLSearchParams())
+  }
+
+  function handleSortChange(key: StockLedgerFilters['sortBy']) {
+    const isSameColumn = currentSortKey === key
+    const nextDirection = isSameColumn ? (currentSortDirection === 'asc' ? 'desc' : 'asc') : key === 'timestamp' ? 'desc' : 'asc'
+    updateFilters({ sortBy: key, sortDirection: nextDirection })
   }
 
   function formatDateTime(dateStr: string) {
@@ -265,26 +288,62 @@ export function StockLedgerPage() {
         <div className="rounded-xl border border-slate-200 bg-white shadow-md">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
+              <thead className="border-b border-slate-200 bg-slate-50 text-right">
                 <tr>
-                  <th className="px-4 py-3 text-right font-semibold">تاریخ و زمان</th>
-                  <th className="px-4 py-3 text-right font-semibold">نوع عملیات</th>
-                  <th className="px-4 py-3 text-right font-semibold">مقدار</th>
-                  <th className="px-4 py-3 text-right font-semibold">نوع سند</th>
-                  <th className="px-4 py-3 text-right font-semibold">لات</th>
-                  <th className="px-4 py-3 text-right font-semibold">تاریخ انقضا</th>
-                  <th className="px-4 py-3 text-right font-semibold">یادداشت</th>
+                  <SortableHeader
+                    label="تاریخ و زمان"
+                    sortKey="timestamp"
+                    currentSortKey={currentSortKey}
+                    currentDirection={currentSortDirection}
+                    onSort={() => handleSortChange('timestamp')}
+                  />
+                  <SortableHeader
+                    label="نوع عملیات"
+                    sortKey="movementType"
+                    currentSortKey={currentSortKey}
+                    currentDirection={currentSortDirection}
+                    onSort={() => handleSortChange('movementType')}
+                  />
+                  <SortableHeader
+                    label="مقدار"
+                    sortKey="deltaQty"
+                    currentSortKey={currentSortKey}
+                    currentDirection={currentSortDirection}
+                    onSort={() => handleSortChange('deltaQty')}
+                  />
+                  <SortableHeader
+                    label="نوع سند"
+                    sortKey="refDocType"
+                    currentSortKey={currentSortKey}
+                    currentDirection={currentSortDirection}
+                    onSort={() => handleSortChange('refDocType')}
+                  />
+                  <SortableHeader
+                    label="لات"
+                    sortKey="lotNumber"
+                    currentSortKey={currentSortKey}
+                    currentDirection={currentSortDirection}
+                    onSort={() => handleSortChange('lotNumber')}
+                  />
+                  <SortableHeader
+                    label="تاریخ انقضا"
+                    sortKey="expiryDate"
+                    currentSortKey={currentSortKey}
+                    currentDirection={currentSortDirection}
+                    onSort={() => handleSortChange('expiryDate')}
+                  />
+                  <th className="px-4 py-3 font-semibold text-slate-600">یادداشت</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {data.items.length === 0 ? (
+                {items.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
                       هیچ رکوردی یافت نشد
                     </td>
                   </tr>
                 ) : (
-                  data.items.map((entry) => (
+                  items.map((entry) => (
                     <tr
                       key={entry.id}
                       className="cursor-pointer hover:bg-slate-50 transition-colors even:bg-slate-50/60"
@@ -295,18 +354,16 @@ export function StockLedgerPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            StockMovementTypeColors[entry.movementType]
-                          }`}
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${StockMovementTypeColors[entry.movementType]
+                            }`}
                         >
                           {StockMovementTypeLabels[entry.movementType]}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-center">
                         <span
-                          className={`font-semibold ${
-                            entry.deltaQty > 0 ? 'text-emerald-600' : 'text-red-600'
-                          }`}
+                          className={`font-semibold ${entry.deltaQty > 0 ? 'text-emerald-600' : 'text-red-600'
+                            }`}
                         >
                           {entry.deltaQty > 0 ? '+' : ''}
                           {entry.deltaQty.toLocaleString('fa-IR')}
@@ -327,32 +384,58 @@ export function StockLedgerPage() {
 
           {/* Pagination */}
           {data.totalPages > 1 && (
-            <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-600">
-                  نمایش {((data.page - 1) * data.pageSize + 1).toLocaleString('fa-IR')} تا{' '}
-                  {Math.min(data.page * data.pageSize, data.totalCount).toLocaleString('fa-IR')} از{' '}
-                  {data.totalCount.toLocaleString('fa-IR')} رکورد
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handlePageChange(data.page - 1)}
-                    disabled={data.page === 1}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    قبلی
-                  </button>
-                  <span className="text-sm text-slate-600">
-                    صفحه {data.page.toLocaleString('fa-IR')} از {data.totalPages.toLocaleString('fa-IR')}
-                  </span>
-                  <button
-                    onClick={() => handlePageChange(data.page + 1)}
-                    disabled={data.page >= data.totalPages}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    بعدی
-                  </button>
-                </div>
+            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-sm text-slate-600">
+                نمایش {((data.page - 1) * data.pageSize + 1).toLocaleString('fa-IR')} تا{' '}
+                {Math.min(data.page * data.pageSize, data.totalCount).toLocaleString('fa-IR')} از{' '}
+                {data.totalCount.toLocaleString('fa-IR')} رکورد
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handlePageChange(data.page - 1)}
+                  disabled={data.page <= 1}
+                  className="rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                  </svg>
+                </button>
+
+                {/* Page numbers */}
+                {Array.from({ length: Math.min(5, data.totalPages) }, (_, i) => {
+                  let pageNum: number
+                  if (data.totalPages <= 5) {
+                    pageNum = i + 1
+                  } else if (data.page <= 3) {
+                    pageNum = i + 1
+                  } else if (data.page >= data.totalPages - 2) {
+                    pageNum = data.totalPages - 4 + i
+                  } else {
+                    pageNum = data.page - 2 + i
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`min-w-[36px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${data.page === pageNum
+                        ? 'bg-emerald-600 text-white'
+                        : 'text-slate-600 hover:bg-slate-200'
+                        }`}
+                    >
+                      {pageNum.toLocaleString('fa-IR')}
+                    </button>
+                  )
+                })}
+
+                <button
+                  onClick={() => handlePageChange(data.page + 1)}
+                  disabled={data.page >= data.totalPages}
+                  className="rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                  </svg>
+                </button>
               </div>
             </div>
           )}

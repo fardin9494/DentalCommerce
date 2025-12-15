@@ -1,4 +1,4 @@
-﻿using BuildingBlocks.Domain;
+using BuildingBlocks.Domain;
 using Inventory.Domain.Enums;
 
 namespace Inventory.Domain.Aggregates;
@@ -11,7 +11,7 @@ public sealed class Adjustment : AggregateRoot<Guid>
     public AdjustmentStatus Status { get; private set; } = AdjustmentStatus.Draft;
     public AdjustmentReason Reason { get; private set; }
     public string? Note { get; private set; }
-    public DateTime DocDate { get; private set; }         // UTC
+    public DateTime DocDate { get; private set; } // UTC
     public DateTime? PostedAt { get; private set; }
 
     public IReadOnlyList<AdjustmentLine> Lines => _lines;
@@ -31,11 +31,15 @@ public sealed class Adjustment : AggregateRoot<Guid>
         };
     }
 
-    public AdjustmentLine AddLine(Guid productId, Guid? variantId, string? lotNumber, DateTime? expiryDateUtc, decimal qtyDelta /* + افزایشی / - کاهشی */)
+    /// <summary>
+    /// Add an adjustment line tied to a specific StockItem.
+    /// qtyDelta: + increase / - decrease
+    /// </summary>
+    public AdjustmentLine AddLine(Guid stockItemId, Guid productId, Guid? variantId, string? lotNumber, DateTime? expiryDateUtc, decimal qtyDelta)
     {
         EnsureDraft();
-        if (qtyDelta == 0) throw new InvalidOperationException("مقدار نباید صفر باشد.");
-        var line = AdjustmentLine.Create(Id, _lines.Count + 1, productId, variantId, lotNumber, expiryDateUtc, qtyDelta);
+        if (qtyDelta == 0) throw new InvalidOperationException("مقدار نمی‌تواند صفر باشد.");
+        var line = AdjustmentLine.Create(Id, _lines.Count + 1, stockItemId, productId, variantId, lotNumber, expiryDateUtc, qtyDelta);
         _lines.Add(line);
         Touch();
         return line;
@@ -51,7 +55,12 @@ public sealed class Adjustment : AggregateRoot<Guid>
         Touch();
     }
 
-    public void SetNote(string? note) { EnsureDraft(); Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(); Touch(); }
+    public void SetNote(string? note)
+    {
+        EnsureDraft();
+        Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        Touch();
+    }
 
     public void UpdateHeader(string? note, DateTime? docDateUtc)
     {
@@ -64,7 +73,7 @@ public sealed class Adjustment : AggregateRoot<Guid>
     public void Post(DateTime? whenUtc = null)
     {
         EnsureDraft();
-        if (_lines.Count == 0) throw new InvalidOperationException("بدون خط قابل ثبت نیست.");
+        if (_lines.Count == 0) throw new InvalidOperationException("هیچ خطی برای ثبت وجود ندارد.");
         Status = AdjustmentStatus.Posted;
         PostedAt = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
         Touch();
@@ -72,14 +81,14 @@ public sealed class Adjustment : AggregateRoot<Guid>
 
     public void Cancel()
     {
-        if (Status != AdjustmentStatus.Draft) throw new InvalidOperationException("فقط در وضعیت پیش‌نویس قابل ابطال است.");
+        if (Status != AdjustmentStatus.Draft) throw new InvalidOperationException("فقط پیش‌نویس‌ها قابل لغو هستند.");
         Status = AdjustmentStatus.Canceled;
         Touch();
     }
 
     private void EnsureDraft()
     {
-        if (Status != AdjustmentStatus.Draft) throw new InvalidOperationException("در وضعیت جاری قابل ویرایش/افزودن نیست.");
+        if (Status != AdjustmentStatus.Draft) throw new InvalidOperationException("اصلاح باید در وضعیت پیش‌نویس باشد تا ویرایش شود.");
     }
 }
 
@@ -87,32 +96,40 @@ public sealed class AdjustmentLine : BaseEntity<Guid>
 {
     public Guid AdjustmentId { get; private set; }
     public int LineNo { get; private set; }
+    public Guid StockItemId { get; private set; }
     public Guid ProductId { get; private set; }
     public Guid? VariantId { get; private set; }
     public string? LotNumber { get; private set; }
     public DateTime? ExpiryDate { get; private set; } // UTC
-    public decimal QtyDelta { get; private set; }     // + افزایش / - کاهش
+    public decimal QtyDelta { get; private set; }     // + increase / - decrease
 
     private AdjustmentLine() { }
 
-    internal static AdjustmentLine Create(Guid adjustmentId, int lineNo, Guid productId, Guid? variantId, string? lotNumber, DateTime? expiryDateUtc, decimal qtyDelta)
-        => new()
+    internal static AdjustmentLine Create(Guid adjustmentId, int lineNo, Guid stockItemId, Guid productId, Guid? variantId, string? lotNumber, DateTime? expiryDateUtc, decimal qtyDelta)
+    {
+        if (stockItemId == Guid.Empty) throw new ArgumentException("شناسه موجودی الزامی است.", nameof(stockItemId));
+        if (productId == Guid.Empty) throw new ArgumentException("شناسه محصول الزامی است.", nameof(productId));
+        if (qtyDelta == 0) throw new InvalidOperationException("مقدار نمی‌تواند صفر باشد.");
+
+        return new()
         {
             Id = Guid.NewGuid(),
             AdjustmentId = adjustmentId,
             LineNo = lineNo,
+            StockItemId = stockItemId,
             ProductId = productId,
             VariantId = variantId,
             LotNumber = string.IsNullOrWhiteSpace(lotNumber) ? null : lotNumber.Trim(),
             ExpiryDate = expiryDateUtc.HasValue ? DateTime.SpecifyKind(expiryDateUtc.Value, DateTimeKind.Utc) : null,
             QtyDelta = qtyDelta
         };
+    }
 
     internal void Renumber(int no) => LineNo = no;
 
     public void UpdateQtyDelta(decimal qtyDelta)
     {
-        if (qtyDelta == 0) throw new InvalidOperationException("مقدار نباید صفر باشد.");
+        if (qtyDelta == 0) throw new InvalidOperationException("مقدار نمی‌تواند صفر باشد.");
         QtyDelta = qtyDelta;
     }
 }

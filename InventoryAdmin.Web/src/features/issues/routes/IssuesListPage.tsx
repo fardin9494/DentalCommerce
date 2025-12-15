@@ -10,6 +10,23 @@ import {
   type IssuesListFilters,
 } from '../types'
 import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
+import { useSortableTable } from '@/shared/hooks/useSortableTable'
+import { SortableHeader } from '@/shared/components/SortableHeader'
+
+// Type for issue list item
+interface IssueListItem {
+  id: string
+  warehouseId?: string | null
+  warehouseName?: string | null
+  status: string
+  externalRef?: string | null
+  docDate: string
+  postedAt?: string | null
+  linesCount: number
+  totalRequestedQty: number
+  totalAllocatedQty: number
+  totalRemainingQty: number
+}
 
 export function IssuesListPage() {
   const navigate = useNavigate()
@@ -33,13 +50,20 @@ export function IssuesListPage() {
 
   const { data, isLoading, error } = useIssuesList(filters)
 
+  // Sorting - default by docDate descending (newest first)
+  const { sortedData, requestSort, getSortIndicator, sortConfig } = useSortableTable<IssueListItem>({
+    data: (data?.items || []) as IssueListItem[],
+    defaultSortKey: 'docDate',
+    defaultDirection: 'desc',
+  })
+
   // Local filter states for UI
   const [searchInput, setSearchInput] = useState(filters.search || '')
   const [statusFilter, setStatusFilter] = useState<string>(filters.status?.toString() || '')
 
   function updateFilters(newFilters: Partial<IssuesListFilters>) {
     const params = new URLSearchParams(searchParams)
-    
+
     Object.entries(newFilters).forEach(([key, value]) => {
       if (value === undefined || value === '' || value === null) {
         params.delete(key)
@@ -47,12 +71,12 @@ export function IssuesListPage() {
         params.set(key, String(value))
       }
     })
-    
+
     // Reset to page 1 when filters change (except when changing page)
     if (!('page' in newFilters)) {
       params.set('page', '1')
     }
-    
+
     setSearchParams(params)
   }
 
@@ -145,7 +169,7 @@ export function IssuesListPage() {
   function toggleAllSelection() {
     if (!data) return
     const allSelected = data.items.every(issue => selectedIssues.has(issue.id))
-    
+
     setSelectedIssues(prev => {
       if (allSelected) {
         return new Set()
@@ -308,8 +332,8 @@ export function IssuesListPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-right text-xs uppercase tracking-wide text-slate-600">
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                  <tr className="border-b border-slate-200 bg-slate-50 text-right">
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">
                       <input
                         type="checkbox"
                         checked={data.items.length > 0 && data.items.every(issue => selectedIssues.has(issue.id))}
@@ -317,30 +341,77 @@ export function IssuesListPage() {
                         className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                       />
                     </th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">شناسه</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">انبار</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">وضعیت</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">مرجع</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">تاریخ سند</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">تاریخ ثبت</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">تعداد خطوط</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">درخواستی</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">تخصیص یافته</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">باقیمانده</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">عملیات</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">شناسه</th>
+                    <SortableHeader
+                      label="انبار"
+                      sortKey="warehouseId"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('warehouseId' as keyof IssueListItem)}
+                      onSort={(key) => requestSort(key as keyof IssueListItem)}
+                    />
+                    <SortableHeader
+                      label="وضعیت"
+                      sortKey="status"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('status' as keyof IssueListItem)}
+                      onSort={(key) => requestSort(key as keyof IssueListItem)}
+                    />
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">مرجع</th>
+                    <SortableHeader
+                      label="تاریخ سند"
+                      sortKey="docDate"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('docDate' as keyof IssueListItem)}
+                      onSort={(key) => requestSort(key as keyof IssueListItem)}
+                    />
+                    <SortableHeader
+                      label="تاریخ ثبت"
+                      sortKey="postedAt"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('postedAt' as keyof IssueListItem)}
+                      onSort={(key) => requestSort(key as keyof IssueListItem)}
+                    />
+                    <SortableHeader
+                      label="تعداد خطوط"
+                      sortKey="linesCount"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('linesCount' as keyof IssueListItem)}
+                      onSort={(key) => requestSort(key as keyof IssueListItem)}
+                    />
+                    <SortableHeader
+                      label="درخواستی"
+                      sortKey="totalRequestedQty"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('totalRequestedQty' as keyof IssueListItem)}
+                      onSort={(key) => requestSort(key as keyof IssueListItem)}
+                    />
+                    <SortableHeader
+                      label="تخصیص یافته"
+                      sortKey="totalAllocatedQty"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('totalAllocatedQty' as keyof IssueListItem)}
+                      onSort={(key) => requestSort(key as keyof IssueListItem)}
+                    />
+                    <SortableHeader
+                      label="باقیمانده"
+                      sortKey="totalRemainingQty"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('totalRemainingQty' as keyof IssueListItem)}
+                      onSort={(key) => requestSort(key as keyof IssueListItem)}
+                    />
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">عملیات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {data.items.map((issue) => {
+                  {sortedData.map((issue) => {
                     const isSelected = selectedIssues.has(issue.id)
                     const isPosted = issue.status === 'Posted'
-                    
+
                     return (
                       <tr
                         key={issue.id}
-                        className={`transition-colors hover:bg-slate-50 even:bg-slate-50/60 ${
-                          isSelected ? 'bg-blue-50' : ''
-                        }`}
+                        className={`transition-colors hover:bg-slate-50 even:bg-slate-50/60 ${isSelected ? 'bg-blue-50' : ''
+                          }`}
                       >
                         <td className="whitespace-nowrap px-4 py-3">
                           <input
@@ -353,7 +424,7 @@ export function IssuesListPage() {
                             className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                           />
                         </td>
-                        <td 
+                        <td
                           className="whitespace-nowrap px-4 py-3 cursor-pointer"
                           onClick={() => navigate(`/issues/${issue.id}`)}
                         >
@@ -361,72 +432,70 @@ export function IssuesListPage() {
                             {issue.id.substring(0, 8)}...
                           </span>
                         </td>
-                        <td 
+                        <td
                           className="whitespace-nowrap px-4 py-3 text-slate-700 cursor-pointer"
                           onClick={() => navigate(`/issues/${issue.id}`)}
                         >
-                          {issue.warehouseId 
+                          {issue.warehouseId
                             ? (issue.warehouseName || getWarehouseName(issue.warehouseId))
                             : 'انتخاب نشده'}
                         </td>
-                        <td 
+                        <td
                           className="whitespace-nowrap px-4 py-3 cursor-pointer"
                           onClick={() => navigate(`/issues/${issue.id}`)}
                         >
                           <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                              IssueStatusColors[issue.status] || 'bg-slate-100 text-slate-700'
-                            }`}
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${IssueStatusColors[issue.status] || 'bg-slate-100 text-slate-700'
+                              }`}
                           >
                             {IssueStatusLabels[issue.status] || issue.status}
                           </span>
                         </td>
-                        <td 
+                        <td
                           className="whitespace-nowrap px-4 py-3 text-slate-600 cursor-pointer"
                           onClick={() => navigate(`/issues/${issue.id}`)}
                         >
                           {issue.externalRef || '-'}
                         </td>
-                        <td 
+                        <td
                           className="whitespace-nowrap px-4 py-3 text-slate-600 cursor-pointer"
                           onClick={() => navigate(`/issues/${issue.id}`)}
                         >
                           {formatDate(issue.docDate)}
                         </td>
-                        <td 
+                        <td
                           className="whitespace-nowrap px-4 py-3 text-slate-500 text-xs cursor-pointer"
                           onClick={() => navigate(`/issues/${issue.id}`)}
                         >
                           {formatDateTime(issue.postedAt)}
                         </td>
-                        <td 
+                        <td
                           className="whitespace-nowrap px-4 py-3 text-center text-slate-700 cursor-pointer"
                           onClick={() => navigate(`/issues/${issue.id}`)}
                         >
                           {issue.linesCount}
                         </td>
-                        <td 
+                        <td
                           className="whitespace-nowrap px-4 py-3 text-center text-slate-700 cursor-pointer"
                           onClick={() => navigate(`/issues/${issue.id}`)}
                         >
                           {issue.totalRequestedQty.toLocaleString('fa-IR')}
                         </td>
-                        <td 
+                        <td
                           className="whitespace-nowrap px-4 py-3 text-center text-slate-700 cursor-pointer"
                           onClick={() => navigate(`/issues/${issue.id}`)}
                         >
                           {issue.totalAllocatedQty.toLocaleString('fa-IR')}
                         </td>
-                        <td 
+                        <td
                           className="whitespace-nowrap px-4 py-3 text-center cursor-pointer"
                           onClick={() => navigate(`/issues/${issue.id}`)}
                         >
                           <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                              issue.totalRemainingQty > 0
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${issue.totalRemainingQty > 0
                                 ? 'bg-orange-100 text-orange-700'
                                 : 'bg-green-100 text-green-700'
-                            }`}
+                              }`}
                           >
                             {issue.totalRemainingQty.toLocaleString('fa-IR')}
                           </span>
@@ -469,7 +538,7 @@ export function IssuesListPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                     </svg>
                   </button>
-                  
+
                   {/* Page numbers */}
                   {Array.from({ length: Math.min(5, data.totalPages) }, (_, i) => {
                     let pageNum: number
@@ -486,11 +555,10 @@ export function IssuesListPage() {
                       <button
                         key={pageNum}
                         onClick={() => handlePageChange(pageNum)}
-                        className={`min-w-[36px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                          data.page === pageNum
+                        className={`min-w-[36px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${data.page === pageNum
                             ? 'bg-emerald-600 text-white'
                             : 'text-slate-600 hover:bg-slate-200'
-                        }`}
+                          }`}
                       >
                         {pageNum.toLocaleString('fa-IR')}
                       </button>

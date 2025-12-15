@@ -1,9 +1,26 @@
+using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Inventory.Application.Features.StockLedger.Queries;
+
+public enum SortDirection
+{
+    Asc,
+    Desc
+}
+
+public enum StockLedgerSortField
+{
+    Timestamp,
+    MovementType,
+    DeltaQty,
+    RefDocType,
+    LotNumber,
+    ExpiryDate
+}
 
 public sealed record GetStockLedgerQuery(
     Guid? WarehouseId = null,
@@ -15,7 +32,9 @@ public sealed record GetStockLedgerQuery(
     DateTime? FromDate = null,
     DateTime? ToDate = null,
     int Page = 1,
-    int PageSize = 50
+    int PageSize = 50,
+    StockLedgerSortField SortBy = StockLedgerSortField.Timestamp,
+    SortDirection SortDirection = SortDirection.Desc
 ) : IRequest<StockLedgerListResult>;
 
 public sealed record StockLedgerListResult(
@@ -77,9 +96,9 @@ public sealed class GetStockLedgerHandler : IRequestHandler<GetStockLedgerQuery,
 
         var totalCount = await query.CountAsync(ct);
 
-        var items = await query
-            .OrderByDescending(e => e.Timestamp)
-            .ThenByDescending(e => e.Id)
+        var orderedQuery = ApplyOrdering(query, req.SortBy, req.SortDirection);
+
+        var items = await orderedQuery
             .Skip((req.Page - 1) * req.PageSize)
             .Take(req.PageSize)
             .ToListAsync(ct);
@@ -149,6 +168,62 @@ public sealed class GetStockLedgerHandler : IRequestHandler<GetStockLedgerQuery,
             req.PageSize,
             totalPages
         );
+    }
+
+    private static IOrderedQueryable<StockLedgerEntry> ApplyOrdering(
+        IQueryable<StockLedgerEntry> query,
+        StockLedgerSortField sortBy,
+        SortDirection direction)
+    {
+        return (sortBy, direction) switch
+        {
+            (StockLedgerSortField.MovementType, SortDirection.Asc) => query
+                .OrderBy(e => e.MovementType)
+                .ThenBy(e => e.Timestamp)
+                .ThenBy(e => e.Id),
+            (StockLedgerSortField.MovementType, SortDirection.Desc) => query
+                .OrderByDescending(e => e.MovementType)
+                .ThenByDescending(e => e.Timestamp)
+                .ThenByDescending(e => e.Id),
+            (StockLedgerSortField.DeltaQty, SortDirection.Asc) => query
+                .OrderBy(e => e.DeltaQty)
+                .ThenBy(e => e.Timestamp)
+                .ThenBy(e => e.Id),
+            (StockLedgerSortField.DeltaQty, SortDirection.Desc) => query
+                .OrderByDescending(e => e.DeltaQty)
+                .ThenByDescending(e => e.Timestamp)
+                .ThenByDescending(e => e.Id),
+            (StockLedgerSortField.RefDocType, SortDirection.Asc) => query
+                .OrderBy(e => e.RefDocType)
+                .ThenBy(e => e.Timestamp)
+                .ThenBy(e => e.Id),
+            (StockLedgerSortField.RefDocType, SortDirection.Desc) => query
+                .OrderByDescending(e => e.RefDocType)
+                .ThenByDescending(e => e.Timestamp)
+                .ThenByDescending(e => e.Id),
+            (StockLedgerSortField.LotNumber, SortDirection.Asc) => query
+                .OrderBy(e => e.LotNumber)
+                .ThenBy(e => e.Timestamp)
+                .ThenBy(e => e.Id),
+            (StockLedgerSortField.LotNumber, SortDirection.Desc) => query
+                .OrderByDescending(e => e.LotNumber)
+                .ThenByDescending(e => e.Timestamp)
+                .ThenByDescending(e => e.Id),
+            (StockLedgerSortField.ExpiryDate, SortDirection.Asc) => query
+                .OrderBy(e => e.ExpiryDate)
+                .ThenBy(e => e.Timestamp)
+                .ThenBy(e => e.Id),
+            (StockLedgerSortField.ExpiryDate, SortDirection.Desc) => query
+                .OrderByDescending(e => e.ExpiryDate)
+                .ThenByDescending(e => e.Timestamp)
+                .ThenByDescending(e => e.Id),
+            (StockLedgerSortField.Timestamp, SortDirection.Asc) => query
+                .OrderBy(e => e.Timestamp)
+                .ThenBy(e => e.Id),
+            _ => query
+                .OrderByDescending(e => e.Timestamp)
+                .ThenByDescending(e => e.Id),
+        };
     }
 }
 

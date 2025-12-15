@@ -4,6 +4,7 @@ using MediatR;
 
 public sealed record AddAdjustmentLineCommand(
     Guid AdjustmentId,
+    Guid StockItemId,
     Guid ProductId,
     Guid? VariantId,
     string? LotNumber,

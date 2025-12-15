@@ -60,6 +60,8 @@ export const StockLedgerListResultSchema = z.object({
 })
 export type StockLedgerListResult = z.infer<typeof StockLedgerListResultSchema>
 
+export type StockLedgerSortField = 'timestamp' | 'movementType' | 'deltaQty' | 'refDocType' | 'lotNumber' | 'expiryDate'
+
 export interface StockLedgerFilters {
   warehouseId?: string
   productId?: string
@@ -71,6 +73,8 @@ export interface StockLedgerFilters {
   toDate?: string
   page?: number
   pageSize?: number
+  sortBy?: StockLedgerSortField
+  sortDirection?: 'asc' | 'desc'
 }
 
 export const StockLedgerEntryDetailsSchema = z.object({

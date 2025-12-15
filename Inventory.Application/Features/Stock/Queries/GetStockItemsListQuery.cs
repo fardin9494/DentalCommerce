@@ -114,6 +114,7 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
         var page = Math.Clamp(req.Page, 1, Math.Max(1, totalPages));
 
         // Get paginated results (ordered)
+        // Default ordering: newest updates first; fallback to creation date
         var rawItems = await query
             .OrderByDescending(si => si.UpdatedAt)
             .ThenByDescending(si => si.CreatedAt)
@@ -164,11 +165,11 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
                     if (variantInfo?.Name != null)
                     {
                         // Extract variant value from name (format: "ProductName - VariantValue")
-                        if (variantInfo.Name.Contains(" - "))
+                        string[] parts = variantInfo.Name.Split(" - ", 2, StringSplitOptions.None);
+                        if (parts.Length > 1)
                         {
-                            var parts = variantInfo.Name.Split(" - ", 2);
                             productName ??= parts[0];
-                            variantValue = parts.Length > 1 ? parts[1] : null;
+                            variantValue = parts[1];
                         }
                         else
                         {

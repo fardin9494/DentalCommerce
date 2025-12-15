@@ -1,4 +1,4 @@
-﻿using Inventory.Application.Common.Interfaces;
+using Inventory.Application.Common.Interfaces;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -18,27 +18,44 @@ public sealed class AddAdjustmentLineHandler : IRequestHandler<AddAdjustmentLine
 
     public async Task<Guid> Handle(AddAdjustmentLineCommand req, CancellationToken ct)
     {
+        if (req.StockItemId == Guid.Empty)
+            throw new InvalidOperationException("شناسه موجودی اجباری است.");
+
         var adj = await _db.Adjustments
                       .Include(a => a.Lines)
                       .FirstOrDefaultAsync(a => a.Id == req.AdjustmentId, ct)
-                  ?? throw new InvalidOperationException("سند اصلاح موجودی یافت نشد.");
+                  ?? throw new InvalidOperationException("پیش‌نویس اصلاح موجودی پیدا نشد.");
+
+        var stockItem = await _db.StockItems
+            .AsNoTracking()
+            .FirstOrDefaultAsync(si => si.Id == req.StockItemId, ct)
+            ?? throw new InvalidOperationException("موجودی انتخاب شده یافت نشد.");
+
+        if (stockItem.WarehouseId != adj.WarehouseId)
+            throw new InvalidOperationException("موجودی انتخاب شده متعلق به انبار دیگری است.");
+
+        if (stockItem.ProductId != req.ProductId || stockItem.VariantId != req.VariantId)
+            throw new InvalidOperationException("موجودی انتخاب شده با محصول/تنوع درخواستی همخوانی ندارد.");
 
         // Validate product and variant exist in Catalog before adding line
         var catalogItem = await _catalogGateway.GetCatalogItemAsync(req.ProductId, req.VariantId, ct);
         if (catalogItem is null)
         {
             var errorMessage = req.VariantId.HasValue
-                ? $"محصول با شناسه {req.ProductId} یا variant با شناسه {req.VariantId.Value} در کاتالوگ یافت نشد یا غیرفعال است."
-                : $"محصول با شناسه {req.ProductId} در کاتالوگ یافت نشد یا غیرفعال است.";
+                ? $"محصول با شناسه {req.ProductId} و variant با شناسه {req.VariantId.Value} در کاتالوگ پیدا نشد."
+                : $"محصول با شناسه {req.ProductId} در کاتالوگ پیدا نشد.";
             throw new InvalidOperationException(errorMessage);
         }
 
-        // Note: We don't check if product exists in StockItems here because:
-        // - For positive QtyDelta (increase), we can create new StockItem in PostAdjustmentHandler
-        // - For negative QtyDelta (decrease), we check in PostAdjustmentHandler that StockItem exists
-        // This allows flexibility in creating adjustment lines before posting
+        // Always bind the adjustment line to the exact StockItem that was picked in the UI
+        var line = adj.AddLine(
+            stockItem.Id,
+            stockItem.ProductId,
+            stockItem.VariantId,
+            stockItem.LotNumber,
+            stockItem.ExpiryDate,
+            req.QtyDelta);
 
-        var line = adj.AddLine(req.ProductId, req.VariantId, req.LotNumber, req.ExpiryDateUtc, req.QtyDelta);
         _db.Entry(line).State = EntityState.Added;
         await _db.SaveChangesAsync(ct);
         return line.Id;

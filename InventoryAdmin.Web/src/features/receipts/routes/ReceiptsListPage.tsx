@@ -13,6 +13,22 @@ import {
   type ReceiptsListFilters,
 } from '../types'
 import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
+import { useSortableTable } from '@/shared/hooks/useSortableTable'
+import { SortableHeader } from '@/shared/components/SortableHeader'
+
+// Type for receipt list item
+interface ReceiptListItem {
+  id: string
+  warehouseId: string
+  warehouseName?: string | null
+  reason: string
+  status: string
+  docDate: string
+  externalRef?: string | null
+  linesCount: number
+  totalQty: number
+  receivedAt?: string | null
+}
 
 export function ReceiptsListPage() {
   const navigate = useNavigate()
@@ -34,6 +50,13 @@ export function ReceiptsListPage() {
 
   const { data, isLoading, error } = useReceiptsList(filters)
 
+  // Sorting - default by docDate descending (newest first)
+  const { sortedData, requestSort, getSortIndicator, sortConfig } = useSortableTable<ReceiptListItem>({
+    data: data?.items || [],
+    defaultSortKey: 'docDate',
+    defaultDirection: 'desc',
+  })
+
   // Local filter states for UI
   const [searchInput, setSearchInput] = useState(filters.search || '')
   const [statusFilter, setStatusFilter] = useState<string>(filters.status?.toString() || '')
@@ -41,7 +64,7 @@ export function ReceiptsListPage() {
 
   function updateFilters(newFilters: Partial<ReceiptsListFilters>) {
     const params = new URLSearchParams(searchParams)
-    
+
     Object.entries(newFilters).forEach(([key, value]) => {
       if (value === undefined || value === '' || value === null) {
         params.delete(key)
@@ -49,12 +72,12 @@ export function ReceiptsListPage() {
         params.set(key, String(value))
       }
     })
-    
+
     // Reset to page 1 when filters change (except when changing page)
     if (!('page' in newFilters)) {
       params.set('page', '1')
     }
-    
+
     setSearchParams(params)
   }
 
@@ -283,21 +306,63 @@ export function ReceiptsListPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-right text-xs uppercase tracking-wide text-slate-600">
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">شناسه</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">انبار</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">نوع</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">وضعیت</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">تاریخ سند</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">مرجع</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">تعداد آیتم</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">مجموع تعداد</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">تاریخ دریافت</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold">عملیات</th>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-right">
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">شناسه</th>
+                    <SortableHeader
+                      label="انبار"
+                      sortKey="warehouseId"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('warehouseId' as keyof ReceiptListItem)}
+                      onSort={(key) => requestSort(key as keyof ReceiptListItem)}
+                    />
+                    <SortableHeader
+                      label="نوع"
+                      sortKey="reason"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('reason' as keyof ReceiptListItem)}
+                      onSort={(key) => requestSort(key as keyof ReceiptListItem)}
+                    />
+                    <SortableHeader
+                      label="وضعیت"
+                      sortKey="status"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('status' as keyof ReceiptListItem)}
+                      onSort={(key) => requestSort(key as keyof ReceiptListItem)}
+                    />
+                    <SortableHeader
+                      label="تاریخ سند"
+                      sortKey="docDate"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('docDate' as keyof ReceiptListItem)}
+                      onSort={(key) => requestSort(key as keyof ReceiptListItem)}
+                    />
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">مرجع</th>
+                    <SortableHeader
+                      label="تعداد آیتم"
+                      sortKey="linesCount"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('linesCount' as keyof ReceiptListItem)}
+                      onSort={(key) => requestSort(key as keyof ReceiptListItem)}
+                    />
+                    <SortableHeader
+                      label="مجموع تعداد"
+                      sortKey="totalQty"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('totalQty' as keyof ReceiptListItem)}
+                      onSort={(key) => requestSort(key as keyof ReceiptListItem)}
+                    />
+                    <SortableHeader
+                      label="تاریخ دریافت"
+                      sortKey="receivedAt"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('receivedAt' as keyof ReceiptListItem)}
+                      onSort={(key) => requestSort(key as keyof ReceiptListItem)}
+                    />
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">عملیات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {data.items.map((receipt) => (
+                  {sortedData.map((receipt) => (
                     <tr
                       key={receipt.id}
                       className="transition-colors hover:bg-slate-50 cursor-pointer even:bg-slate-50/60"
@@ -318,9 +383,8 @@ export function ReceiptsListPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            ReceiptStatusColors[receipt.status as ReceiptStatus]
-                          }`}
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${ReceiptStatusColors[receipt.status as ReceiptStatus]
+                            }`}
                         >
                           {ReceiptStatusLabels[receipt.status as ReceiptStatus]}
                         </span>
@@ -377,7 +441,7 @@ export function ReceiptsListPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                     </svg>
                   </button>
-                  
+
                   {/* Page numbers */}
                   {Array.from({ length: Math.min(5, data.totalPages) }, (_, i) => {
                     let pageNum: number
@@ -394,11 +458,10 @@ export function ReceiptsListPage() {
                       <button
                         key={pageNum}
                         onClick={() => handlePageChange(pageNum)}
-                        className={`min-w-[36px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                          data.page === pageNum
-                            ? 'bg-emerald-600 text-white'
-                            : 'text-slate-600 hover:bg-slate-200'
-                        }`}
+                        className={`min-w-[36px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${data.page === pageNum
+                          ? 'bg-emerald-600 text-white'
+                          : 'text-slate-600 hover:bg-slate-200'
+                          }`}
                       >
                         {pageNum.toLocaleString('fa-IR')}
                       </button>

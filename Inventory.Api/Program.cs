@@ -1158,10 +1158,20 @@ stockLedger.MapGet("/", async (
     Guid? refDocId,
     DateTime? fromDate,
     DateTime? toDate,
+    string? sortBy,
+    string? sortDirection,
     int page = 1,
     int pageSize = 50,
     IMediator m = null!) =>
 {
+    var parsedSortField = Enum.TryParse<StockLedgerSortField>(sortBy ?? string.Empty, ignoreCase: true, out var sortField)
+        ? sortField
+        : StockLedgerSortField.Timestamp;
+
+    var parsedSortDirection = Enum.TryParse<SortDirection>(sortDirection ?? string.Empty, ignoreCase: true, out var directionValue)
+        ? directionValue
+        : SortDirection.Desc;
+
     var query = new GetStockLedgerQuery(
         WarehouseId: warehouseId,
         ProductId: productId,
@@ -1172,7 +1182,9 @@ stockLedger.MapGet("/", async (
         FromDate: fromDate,
         ToDate: toDate,
         Page: page,
-        PageSize: pageSize
+        PageSize: pageSize,
+        SortBy: parsedSortField,
+        SortDirection: parsedSortDirection
     );
     return await m.Send(query);
 });

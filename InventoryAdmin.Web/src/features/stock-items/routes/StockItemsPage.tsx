@@ -6,7 +6,32 @@ import { useStockItems } from '../queries'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
 import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
 import { useProductNames } from '@/shared/hooks/useProductNames'
+import { useSortableTable } from '@/shared/hooks/useSortableTable'
+import { SortableHeader } from '@/shared/components/SortableHeader'
 import type { StockItemsListFilters } from '../api'
+
+// Type for stock item (matching API response)
+interface StockItem {
+  id: string
+  productId: string
+  productName?: string | null
+  variantId?: string | null
+  variantValue?: string | null
+  sku: string
+  warehouseId: string
+  warehouseName?: string | null
+  shelfId?: string | null
+  shelfName?: string | null
+  lotNumber?: string | null
+  expiryDate?: string | null
+  onHand: number
+  reserved: number
+  blocked: number
+  available: number
+  blockReason?: string | null
+  createdAt: string
+  updatedAt: string
+}
 
 export function StockItemsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -57,6 +82,14 @@ export function StockItemsPage() {
   )
 
   const { data, isLoading, error } = useStockItems(filters)
+
+  // Sorting - default by last update (fallback to creation)
+  const { sortedData, requestSort, getSortIndicator, sortConfig } = useSortableTable<StockItem>({
+    data: (data?.items || []) as StockItem[],
+    defaultSortKey: 'updatedAt',
+    defaultDirection: 'desc',
+  })
+
   const [warehouseFilter, setWarehouseFilter] = useState<string>(filters.warehouseId || '')
   const [hasStockFilter, setHasStockFilter] = useState<string>(
     filters.hasStock === false ? 'false' : 'true' // Default to 'true'
@@ -289,20 +322,78 @@ export function StockItemsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-right">
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">محصول</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">SKU</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">انبار</th>
+                    <SortableHeader
+                      label="محصول"
+                      sortKey="productName"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('productName' as keyof StockItem)}
+                      onSort={(key) => requestSort(key as keyof StockItem)}
+                    />
+                    <SortableHeader
+                      label="SKU"
+                      sortKey="sku"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('sku' as keyof StockItem)}
+                      onSort={(key) => requestSort(key as keyof StockItem)}
+                    />
+                    <SortableHeader
+                      label="انبار"
+                      sortKey="warehouseName"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('warehouseName' as keyof StockItem)}
+                      onSort={(key) => requestSort(key as keyof StockItem)}
+                    />
                     <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">قفسه</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">لات</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">انقضا</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600 text-center">موجودی</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600 text-center">رزرو</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600 text-center">مسدود</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600 text-center">آزاد</th>
+                    <SortableHeader
+                      label="لات"
+                      sortKey="lotNumber"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('lotNumber' as keyof StockItem)}
+                      onSort={(key) => requestSort(key as keyof StockItem)}
+                    />
+                    <SortableHeader
+                      label="انقضا"
+                      sortKey="expiryDate"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('expiryDate' as keyof StockItem)}
+                      onSort={(key) => requestSort(key as keyof StockItem)}
+                    />
+                    <SortableHeader
+                      label="موجودی"
+                      sortKey="onHand"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('onHand' as keyof StockItem)}
+                      onSort={(key) => requestSort(key as keyof StockItem)}
+                      className="text-center"
+                    />
+                    <SortableHeader
+                      label="رزرو"
+                      sortKey="reserved"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('reserved' as keyof StockItem)}
+                      onSort={(key) => requestSort(key as keyof StockItem)}
+                      className="text-center"
+                    />
+                    <SortableHeader
+                      label="مسدود"
+                      sortKey="blocked"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('blocked' as keyof StockItem)}
+                      onSort={(key) => requestSort(key as keyof StockItem)}
+                      className="text-center"
+                    />
+                    <SortableHeader
+                      label="آزاد"
+                      sortKey="available"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('available' as keyof StockItem)}
+                      onSort={(key) => requestSort(key as keyof StockItem)}
+                      className="text-center"
+                    />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {data.items.map((item) => (
+                  {sortedData.map((item) => (
                     <tr key={item.id} className="transition-colors hover:bg-slate-50">
                       <td className="px-4 py-3">
                         <div>
@@ -361,9 +452,8 @@ export function StockItemsPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-center">
                         <span
-                          className={`font-semibold ${
-                            item.available > 0 ? 'text-emerald-600' : item.available < 0 ? 'text-red-600' : 'text-slate-400'
-                          }`}
+                          className={`font-semibold ${item.available > 0 ? 'text-emerald-600' : item.available < 0 ? 'text-red-600' : 'text-slate-400'
+                            }`}
                         >
                           {item.available.toLocaleString('fa-IR')}
                         </span>
@@ -408,11 +498,10 @@ export function StockItemsPage() {
                       <button
                         key={pageNum}
                         onClick={() => handlePageChange(pageNum)}
-                        className={`min-w-[36px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                          data.page === pageNum
-                            ? 'bg-emerald-600 text-white'
-                            : 'text-slate-600 hover:bg-slate-200'
-                        }`}
+                        className={`min-w-[36px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${data.page === pageNum
+                          ? 'bg-emerald-600 text-white'
+                          : 'text-slate-600 hover:bg-slate-200'
+                          }`}
                       >
                         {pageNum.toLocaleString('fa-IR')}
                       </button>

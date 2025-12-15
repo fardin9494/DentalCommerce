@@ -21,6 +21,7 @@ public sealed record AdjustmentDetailsDto(
 public sealed record AdjustmentLineDto(
     Guid Id,
     int LineNo,
+    Guid StockItemId,
     Guid ProductId,
     Guid? VariantId,
     string? LotNumber,
@@ -47,6 +48,7 @@ public sealed class GetAdjustmentDetailsHandler : IRequestHandler<AdjustmentDeta
             .Select(l => new AdjustmentLineDto(
                 l.Id,
                 l.LineNo,
+                l.StockItemId,
                 l.ProductId,
                 l.VariantId,
                 l.LotNumber,
@@ -67,5 +69,4 @@ public sealed class GetAdjustmentDetailsHandler : IRequestHandler<AdjustmentDeta
         );
     }
 }
-
 

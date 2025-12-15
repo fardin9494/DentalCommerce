@@ -39,12 +39,12 @@ export const AdjustmentStatusLabels: Record<AdjustmentStatus, string> = {
 }
 
 export const AdjustmentReasonLabels: Record<AdjustmentReason, string> = {
-  InitialBalance: 'موجودی اول دوره',
+  InitialBalance: 'موجودی اولیه',
   Damage: 'خرابی/آسیب',
-  Expired: 'تاریخ مصرف گذشته',
-  Found: 'یافت‌شده/اضافه',
-  Shrinkage: 'کسری/افت',
-  Correction: 'اصلاح دستی',
+  Expired: 'انقضا',
+  Found: 'یافت‌شده',
+  Shrinkage: 'کسری/کمبود',
+  Correction: 'اصلاح موجودی',
   Other: 'سایر',
 }
 
@@ -58,11 +58,12 @@ export const AdjustmentStatusColors: Record<AdjustmentStatus, string> = {
 export const AdjustmentLineSchema = z.object({
   id: z.string().uuid(),
   lineNo: z.number(),
+  stockItemId: z.string().uuid(),
   productId: z.string().uuid(),
   variantId: z.string().uuid().nullable().optional(),
   lotNumber: z.string().nullable().optional(),
   expiryDateUtc: z.string().nullable().optional(),
-  qtyDelta: z.number(), // + افزایش / - کاهش
+  qtyDelta: z.number(), // + increase / - decrease
 })
 export type AdjustmentLine = z.infer<typeof AdjustmentLineSchema>
 
@@ -122,11 +123,12 @@ export const CreateAdjustmentSchema = z.object({
 export type CreateAdjustmentDto = z.infer<typeof CreateAdjustmentSchema>
 
 export const AddAdjustmentLineSchema = z.object({
+  stockItemId: z.string().uuid(),
   productId: z.string().uuid(),
   variantId: z.string().uuid().optional().nullable(),
   lotNumber: z.string().optional().nullable(),
   expiryDateUtc: z.string().optional().nullable(),
-  qtyDelta: z.number().refine((val) => val !== 0, { message: 'مقدار نباید صفر باشد' }),
+  qtyDelta: z.number().refine((val) => val !== 0, { message: 'مقدار نمی‌تواند صفر باشد' }),
 })
 export type AddAdjustmentLineDto = z.infer<typeof AddAdjustmentLineSchema>
 
@@ -137,7 +139,6 @@ export const UpdateAdjustmentHeaderSchema = z.object({
 export type UpdateAdjustmentHeaderDto = z.infer<typeof UpdateAdjustmentHeaderSchema>
 
 export const UpdateAdjustmentLineSchema = z.object({
-  qtyDelta: z.number().refine((val) => val !== 0, { message: 'مقدار نباید صفر باشد' }),
+  qtyDelta: z.number().refine((val) => val !== 0, { message: 'مقدار نمی‌تواند صفر باشد' }),
 })
 export type UpdateAdjustmentLineDto = z.infer<typeof UpdateAdjustmentLineSchema>
-

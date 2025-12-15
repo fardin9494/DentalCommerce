@@ -13,6 +13,7 @@ interface AddAdjustmentLineModalProps {
   warehouseId: string
   onClose: () => void
   onSubmit: (data: {
+    stockItemId: string
     productId: string
     variantId?: string
     lotNumber?: string
@@ -47,7 +48,8 @@ export function AddAdjustmentLineModal({
     }
   }, [selectedProduct, warehouseId])
 
-  const { data: stockItemsData, isLoading: loadingStock } = useStockItems(stockFilters || {}, { enabled: !!stockFilters })
+  const stockEnabled = !!stockFilters
+  const { data: stockItemsData, isLoading: loadingStock } = useStockItems(stockFilters || {}, stockEnabled)
 
   if (!isOpen) return null
 
@@ -78,6 +80,7 @@ export function AddAdjustmentLineModal({
     const expiryDateUtc = expiryDate ? expiryDate.toDate().toISOString() : undefined
 
     onSubmit({
+      stockItemId: selectedStockItem.id,
       productId: selectedProduct.productId,
       variantId: selectedProduct.variantId,
       lotNumber: lotNumber.trim() || selectedStockItem.lotNumber || undefined,
@@ -320,4 +323,3 @@ export function AddAdjustmentLineModal({
     </div>
   )
 }
-

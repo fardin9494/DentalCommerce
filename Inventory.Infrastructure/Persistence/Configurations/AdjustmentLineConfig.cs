@@ -12,17 +12,24 @@ public sealed class AdjustmentLineConfig : IEntityTypeConfiguration<AdjustmentLi
         b.ToTable("AdjustmentLine");
         b.HasKey(x => x.Id);
 
+        b.Property(x => x.StockItemId).IsRequired();
         b.Property(x => x.LineNo).IsRequired();
         b.Property(x => x.ProductId).IsRequired();
         b.Property(x => x.QtyDelta).HasPrecision(18, 3).IsRequired();
         b.Property(x => x.ExpiryDate).HasColumnType("datetime2");
         b.Property(x => x.LotNumber).HasMaxLength(64);
 
+        b.HasIndex(x => x.StockItemId);
         b.HasIndex(x => new { x.AdjustmentId, x.LineNo }).IsUnique();
 
         b.HasOne<Adjustment>()
             .WithMany(a => a.Lines)
             .HasForeignKey(x => x.AdjustmentId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        b.HasOne<StockItem>()
+            .WithMany()
+            .HasForeignKey(x => x.StockItemId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

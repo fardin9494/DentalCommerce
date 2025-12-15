@@ -81,6 +81,7 @@ export function AdjustmentDetailPage() {
   }
 
   async function handleAddLine(data: {
+    stockItemId: string
     productId: string
     variantId?: string
     lotNumber?: string
@@ -90,6 +91,7 @@ export function AdjustmentDetailPage() {
     await addLine.mutateAsync({
       adjustmentId: id!,
       dto: {
+        stockItemId: data.stockItemId,
         productId: data.productId,
         variantId: data.variantId || null,
         lotNumber: data.lotNumber || null,

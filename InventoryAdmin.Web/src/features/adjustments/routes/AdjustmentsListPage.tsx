@@ -15,6 +15,22 @@ import {
   type AdjustmentsListFilters,
 } from '../types'
 import { useActiveWarehouses, useWarehouseNames } from '@/shared/hooks/useWarehouses'
+import { useSortableTable } from '@/shared/hooks/useSortableTable'
+import { SortableHeader } from '@/shared/components/SortableHeader'
+
+// Type for adjustment list item
+interface AdjustmentListItem {
+  id: string
+  warehouseId: string
+  warehouseName?: string | null
+  reason: string
+  status: string
+  docDate: string
+  note?: string | null
+  linesCount: number
+  totalQtyDelta: number
+  postedAt?: string | null
+}
 
 export function AdjustmentsListPage() {
   const navigate = useNavigate()
@@ -39,6 +55,13 @@ export function AdjustmentsListPage() {
   )
 
   const { data, isLoading, error } = useAdjustmentsList(filters)
+
+  // Sorting - default by docDate descending (newest first)
+  const { sortedData, requestSort, getSortIndicator, sortConfig } = useSortableTable<AdjustmentListItem>({
+    data: (data?.items || []) as AdjustmentListItem[],
+    defaultSortKey: 'docDate',
+    defaultDirection: 'desc',
+  })
 
   // Local filter states for UI
   const [searchInput, setSearchInput] = useState(filters.search || '')
@@ -317,19 +340,61 @@ export function AdjustmentsListPage() {
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-right">
                     <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">شناسه</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">انبار</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">دلیل</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">وضعیت</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تاریخ سند</th>
+                    <SortableHeader
+                      label="انبار"
+                      sortKey="warehouseName"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('warehouseName' as keyof AdjustmentListItem)}
+                      onSort={(key) => requestSort(key as keyof AdjustmentListItem)}
+                    />
+                    <SortableHeader
+                      label="دلیل"
+                      sortKey="reason"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('reason' as keyof AdjustmentListItem)}
+                      onSort={(key) => requestSort(key as keyof AdjustmentListItem)}
+                    />
+                    <SortableHeader
+                      label="وضعیت"
+                      sortKey="status"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('status' as keyof AdjustmentListItem)}
+                      onSort={(key) => requestSort(key as keyof AdjustmentListItem)}
+                    />
+                    <SortableHeader
+                      label="تاریخ سند"
+                      sortKey="docDate"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('docDate' as keyof AdjustmentListItem)}
+                      onSort={(key) => requestSort(key as keyof AdjustmentListItem)}
+                    />
                     <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">یادداشت</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تعداد آیتم</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">مجموع تغییر</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تاریخ ثبت</th>
+                    <SortableHeader
+                      label="تعداد آیتم"
+                      sortKey="linesCount"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('linesCount' as keyof AdjustmentListItem)}
+                      onSort={(key) => requestSort(key as keyof AdjustmentListItem)}
+                    />
+                    <SortableHeader
+                      label="مجموع تغییر"
+                      sortKey="totalQtyDelta"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('totalQtyDelta' as keyof AdjustmentListItem)}
+                      onSort={(key) => requestSort(key as keyof AdjustmentListItem)}
+                    />
+                    <SortableHeader
+                      label="تاریخ ثبت"
+                      sortKey="postedAt"
+                      currentSortKey={sortConfig.key as string}
+                      currentDirection={getSortIndicator('postedAt' as keyof AdjustmentListItem)}
+                      onSort={(key) => requestSort(key as keyof AdjustmentListItem)}
+                    />
                     <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">عملیات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {data.items.map((adjustment) => (
+                  {sortedData.map((adjustment) => (
                     <tr
                       key={adjustment.id}
                       className="transition-colors hover:bg-slate-50 cursor-pointer"
@@ -348,9 +413,8 @@ export function AdjustmentsListPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            AdjustmentStatusColors[adjustment.status as AdjustmentStatus] || 'bg-slate-100 text-slate-800'
-                          }`}
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${AdjustmentStatusColors[adjustment.status as AdjustmentStatus] || 'bg-slate-100 text-slate-800'
+                            }`}
                         >
                           {AdjustmentStatusLabels[adjustment.status as AdjustmentStatus] || adjustment.status}
                         </span>
@@ -364,13 +428,12 @@ export function AdjustmentsListPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-center">
                         <span
-                          className={`font-medium ${
-                            adjustment.totalQtyDelta > 0
+                          className={`font-medium ${adjustment.totalQtyDelta > 0
                               ? 'text-emerald-600'
                               : adjustment.totalQtyDelta < 0
                                 ? 'text-red-600'
                                 : 'text-slate-600'
-                          }`}
+                            }`}
                         >
                           {adjustment.totalQtyDelta > 0 ? '+' : ''}
                           {adjustment.totalQtyDelta.toLocaleString('fa-IR')}
@@ -431,11 +494,10 @@ export function AdjustmentsListPage() {
                       <button
                         key={pageNum}
                         onClick={() => handlePageChange(pageNum)}
-                        className={`min-w-[36px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                          data.page === pageNum
+                        className={`min-w-[36px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${data.page === pageNum
                             ? 'bg-emerald-600 text-white'
                             : 'text-slate-600 hover:bg-slate-200'
-                        }`}
+                          }`}
                       >
                         {pageNum.toLocaleString('fa-IR')}
                       </button>
