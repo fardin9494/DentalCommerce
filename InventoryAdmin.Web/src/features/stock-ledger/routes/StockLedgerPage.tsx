@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/shared/components/PageHeader'
-import { Spinner } from '@/shared/components/Spinner'
+import { TableSkeleton } from '@/shared/components/TableSkeleton'
 import { useStockLedger } from '../queries'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
 import {
@@ -172,8 +172,11 @@ export function StockLedgerPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner className="h-8 w-8 text-emerald-600" />
+      <div className="space-y-6">
+        <PageHeader title="کاردکس انبار">مشاهده و بررسی تمام عملیات‌های انبار</PageHeader>
+        <div className="rounded-xl border border-slate-200 bg-white shadow-md">
+          <TableSkeleton columns={7} rows={10} />
+        </div>
       </div>
     )
   }

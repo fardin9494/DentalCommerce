@@ -198,6 +198,9 @@ export function AddAdjustmentLineModal({
                             <div className="text-xs text-slate-500 mt-0.5">
                               انقضا: {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('fa-IR') : 'نامشخص'}
                             </div>
+                            <div className="text-xs text-slate-500 mt-0.5">
+                              قفسه: {item.shelfName || 'بدون قفسه'}
+                            </div>
                           </div>
                           <div className="text-right text-xs text-slate-600">
                             موجودی: {item.onHand.toLocaleString('fa-IR')}

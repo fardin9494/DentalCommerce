@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/shared/components/PageHeader'
-import { Spinner } from '@/shared/components/Spinner'
+import { TableSkeleton } from '@/shared/components/TableSkeleton'
 import { useAssignedStockItems, useMoveStockBetweenShelves } from '../queries'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
 import { TransferShelfModal } from '../components/TransferShelfModal'
@@ -84,6 +84,13 @@ export function ShelfTransferPage() {
 
   function handlePageChange(newPage: number) {
     updateFilters({ page: newPage })
+  }
+
+  function getVisiblePages(currentPage: number, totalPages: number): Array<number | '...'> {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1)
+    if (currentPage <= 3) return [1, 2, 3, 4, '...', totalPages]
+    if (currentPage >= totalPages - 2) return [1, '...', totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
+    return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages]
   }
 
   function clearFilters() {
@@ -169,9 +176,7 @@ export function ShelfTransferPage() {
       {/* Table */}
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Spinner className="h-8 w-8 text-emerald-600" />
-          </div>
+          <TableSkeleton columns={7} rows={10} />
         ) : !data || data.items.length === 0 ? (
           <div className="py-12 text-center text-slate-500">
             کالایی با قفسه اختصاص داده شده یافت نشد.
@@ -251,7 +256,7 @@ export function ShelfTransferPage() {
                     صفحه {data.page.toLocaleString('fa-IR')} از {data.totalPages.toLocaleString('fa-IR')} (
                     {data.totalCount.toLocaleString('fa-IR')} مورد)
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
                     <button
                       onClick={() => handlePageChange(data.page - 1)}
                       disabled={data.page <= 1}
@@ -259,6 +264,28 @@ export function ShelfTransferPage() {
                     >
                       قبلی
                     </button>
+                    <div className="flex items-center gap-1">
+                      {getVisiblePages(data.page, data.totalPages).map((p, idx) =>
+                        p === '...' ? (
+                          <span key={`ellipsis-${idx}`} className="px-2 text-sm text-slate-500">
+                            ...
+                          </span>
+                        ) : (
+                          <button
+                            key={p}
+                            onClick={() => handlePageChange(p)}
+                            disabled={p === data.page}
+                            className={`min-w-[2.25rem] rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-100 ${
+                              p === data.page
+                                ? 'border-emerald-600 bg-emerald-600 text-white'
+                                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            {p.toLocaleString('fa-IR')}
+                          </button>
+                        )
+                      )}
+                    </div>
                     <button
                       onClick={() => handlePageChange(data.page + 1)}
                       disabled={data.page >= data.totalPages}
@@ -285,4 +312,3 @@ export function ShelfTransferPage() {
     </div>
   )
 }
-

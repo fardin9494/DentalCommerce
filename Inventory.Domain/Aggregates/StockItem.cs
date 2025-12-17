@@ -97,40 +97,6 @@ public sealed class StockItem : AggregateRoot<Guid>
         Touch();
     }
 
-    /// <summary>
-    /// کاهش/افزایش اجباری موجودی برای اسناد انبارگردانی/اصلاح.
-    /// در کاهش، اگر رزرو/مسدود بیشتر از موجودی شود، به سقف موجودی جدید بریده می‌شود
-    /// تا مقادیر منفی شکل نگیرد.
-    /// </summary>
-    public void ForceAdjust(decimal qtyDelta)
-    {
-        if (qtyDelta == 0) throw new ArgumentOutOfRangeException(nameof(qtyDelta));
-
-        if (qtyDelta > 0)
-        {
-            OnHand += qtyDelta;
-            // افزایش باعث مشکل رزرو/مسدود نمی‌شود
-            Touch();
-            return;
-        }
-
-        var decrease = -qtyDelta;
-        if (decrease > OnHand)
-            throw new InvalidOperationException("موجودی کافی برای کاهش وجود ندارد.");
-
-        OnHand -= decrease;
-
-        // اگر رزرو یا مسدود بیشتر از موجودی جدید بود، به موجودی جدید محدود شود
-        if (Reserved > OnHand) Reserved = OnHand;
-        if (Blocked > OnHand)
-        {
-            Blocked = OnHand;
-            if (Blocked == 0) BlockReason = null;
-        }
-
-        Touch();
-    }
-
     public void Reserve(decimal qty)
     {
         if (qty <= 0) throw new ArgumentOutOfRangeException(nameof(qty));

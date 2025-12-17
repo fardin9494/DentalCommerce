@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/shared/components/PageHeader'
-import { Spinner } from '@/shared/components/Spinner'
+import { TableSkeleton } from '@/shared/components/TableSkeleton'
 import { useUnassignedStockItems, useMoveStockToShelf } from '../queries'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
 import { AssignShelfModal } from '../components/AssignShelfModal'
@@ -221,9 +221,7 @@ export function PutAwayPage() {
       {/* Results */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Spinner className="h-8 w-8 text-emerald-600" />
-          </div>
+          <TableSkeleton columns={7} rows={10} />
         ) : error ? (
           <div className="py-20 text-center">
             <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-red-100 p-3 text-red-600">
