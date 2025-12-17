@@ -40,6 +40,7 @@ export interface StockItemsListFilters {
   shelfId?: string
   search?: string
   hasStock?: boolean
+  shelvedOnly?: boolean
   page?: number
   pageSize?: number
 }
@@ -83,4 +84,3 @@ export async function getStockProducts(filters: StockProductsFilters): Promise<S
   const data = await fetchJson<unknown>(`/stock-items/products${query}`)
   return StockProductsResultSchema.parse(data)
 }
-

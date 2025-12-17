@@ -11,7 +11,8 @@ public sealed record GetStockItemsListQuery(
     Guid? VariantId = null,
     Guid? ShelfId = null,
     string? Search = null,
-    bool? HasStock = null, // true = فقط موجودی > 0
+    bool? HasStock = null, // true = موجودی > 0
+    bool? ShelvedOnly = null, // true => فقط آیتم‌های دارای ShelfId
     int Page = 1,
     int PageSize = 20
 ) : IRequest<StockItemsListResult>;
@@ -72,6 +73,8 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
 
         if (req.ShelfId.HasValue)
             query = query.Where(si => si.ShelfId == req.ShelfId.Value);
+        else if (req.ShelvedOnly == true)
+            query = query.Where(si => si.ShelfId != null);
 
         // Note: Product name search will be done after fetching product names from catalog
         // We don't filter by search term here - we'll filter after getting product names
@@ -139,7 +142,7 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
             })
             .ToListAsync(ct);
 
-        // Get product names from catalog (اختیاری؛ اگر کاتالوگ در دسترس نباشد، آیتم را حذف نمی‌کنیم)
+        // Get product names from catalog (lightweight; best effort)
         var searchTermLower = !string.IsNullOrWhiteSpace(req.Search) ? req.Search.Trim().ToLower() : null;
         var validItems = new List<StockItemListItemDto>();
         
@@ -184,7 +187,7 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
             }
             catch
             {
-                // در صورت خطا در کاتالوگ، ادامه می‌دهیم و آیتم را حذف نمی‌کنیم
+                // Ignore catalog failures to keep listing responsive
             }
 
             // Filter by search term if provided - check all fields
@@ -235,4 +238,3 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
         );
     }
 }
-

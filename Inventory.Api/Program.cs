@@ -1199,6 +1199,7 @@ stockItems.MapGet("/", async (
     Guid? shelfId,
     string? search,
     bool? hasStock,
+    bool? shelvedOnly,
     int? page,
     int? pageSize,
     IMediator m) =>
@@ -1210,6 +1211,7 @@ stockItems.MapGet("/", async (
         ShelfId: shelfId,
         Search: search,
         HasStock: hasStock,
+        ShelvedOnly: shelvedOnly,
         Page: page ?? 1,
         PageSize: pageSize ?? 20
     );
