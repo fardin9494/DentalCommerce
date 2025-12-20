@@ -76,8 +76,7 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
         else if (req.ShelvedOnly == true)
             query = query.Where(si => si.ShelfId != null);
 
-        // Note: Product name search will be done after fetching product names from catalog
-        // We don't filter by search term here - we'll filter after getting product names
+        // Search can include product/variant name (from Catalog) so the final filtering may need in-memory evaluation.
 
         // By default, only show items with stock (OnHand > 0)
         // If HasStock is explicitly set to false, show items with zero stock
@@ -94,35 +93,151 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
             query = query.Where(si => si.OnHand > 0);
         }
 
-        // Get warehouses for names (before pagination to avoid multiple queries)
-        var warehouseIds = await query.Select(si => si.WarehouseId).Distinct().ToListAsync(ct);
-        var warehouses = await _db.Warehouses
-            .AsNoTracking()
-            .Where(w => warehouseIds.Contains(w.Id))
-            .ToDictionaryAsync(w => w.Id, w => w.Name, ct);
-
-        // Get shelves for names (before pagination to avoid multiple queries)
-        var shelfIds = await query.Where(si => si.ShelfId != null).Select(si => si.ShelfId!.Value).Distinct().ToListAsync(ct);
-        var shelves = await _db.StockShelves
-            .AsNoTracking()
-            .Where(s => shelfIds.Contains(s.Id))
-            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
-
-        // Get total count
-        var totalCount = await query.CountAsync(ct);
-
-        // Calculate pagination
         var pageSize = Math.Clamp(req.PageSize, 1, 100);
-        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
-        var page = Math.Clamp(req.Page, 1, Math.Max(1, totalPages));
+        var searchTermLower = !string.IsNullOrWhiteSpace(req.Search) ? req.Search.Trim().ToLower() : null;
 
-        // Get paginated results (ordered)
-        // Default ordering: newest updates first; fallback to creation date
-        var rawItems = await query
+        var productNameCache = new Dictionary<Guid, string?>();
+        var variantValueCache = new Dictionary<(Guid ProductId, Guid VariantId), (string? ProductName, string? VariantValue)>();
+
+        async Task<(string? ProductName, string? VariantValue)> GetCatalogNamesAsync(Guid productId, Guid? variantId)
+        {
+            string? productName = null;
+            string? variantValue = null;
+
+            if (!productNameCache.TryGetValue(productId, out productName))
+            {
+                using var perCallTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, perCallTimeout.Token);
+                try
+                {
+                    var info = await _catalogGateway.GetCatalogItemAsync(productId, null, linkedCts.Token);
+                    productName = info?.Name;
+                }
+                catch (OperationCanceledException) { }
+                catch { }
+
+                productNameCache[productId] = productName;
+            }
+
+            if (variantId.HasValue)
+            {
+                var key = (productId, variantId.Value);
+                if (variantValueCache.TryGetValue(key, out var cached))
+                    return cached;
+
+                using var perCallTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, perCallTimeout.Token);
+                try
+                {
+                    var variantInfo = await _catalogGateway.GetCatalogItemAsync(productId, variantId.Value, linkedCts.Token);
+                    if (variantInfo?.Name != null)
+                    {
+                        var parts = variantInfo.Name.Split(" - ", 2, StringSplitOptions.None);
+                        if (parts.Length > 1)
+                        {
+                            productName ??= parts[0];
+                            variantValue = parts[1];
+                        }
+                        else
+                        {
+                            variantValue = variantInfo.Name;
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { }
+                catch { }
+
+                if (productNameCache[productId] is null && productName is not null)
+                    productNameCache[productId] = productName;
+
+                var result = (productName, variantValue);
+                variantValueCache[key] = result;
+                return result;
+            }
+
+            return (productName, variantValue);
+        }
+
+        if (searchTermLower is null)
+        {
+            var totalCount = await query.CountAsync(ct);
+            var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+            var page = Math.Clamp(req.Page, 1, Math.Max(1, totalPages));
+
+            var rawItems = await query
+                .OrderByDescending(si => si.UpdatedAt)
+                .ThenByDescending(si => si.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(si => new
+                {
+                    si.Id,
+                    si.ProductId,
+                    si.VariantId,
+                    si.WarehouseId,
+                    si.Sku,
+                    si.LotNumber,
+                    si.ExpiryDate,
+                    si.OnHand,
+                    si.Reserved,
+                    si.Blocked,
+                    si.BlockReason,
+                    si.ShelfId,
+                    si.CreatedAt,
+                    si.UpdatedAt
+                })
+                .ToListAsync(ct);
+
+            var warehouseIds = rawItems.Select(x => x.WarehouseId).Distinct().ToList();
+            var warehouses = await _db.Warehouses
+                .AsNoTracking()
+                .Where(w => warehouseIds.Contains(w.Id))
+                .ToDictionaryAsync(w => w.Id, w => w.Name, ct);
+
+            var shelfIds = rawItems.Where(x => x.ShelfId.HasValue).Select(x => x.ShelfId!.Value).Distinct().ToList();
+            var shelves = shelfIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _db.StockShelves
+                    .AsNoTracking()
+                    .Where(s => shelfIds.Contains(s.Id))
+                    .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+
+            var items = new List<StockItemListItemDto>(rawItems.Count);
+            foreach (var item in rawItems)
+            {
+                var (productName, variantValue) = await GetCatalogNamesAsync(item.ProductId, item.VariantId);
+                var available = item.OnHand - item.Reserved - item.Blocked;
+                items.Add(new StockItemListItemDto(
+                    item.Id,
+                    item.ProductId,
+                    item.VariantId,
+                    item.WarehouseId,
+                    warehouses.TryGetValue(item.WarehouseId, out var whName) ? whName : null,
+                    item.Sku,
+                    productName,
+                    variantValue,
+                    item.LotNumber,
+                    item.ExpiryDate,
+                    item.OnHand,
+                    item.Reserved,
+                    item.Blocked,
+                    available,
+                    item.BlockReason,
+                    item.ShelfId,
+                    item.ShelfId.HasValue && shelves.TryGetValue(item.ShelfId.Value, out var shelfName) ? shelfName : null,
+                    item.CreatedAt,
+                    item.UpdatedAt
+                ));
+            }
+
+            return new StockItemsListResult(items, totalCount, page, pageSize, totalPages);
+        }
+
+        // When search is present, we must filter after catalog enrichment; so we build the matched set first,
+        // then paginate on the filtered result so TotalCount/TotalPages are correct.
+        var allRawItems = await query
             .OrderByDescending(si => si.UpdatedAt)
             .ThenByDescending(si => si.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
             .Select(si => new
             {
                 si.Id,
@@ -142,74 +257,40 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
             })
             .ToListAsync(ct);
 
-        // Get product names from catalog (lightweight; best effort)
-        var searchTermLower = !string.IsNullOrWhiteSpace(req.Search) ? req.Search.Trim().ToLower() : null;
-        var validItems = new List<StockItemListItemDto>();
-        
-        foreach (var item in rawItems)
+        var allWarehouseIds = allRawItems.Select(x => x.WarehouseId).Distinct().ToList();
+        var allWarehouses = await _db.Warehouses
+            .AsNoTracking()
+            .Where(w => allWarehouseIds.Contains(w.Id))
+            .ToDictionaryAsync(w => w.Id, w => w.Name, ct);
+
+        var allShelfIds = allRawItems.Where(x => x.ShelfId.HasValue).Select(x => x.ShelfId!.Value).Distinct().ToList();
+        var allShelves = allShelfIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.StockShelves
+                .AsNoTracking()
+                .Where(s => allShelfIds.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+
+        var matched = new List<StockItemListItemDto>(allRawItems.Count);
+        foreach (var item in allRawItems)
         {
-            string? productName = null;
-            string? variantValue = null;
+            var (productName, variantValue) = await GetCatalogNamesAsync(item.ProductId, item.VariantId);
 
-            // Get product name from catalog (with timeout)
-            using var catalogTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, catalogTimeoutCts.Token);
+            var matchesSku = item.Sku.ToLower().Contains(searchTermLower);
+            var matchesLot = item.LotNumber != null && item.LotNumber.ToLower().Contains(searchTermLower);
+            var matchesProductName = productName != null && productName.ToLower().Contains(searchTermLower);
+            var matchesVariant = variantValue != null && variantValue.ToLower().Contains(searchTermLower);
 
-            try
-            {
-                // Get product name (without variant)
-                var productInfo = await _catalogGateway.GetCatalogItemAsync(item.ProductId, null, linkedCts.Token);
-                productName = productInfo?.Name;
-
-                // If variant exists, get variant-specific name
-                if (item.VariantId.HasValue)
-                {
-                    var variantInfo = await _catalogGateway.GetCatalogItemAsync(item.ProductId, item.VariantId, linkedCts.Token);
-                    if (variantInfo?.Name != null)
-                    {
-                        // Extract variant value from name (format: "ProductName - VariantValue")
-                        string[] parts = variantInfo.Name.Split(" - ", 2, StringSplitOptions.None);
-                        if (parts.Length > 1)
-                        {
-                            productName ??= parts[0];
-                            variantValue = parts[1];
-                        }
-                        else
-                        {
-                            variantValue = variantInfo.Name;
-                        }
-                    }
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // Timeout - continue without catalog info
-            }
-            catch
-            {
-                // Ignore catalog failures to keep listing responsive
-            }
-
-            // Filter by search term if provided - check all fields
-            if (searchTermLower != null)
-            {
-                var matchesSku = item.Sku.ToLower().Contains(searchTermLower);
-                var matchesLot = item.LotNumber != null && item.LotNumber.ToLower().Contains(searchTermLower);
-                var matchesProductName = productName != null && productName.ToLower().Contains(searchTermLower);
-                var matchesVariant = variantValue != null && variantValue.ToLower().Contains(searchTermLower);
-
-                // If search term doesn't match any field, skip this item
-                if (!matchesSku && !matchesLot && !matchesProductName && !matchesVariant)
-                    continue;
-            }
+            if (!matchesSku && !matchesLot && !matchesProductName && !matchesVariant)
+                continue;
 
             var available = item.OnHand - item.Reserved - item.Blocked;
-            validItems.Add(new StockItemListItemDto(
+            matched.Add(new StockItemListItemDto(
                 item.Id,
                 item.ProductId,
                 item.VariantId,
                 item.WarehouseId,
-                warehouses.TryGetValue(item.WarehouseId, out var name) ? name : null,
+                allWarehouses.TryGetValue(item.WarehouseId, out var whName) ? whName : null,
                 item.Sku,
                 productName,
                 variantValue,
@@ -221,20 +302,21 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
                 available,
                 item.BlockReason,
                 item.ShelfId,
-                item.ShelfId.HasValue && shelves.TryGetValue(item.ShelfId.Value, out var shelfName) ? shelfName : null,
+                item.ShelfId.HasValue && allShelves.TryGetValue(item.ShelfId.Value, out var shelfName) ? shelfName : null,
                 item.CreatedAt,
                 item.UpdatedAt
             ));
         }
 
-        // Return results with original total count and total pages
-        // Note: totalCount and totalPages are based on database query, not filtered by catalog
-        return new StockItemsListResult(
-            validItems,
-            totalCount,
-            page,
-            pageSize,
-            totalPages
-        );
+        var filteredTotalCount = matched.Count;
+        var filteredTotalPages = (int)Math.Ceiling(filteredTotalCount / (double)pageSize);
+        var filteredPage = Math.Clamp(req.Page, 1, Math.Max(1, filteredTotalPages));
+
+        var paged = matched
+            .Skip((filteredPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return new StockItemsListResult(paged, filteredTotalCount, filteredPage, pageSize, filteredTotalPages);
     }
 }
