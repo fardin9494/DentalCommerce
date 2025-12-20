@@ -14,6 +14,7 @@ public sealed class AdjustmentConfig : IEntityTypeConfiguration<Adjustment>
         b.HasKey(x => x.Id);
 
         b.Property(x => x.WarehouseId).IsRequired();
+        b.Property(x => x.DocNo).HasColumnType("bigint").ValueGeneratedOnAdd().HasDefaultValueSql("NEXT VALUE FOR inv.AdjustmentDocNoSeq").IsRequired();
         b.Property(x => x.Status).IsRequired();
         b.Property(x => x.Reason).IsRequired();
         b.Property(x => x.DocDate).HasColumnType("datetime2");
@@ -23,6 +24,7 @@ public sealed class AdjustmentConfig : IEntityTypeConfiguration<Adjustment>
         b.Property(x => x.CreatedAt).HasColumnType("datetime2");
         b.Property(x => x.UpdatedAt).HasColumnType("datetime2");
 
+        b.HasIndex(x => x.DocNo).IsUnique();
         b.Metadata.FindNavigation(nameof(Adjustment.Lines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
     }
 }

@@ -13,6 +13,7 @@ public sealed class ReceiptConfig : IEntityTypeConfiguration<Receipt>
         b.HasKey(x => x.Id);
 
         b.Property(x => x.WarehouseId).IsRequired();
+        b.Property(x => x.DocNo).HasColumnType("bigint").ValueGeneratedOnAdd().HasDefaultValueSql("NEXT VALUE FOR inv.ReceiptDocNoSeq").IsRequired();
         b.Property(x => x.DocDate).HasColumnType("datetime2").IsRequired();
         b.Property(x => x.ExternalRef).HasMaxLength(64);
         b.Property(x => x.Status).HasConversion<int>().IsRequired();
@@ -23,6 +24,7 @@ public sealed class ReceiptConfig : IEntityTypeConfiguration<Receipt>
         b.Property(x => x.UpdatedAt).HasColumnType("datetime2");
 
         b.HasIndex(x => new { x.WarehouseId, x.Status, x.DocDate });
+        b.HasIndex(x => x.DocNo).IsUnique();
         b.Metadata.FindNavigation(nameof(Receipt.Lines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
     }
 }

@@ -19,7 +19,8 @@ public sealed class CreateIssueDraftHandler : IRequestHandler<CreateIssueDraftCo
             if (!existsWh) throw new InvalidOperationException("انبار یافت نشد.");
         }
 
-        var issue = Issue.Create(req.WarehouseId, req.DocDateUtc, req.ExternalRef);
+        var docNo = await _db.NextIssueDocNoAsync(ct);
+        var issue = Issue.Create(docNo, req.WarehouseId, req.DocDateUtc, req.ExternalRef);
         _db.Issues.Add(issue);
         await _db.SaveChangesAsync(ct);
         return issue.Id;

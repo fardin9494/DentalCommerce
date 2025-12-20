@@ -10,6 +10,7 @@ import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
 import { useProductNames } from '@/shared/hooks/useProductNames'
 import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
 import { useProductDetail } from '@/shared/hooks/useProducts'
+import { issueDisplayRef } from '@/shared/utils/inventoryDocumentReference'
 
 const statusLabels: Record<string, string> = {
   Draft: 'پیش‌نویس',
@@ -350,7 +351,7 @@ export function IssueDetailPage() {
         {/* External Ref Card */}
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-sm font-medium text-slate-500">شماره مرجع</div>
-          <div className="mt-2 text-lg font-semibold text-slate-900">{issue.externalRef || '-'}</div>
+          <div className="mt-2 text-lg font-semibold text-slate-900">{issueDisplayRef(issue.id, issue.externalRef)}</div>
         </div>
       </div>
 
@@ -701,7 +702,6 @@ export function IssueDetailPage() {
     </div>
   )
 }
-
 
 
 

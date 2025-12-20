@@ -34,6 +34,7 @@ import {
 import { useProductNames } from '@/shared/hooks/useProductNames'
 import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
 import { useProductDetail } from '@/shared/hooks/useProducts'
+import { receiptDisplayRef } from '@/shared/utils/inventoryDocumentReference'
 
 export function ReceiptDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -419,7 +420,7 @@ export function ReceiptDetailPage() {
         {/* External Ref Card */}
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-sm font-medium text-slate-500">شماره مرجع</div>
-          <div className="mt-2 text-lg font-semibold text-slate-900">{receipt.externalRef || '-'}</div>
+          <div className="mt-2 text-lg font-semibold text-slate-900">{receiptDisplayRef(receipt.id, receipt.reason, receipt.externalRef)}</div>
         </div>
       </div>
 

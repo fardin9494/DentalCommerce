@@ -7,6 +7,7 @@ import { CreateTransferModal } from '../components/CreateTransferModal'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
 import { useSortableTable } from '@/shared/hooks/useSortableTable'
 import { SortableHeader } from '@/shared/components/SortableHeader'
+import { transferDisplayRef } from '@/shared/utils/inventoryDocumentReference'
 import {
   TransferStatusLabels,
   TransferStatusColors,
@@ -406,7 +407,7 @@ export function TransfersListPage() {
                       >
                         <td className="px-4 py-3">
                           <div className="font-medium text-slate-900">
-                            {item.externalRef || item.id.substring(0, 8) + '...'}
+                            {transferDisplayRef(item.id, item.externalRef)}
                           </div>
                           <div className="text-xs text-slate-400 font-mono">{item.id.substring(0, 8)}...</div>
                         </td>

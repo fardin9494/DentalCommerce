@@ -1,5 +1,6 @@
 ﻿using BuildingBlocks.Domain;
 using Inventory.Domain.Enums;
+using Inventory.Domain.Naming;
 
 namespace Inventory.Domain.Aggregates;
 
@@ -8,6 +9,7 @@ public sealed class Receipt : AggregateRoot<Guid>
     private readonly List<ReceiptLine> _lines = new();
 
     public Guid WarehouseId { get; private set; }
+    public long DocNo { get; private set; }
     public string? ExternalRef { get; private set; } // شماره‌ی فاکتور تامین‌کننده/ارجاع خارجی (اختیاری)
     public DateTime DocDate { get; private set; }    // تاریخ سند (UTC)
     public ReceiptStatus Status { get; private set; } = ReceiptStatus.Draft;
@@ -23,15 +25,21 @@ public sealed class Receipt : AggregateRoot<Guid>
        
     }
 
-    public static Receipt Create(Guid warehouseId, ReceiptReason reason, DateTime? docDateUtc = null, string? externalRef = null)
-        => new()
+    public static Receipt Create(Guid warehouseId, ReceiptReason reason, long docNo, DateTime? docDateUtc = null, string? externalRef = null)
+    {
+        if (docNo <= 0) throw new ArgumentOutOfRangeException(nameof(docNo));
+        var rec = new Receipt
         {
             Id = Guid.NewGuid(),
             WarehouseId = warehouseId,
+            DocNo = docNo,
             Reason = reason,
             DocDate = DateTime.SpecifyKind(docDateUtc ?? DateTime.UtcNow, DateTimeKind.Utc),
-            ExternalRef = string.IsNullOrWhiteSpace(externalRef) ? null : externalRef.Trim()
         };
+
+        rec.ExternalRef = NormalizeExternalRef(externalRef) ?? InventoryDocumentReference.ForReceipt(rec.Reason, rec.DocDate, rec.DocNo);
+        return rec;
+    }
 
     public ReceiptLine AddLine(Guid productId, Guid? variantId, decimal qty, string? lotNumber, DateTime? expiryDateUtc, decimal? unitCost)
     {
@@ -57,14 +65,25 @@ public sealed class Receipt : AggregateRoot<Guid>
     public void UpdateHeader(string? externalRef, DateTime? docDateUtc)
     {
         EnsureDraft();
-        if (externalRef != null) ExternalRef = string.IsNullOrWhiteSpace(externalRef) ? null : externalRef.Trim();
         if (docDateUtc.HasValue) DocDate = DateTime.SpecifyKind(docDateUtc.Value, DateTimeKind.Utc);
+        if (externalRef != null)
+            ExternalRef = NormalizeExternalRef(externalRef) ?? InventoryDocumentReference.ForReceipt(Reason, DocDate, DocNo);
         Touch();
     }
+
+    private void EnsureExternalRef()
+    {
+        if (DocNo <= 0) throw new InvalidOperationException("DocNo is not set for receipt.");
+        ExternalRef ??= InventoryDocumentReference.ForReceipt(Reason, DocDate, DocNo);
+    }
+
+    private static string? NormalizeExternalRef(string? externalRef)
+        => string.IsNullOrWhiteSpace(externalRef) ? null : externalRef.Trim();
 
     public void Receive(DateTime? whenUtc = null)
     {
         EnsureStatus(ReceiptStatus.Draft);
+        EnsureExternalRef();
         if (_lines.Count == 0) throw new InvalidOperationException("رسید بدون آیتم قابل دریافت نیست.");
 
         Status = ReceiptStatus.Received;
@@ -76,6 +95,8 @@ public sealed class Receipt : AggregateRoot<Guid>
     public void Approve(DateTime? whenUtc = null)
     {
         EnsureStatus(ReceiptStatus.Received); // فقط رسید دریافت شده قابل تایید است
+
+        EnsureExternalRef();
 
         Status = ReceiptStatus.Approved;
         ApprovedAt = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
@@ -98,6 +119,7 @@ public sealed class Receipt : AggregateRoot<Guid>
     public void FinalApprove(DateTime? whenUtc = null)
     {
         EnsureStatus(ReceiptStatus.Received);
+        EnsureExternalRef();
         
         if (!IsReadyForFinalApproval())
             throw new InvalidOperationException("همه خطوط باید به طور کامل تایید یا رد شده باشند.");

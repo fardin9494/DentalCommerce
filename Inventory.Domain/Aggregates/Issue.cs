@@ -1,5 +1,6 @@
 ﻿using BuildingBlocks.Domain;
 using Inventory.Domain.Enums;
+using Inventory.Domain.Naming;
 
 namespace Inventory.Domain.Aggregates;
 
@@ -8,6 +9,7 @@ public sealed class Issue : AggregateRoot<Guid>
     private readonly List<IssueLine> _lines = new();
 
     public Guid? WarehouseId { get; private set; }
+    public long DocNo { get; private set; }
     public string? ExternalRef { get; private set; }
     public DateTime DocDate { get; private set; }       // UTC
     public IssueStatus Status { get; private set; } = IssueStatus.Draft;
@@ -17,14 +19,20 @@ public sealed class Issue : AggregateRoot<Guid>
 
     private Issue() { }
 
-    public static Issue Create(Guid? warehouseId = null, DateTime? docDateUtc = null, string? externalRef = null)
-        => new()
+    public static Issue Create(long docNo, Guid? warehouseId = null, DateTime? docDateUtc = null, string? externalRef = null)
+    {
+        if (docNo <= 0) throw new ArgumentOutOfRangeException(nameof(docNo));
+        var issue = new Issue
         {
             Id = Guid.NewGuid(),
             WarehouseId = warehouseId,
+            DocNo = docNo,
             DocDate = DateTime.SpecifyKind(docDateUtc ?? DateTime.UtcNow, DateTimeKind.Utc),
-            ExternalRef = string.IsNullOrWhiteSpace(externalRef) ? null : externalRef.Trim()
         };
+
+        issue.ExternalRef = NormalizeExternalRef(externalRef) ?? InventoryDocumentReference.ForIssue(issue.DocDate, issue.DocNo);
+        return issue;
+    }
 
     public IssueLine AddLine(Guid productId, Guid? variantId, decimal qty)
     {
@@ -50,14 +58,25 @@ public sealed class Issue : AggregateRoot<Guid>
     public void UpdateHeader(string? externalRef, DateTime? docDateUtc)
     {
         EnsureDraft();
-        if (externalRef != null) ExternalRef = string.IsNullOrWhiteSpace(externalRef) ? null : externalRef.Trim();
         if (docDateUtc.HasValue) DocDate = DateTime.SpecifyKind(docDateUtc.Value, DateTimeKind.Utc);
+        if (externalRef != null)
+            ExternalRef = NormalizeExternalRef(externalRef) ?? InventoryDocumentReference.ForIssue(DocDate, DocNo);
         Touch();
     }
+
+    private void EnsureExternalRef()
+    {
+        if (DocNo <= 0) throw new InvalidOperationException("DocNo is not set for issue.");
+        ExternalRef ??= InventoryDocumentReference.ForIssue(DocDate, DocNo);
+    }
+
+    private static string? NormalizeExternalRef(string? externalRef)
+        => string.IsNullOrWhiteSpace(externalRef) ? null : externalRef.Trim();
 
     public void Post(DateTime? whenUtc = null)
     {
         EnsureDraft();
+        EnsureExternalRef();
         if (_lines.Count == 0) throw new InvalidOperationException("سند خروج بدون آیتم قابل پست نیست.");
         if (_lines.Any(l => l.RemainingQty > 0))
             throw new InvalidOperationException("همه‌ی خطوط باید کامل تخصیص داده شوند (RemainingQty=0).");

@@ -16,7 +16,8 @@ public sealed class CreateReceiptDraftHandler : IRequestHandler<CreateReceiptDra
         if (!existsWh) throw new InvalidOperationException("انبار یافت نشد.");
 
         // ⬅️ امضای درست با Reason
-        var rec = Receipt.Create(req.WarehouseId, req.Reason, req.DocDateUtc, req.ExternalRef);
+        var docNo = await _db.NextReceiptDocNoAsync(ct);
+        var rec = Receipt.Create(req.WarehouseId, req.Reason, docNo, req.DocDateUtc, req.ExternalRef);
 
         _db.Receipts.Add(rec);
         await _db.SaveChangesAsync(ct);

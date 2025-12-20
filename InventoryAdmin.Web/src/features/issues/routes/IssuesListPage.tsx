@@ -12,6 +12,7 @@ import {
 import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
 import { useSortableTable } from '@/shared/hooks/useSortableTable'
 import { SortableHeader } from '@/shared/components/SortableHeader'
+import { issueDisplayRef } from '@/shared/utils/inventoryDocumentReference'
 
 // Type for issue list item
 interface IssueListItem {
@@ -354,7 +355,6 @@ export function IssuesListPage() {
                       currentDirection={getSortIndicator('status' as keyof IssueListItem)}
                       onSort={(key) => requestSort(key as keyof IssueListItem)}
                     />
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">مرجع</th>
                     <SortableHeader
                       label="تاریخ سند"
                       sortKey="docDate"
@@ -427,7 +427,7 @@ export function IssuesListPage() {
                           onClick={() => navigate(`/issues/${issue.id}`)}
                         >
                           <span className="font-mono text-xs text-slate-500">
-                            {issue.id.substring(0, 8)}...
+                            {issueDisplayRef(issue.id, issue.externalRef)}
                           </span>
                         </td>
                         <td
@@ -448,12 +448,6 @@ export function IssuesListPage() {
                           >
                             {IssueStatusLabels[issue.status] || issue.status}
                           </span>
-                        </td>
-                        <td
-                          className="whitespace-nowrap px-4 py-3 text-slate-600 cursor-pointer"
-                          onClick={() => navigate(`/issues/${issue.id}`)}
-                        >
-                          {issue.externalRef || '-'}
                         </td>
                         <td
                           className="whitespace-nowrap px-4 py-3 text-slate-600 cursor-pointer"

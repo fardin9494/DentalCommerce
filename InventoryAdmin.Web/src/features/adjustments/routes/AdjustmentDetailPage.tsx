@@ -24,6 +24,7 @@ import {
   type AdjustmentReason,
 } from '../types'
 import { useProductNames } from '@/shared/hooks/useProductNames'
+import { adjustmentDisplayNote } from '@/shared/utils/inventoryDocumentReference'
 
 export function AdjustmentDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -323,10 +324,10 @@ export function AdjustmentDetailPage() {
               <div className="mt-1 text-slate-900">{formatDateTime(adjustment.postedAt)}</div>
             </div>
           )}
-          {adjustment.note && (
+          {(adjustment.note?.trim() || ' ') && (
             <div className="md:col-span-2">
               <div className="text-sm font-medium text-slate-500">یادداشت</div>
-              <div className="mt-1 text-slate-900">{adjustment.note}</div>
+              <div className="mt-1 text-slate-900">{adjustmentDisplayNote(adjustment.id, adjustment.reason, adjustment.note)}</div>
             </div>
           )}
         </div>

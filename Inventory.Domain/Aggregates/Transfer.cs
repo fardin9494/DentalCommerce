@@ -1,5 +1,6 @@
 ﻿using BuildingBlocks.Domain;
 using Inventory.Domain.Enums;
+using Inventory.Domain.Naming;
 
 namespace Inventory.Domain.Aggregates;
 
@@ -9,6 +10,7 @@ public sealed class Transfer : AggregateRoot<Guid>
 
     public Guid SourceWarehouseId { get; private set; }
     public Guid DestinationWarehouseId { get; private set; }
+    public long DocNo { get; private set; }
     public string? ExternalRef { get; private set; }
     public DateTime DocDate { get; private set; }     // UTC
     public TransferStatus Status { get; private set; } = TransferStatus.Draft;
@@ -19,17 +21,21 @@ public sealed class Transfer : AggregateRoot<Guid>
 
     private Transfer() { }
 
-    public static Transfer Create(Guid sourceWhId, Guid destWhId, DateTime? docDateUtc = null, string? externalRef = null)
+    public static Transfer Create(Guid sourceWhId, Guid destWhId, long docNo, DateTime? docDateUtc = null, string? externalRef = null)
     {
         if (sourceWhId == destWhId) throw new InvalidOperationException("انبار مبدا و مقصد نمی‌توانند یکسان باشند.");
-        return new Transfer
+        if (docNo <= 0) throw new ArgumentOutOfRangeException(nameof(docNo));
+        var tr = new Transfer
         {
             Id = Guid.NewGuid(),
             SourceWarehouseId = sourceWhId,
             DestinationWarehouseId = destWhId,
+            DocNo = docNo,
             DocDate = DateTime.SpecifyKind(docDateUtc ?? DateTime.UtcNow, DateTimeKind.Utc),
-            ExternalRef = string.IsNullOrWhiteSpace(externalRef) ? null : externalRef.Trim()
         };
+
+        tr.ExternalRef = NormalizeExternalRef(externalRef) ?? InventoryDocumentReference.ForTransfer(tr.DocDate, tr.DocNo);
+        return tr;
     }
 
     public TransferLine AddLine(Guid productId, Guid? variantId, decimal qty)
@@ -55,10 +61,20 @@ public sealed class Transfer : AggregateRoot<Guid>
     public void UpdateHeader(string? externalRef, DateTime? docDateUtc)
     {
         EnsureDraft();
-        if (externalRef != null) ExternalRef = string.IsNullOrWhiteSpace(externalRef) ? null : externalRef.Trim();
         if (docDateUtc.HasValue) DocDate = DateTime.SpecifyKind(docDateUtc.Value, DateTimeKind.Utc);
+        if (externalRef != null)
+            ExternalRef = NormalizeExternalRef(externalRef) ?? InventoryDocumentReference.ForTransfer(DocDate, DocNo);
         Touch();
     }
+
+    private void EnsureExternalRef()
+    {
+        if (DocNo <= 0) throw new InvalidOperationException("DocNo is not set for transfer.");
+        ExternalRef ??= InventoryDocumentReference.ForTransfer(DocDate, DocNo);
+    }
+
+    private static string? NormalizeExternalRef(string? externalRef)
+        => string.IsNullOrWhiteSpace(externalRef) ? null : externalRef.Trim();
 
     public void Ship(DateTime? whenUtc = null)
     {
@@ -66,6 +82,8 @@ public sealed class Transfer : AggregateRoot<Guid>
         if (_lines.Count == 0) throw new InvalidOperationException("سند انتقال بدون آیتم قابل ارسال نیست.");
         if (_lines.Any(l => l.RemainingQty > 0))
             throw new InvalidOperationException("همه‌ی خطوط باید کامل تخصیص داده شوند.");
+
+        EnsureExternalRef();
 
         Status = TransferStatus.Shipped;
         ShippedAt = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
@@ -94,6 +112,8 @@ public sealed class Transfer : AggregateRoot<Guid>
         // بررسی اینکه تمام segments دریافت شده‌اند
         if (Lines.SelectMany(x => x.Segments).Any(s => s.RemainingToReceive > 0))
             throw new InvalidOperationException("همه‌ی کالاها باید دریافت شوند قبل از تایید نهایی.");
+
+        EnsureExternalRef();
 
         Status = TransferStatus.Completed;
         CompletedAt = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);

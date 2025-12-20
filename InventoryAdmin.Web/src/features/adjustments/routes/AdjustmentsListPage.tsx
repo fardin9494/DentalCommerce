@@ -17,6 +17,7 @@ import {
 import { useActiveWarehouses, useWarehouseNames } from '@/shared/hooks/useWarehouses'
 import { useSortableTable } from '@/shared/hooks/useSortableTable'
 import { SortableHeader } from '@/shared/components/SortableHeader'
+import { adjustmentDisplayNote } from '@/shared/utils/inventoryDocumentReference'
 
 // Type for adjustment list item
 interface AdjustmentListItem {
@@ -366,7 +367,6 @@ export function AdjustmentsListPage() {
                       currentDirection={getSortIndicator('docDate' as keyof AdjustmentListItem)}
                       onSort={(key) => requestSort(key as keyof AdjustmentListItem)}
                     />
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">یادداشت</th>
                     <SortableHeader
                       label="تعداد آیتم"
                       sortKey="linesCount"
@@ -399,7 +399,7 @@ export function AdjustmentsListPage() {
                       onClick={() => navigate(`/adjustments/${adjustment.id}`)}
                     >
                       <td className="whitespace-nowrap px-4 py-3">
-                        <span className="font-mono text-xs text-slate-500">{adjustment.id.substring(0, 8)}...</span>
+                        <span className="font-mono text-xs text-slate-500">{adjustmentDisplayNote(adjustment.id, adjustment.reason, adjustment.note)}</span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-700">
                         {adjustment.warehouseName || getWarehouseName(adjustment.warehouseId)}
@@ -418,9 +418,6 @@ export function AdjustmentsListPage() {
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(adjustment.docDate)}</td>
-                      <td className="px-4 py-3 text-slate-600 max-w-xs truncate">
-                        {adjustment.note || '-'}
-                      </td>
                       <td className="whitespace-nowrap px-4 py-3 text-center text-slate-700">
                         {adjustment.linesCount}
                       </td>

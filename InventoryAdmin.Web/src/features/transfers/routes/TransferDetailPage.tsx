@@ -25,6 +25,7 @@ import type { TransferLine, TransferSegment } from '../types'
 import { TransferStatusLabels, TransferStatusColors, type TransferStatus } from '../types'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
 import { useProductNames } from '@/shared/hooks/useProductNames'
+import { transferDisplayRef } from '@/shared/utils/inventoryDocumentReference'
 
 export function TransferDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -406,7 +407,7 @@ export function TransferDetailPage() {
           </div>
           <div>
             <div className="text-sm text-slate-500">مرجع خارجی</div>
-            <div className="mt-1 text-sm text-slate-700">{transfer.externalRef || '-'}</div>
+            <div className="mt-1 text-sm text-slate-700">{transferDisplayRef(transfer.id, transfer.externalRef)}</div>
           </div>
           <div>
             <div className="text-sm text-slate-500">تاریخ ارسال</div>

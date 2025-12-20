@@ -11,7 +11,8 @@ public sealed class CreateAdjustmentDraftHandler : IRequestHandler<CreateAdjustm
 
     public async Task<Guid> Handle(CreateAdjustmentDraftCommand req, CancellationToken ct)
     {
-        var adj = Adjustment.Create(req.WarehouseId, req.Reason, req.DocDateUtc, req.Note);
+        var docNo = await _db.NextAdjustmentDocNoAsync(ct);
+        var adj = Adjustment.Create(req.WarehouseId, req.Reason, docNo, req.DocDateUtc, req.Note);
         _db.Adjustments.Add(adj);
         await _db.SaveChangesAsync(ct);
         return adj.Id;

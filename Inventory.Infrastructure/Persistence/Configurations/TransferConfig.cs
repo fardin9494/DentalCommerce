@@ -13,6 +13,7 @@ public sealed class TransferConfig : IEntityTypeConfiguration<Transfer>
 
         b.Property(x => x.SourceWarehouseId).IsRequired();
         b.Property(x => x.DestinationWarehouseId).IsRequired();
+        b.Property(x => x.DocNo).HasColumnType("bigint").ValueGeneratedOnAdd().HasDefaultValueSql("NEXT VALUE FOR inv.TransferDocNoSeq").IsRequired();
         b.Property(x => x.DocDate).HasColumnType("datetime2").IsRequired();
         b.Property(x => x.Status).IsRequired();
         b.Property(x => x.ShippedAt).HasColumnType("datetime2");
@@ -23,6 +24,7 @@ public sealed class TransferConfig : IEntityTypeConfiguration<Transfer>
         b.Property(x => x.UpdatedAt).HasColumnType("datetime2");
 
         b.HasIndex(x => new { x.SourceWarehouseId, x.DestinationWarehouseId, x.Status, x.DocDate });
+        b.HasIndex(x => x.DocNo).IsUnique();
 
         b.Metadata.FindNavigation(nameof(Transfer.Lines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
     }

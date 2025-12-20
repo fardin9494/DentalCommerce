@@ -15,6 +15,7 @@ import {
 import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
 import { useSortableTable } from '@/shared/hooks/useSortableTable'
 import { SortableHeader } from '@/shared/components/SortableHeader'
+import { receiptDisplayRef } from '@/shared/utils/inventoryDocumentReference'
 
 // Type for receipt list item
 interface ReceiptListItem {
@@ -334,7 +335,6 @@ export function ReceiptsListPage() {
                       currentDirection={getSortIndicator('docDate' as keyof ReceiptListItem)}
                       onSort={(key) => requestSort(key as keyof ReceiptListItem)}
                     />
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">مرجع</th>
                     <SortableHeader
                       label="تعداد آیتم"
                       sortKey="linesCount"
@@ -368,7 +368,7 @@ export function ReceiptsListPage() {
                     >
                       <td className="whitespace-nowrap px-4 py-3">
                         <span className="font-mono text-xs text-slate-500">
-                          {receipt.id.substring(0, 8)}...
+                          {receiptDisplayRef(receipt.id, receipt.reason, receipt.externalRef)}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-700">
@@ -389,9 +389,6 @@ export function ReceiptsListPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                         {formatDate(receipt.docDate)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {receipt.externalRef || '-'}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-center text-slate-700">
                         {receipt.linesCount}

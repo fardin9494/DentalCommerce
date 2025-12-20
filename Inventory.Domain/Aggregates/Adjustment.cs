@@ -1,5 +1,6 @@
 using BuildingBlocks.Domain;
 using Inventory.Domain.Enums;
+using Inventory.Domain.Naming;
 
 namespace Inventory.Domain.Aggregates;
 
@@ -8,6 +9,7 @@ public sealed class Adjustment : AggregateRoot<Guid>
     private readonly List<AdjustmentLine> _lines = new();
 
     public Guid WarehouseId { get; private set; }
+    public long DocNo { get; private set; }
     public AdjustmentStatus Status { get; private set; } = AdjustmentStatus.Draft;
     public AdjustmentReason Reason { get; private set; }
     public string? Note { get; private set; }
@@ -18,17 +20,21 @@ public sealed class Adjustment : AggregateRoot<Guid>
 
     private Adjustment() { }
 
-    public static Adjustment Create(Guid warehouseId, AdjustmentReason reason, DateTime? docDateUtc = null, string? note = null)
+    public static Adjustment Create(Guid warehouseId, AdjustmentReason reason, long docNo, DateTime? docDateUtc = null, string? note = null)
     {
         if (warehouseId == Guid.Empty) throw new ArgumentException(nameof(warehouseId));
-        return new Adjustment
+        if (docNo <= 0) throw new ArgumentOutOfRangeException(nameof(docNo));
+        var adj = new Adjustment
         {
             Id = Guid.NewGuid(),
             WarehouseId = warehouseId,
+            DocNo = docNo,
             Reason = reason,
             DocDate = DateTime.SpecifyKind(docDateUtc ?? DateTime.UtcNow, DateTimeKind.Utc),
-            Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim()
         };
+
+        adj.Note = NormalizeNote(note) ?? InventoryDocumentReference.ForAdjustment(adj.Reason, adj.DocDate, adj.DocNo);
+        return adj;
     }
 
     /// <summary>
@@ -58,22 +64,32 @@ public sealed class Adjustment : AggregateRoot<Guid>
     public void SetNote(string? note)
     {
         EnsureDraft();
-        Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        Note = NormalizeNote(note) ?? InventoryDocumentReference.ForAdjustment(Reason, DocDate, DocNo);
         Touch();
     }
 
     public void UpdateHeader(string? note, DateTime? docDateUtc)
     {
         EnsureDraft();
-        if (note != null) Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         if (docDateUtc.HasValue) DocDate = DateTime.SpecifyKind(docDateUtc.Value, DateTimeKind.Utc);
+        if (note != null) Note = NormalizeNote(note) ?? InventoryDocumentReference.ForAdjustment(Reason, DocDate, DocNo);
         Touch();
     }
+
+    private void EnsureNote()
+    {
+        if (DocNo <= 0) throw new InvalidOperationException("DocNo is not set for adjustment.");
+        Note ??= InventoryDocumentReference.ForAdjustment(Reason, DocDate, DocNo);
+    }
+
+    private static string? NormalizeNote(string? note)
+        => string.IsNullOrWhiteSpace(note) ? null : note.Trim();
 
     public void Post(DateTime? whenUtc = null)
     {
         EnsureDraft();
         if (_lines.Count == 0) throw new InvalidOperationException("هیچ خطی برای ثبت وجود ندارد.");
+        EnsureNote();
         Status = AdjustmentStatus.Posted;
         PostedAt = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
         Touch();

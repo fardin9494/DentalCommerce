@@ -16,7 +16,8 @@ public sealed class CreateTransferDraftHandler : IRequestHandler<CreateTransferD
         var dst = await _db.Warehouses.AnyAsync(w => w.Id == req.DestinationWarehouseId, ct);
         if (!src || !dst) throw new InvalidOperationException("انبار مبدا/مقصد نامعتبر است.");
 
-        var tr = Transfer.Create(req.SourceWarehouseId, req.DestinationWarehouseId, req.DocDateUtc, req.ExternalRef);
+        var docNo = await _db.NextTransferDocNoAsync(ct);
+        var tr = Transfer.Create(req.SourceWarehouseId, req.DestinationWarehouseId, docNo, req.DocDateUtc, req.ExternalRef);
         _db.Transfers.Add(tr);
         await _db.SaveChangesAsync(ct);
         return tr.Id;
