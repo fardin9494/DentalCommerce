@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Spinner } from '@/shared/components/Spinner'
 import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
 
@@ -23,6 +23,12 @@ export function AllocateMethodModal({
 }: AllocateMethodModalProps) {
   const { data: warehouses, isLoading: loadingWarehouses } = useActiveWarehouses()
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('')
+  const isLockedToDefault = !!defaultWarehouseId
+
+  useEffect(() => {
+    if (!isOpen) return
+    setSelectedWarehouseId(defaultWarehouseId || '')
+  }, [isOpen, defaultWarehouseId])
 
   if (!isOpen) return null
 
@@ -65,7 +71,7 @@ export function AllocateMethodModal({
             <select
               value={selectedWarehouseId}
               onChange={(e) => setSelectedWarehouseId(e.target.value)}
-              disabled={isAllocating}
+              disabled={isAllocating || isLockedToDefault}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-slate-100 disabled:cursor-not-allowed"
             >
               <option value="">همه انبارها (انتخاب خودکار)</option>
@@ -133,4 +139,3 @@ export function AllocateMethodModal({
     </div>
   )
 }
-

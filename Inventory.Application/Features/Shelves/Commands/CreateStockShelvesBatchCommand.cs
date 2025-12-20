@@ -37,10 +37,13 @@ public sealed class CreateStockShelvesBatchHandler : IRequestHandler<CreateStock
         var prefix = PreparePrefix(req.Prefix, warehouse.Code);
 
         // پیش‌بارگذاری کدها/نام‌های موجود برای جلوگیری از برخورد
-        var existingCodes = (await _db.StockShelves
+        var existing = await _db.StockShelves
             .Where(s => s.WarehouseId == req.WarehouseId)
-            .Select(s => s.Code)
-            .ToListAsync(ct)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .Select(s => new { s.Name, s.Code })
+            .ToListAsync(ct);
+
+        var existingNames = existing.Select(x => x.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingCodes = existing.Select(x => x.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var shelves = new List<StockShelf>();
         for (var r = 1; r <= req.Rows; r++)
@@ -55,7 +58,7 @@ public sealed class CreateStockShelvesBatchHandler : IRequestHandler<CreateStock
                     var name = $"{rowLabel}{colLabel}{levelLabel}";
                     var code = $"{prefix}-{name}";
 
-                    if (existingCodes.Contains(code))
+                    if (existingNames.Contains(name) || existingCodes.Contains(code))
                         continue; // از ایجاد تکراری صرفنظر می‌کنیم
 
                     var shelf = StockShelf.Create(
@@ -68,6 +71,7 @@ public sealed class CreateStockShelvesBatchHandler : IRequestHandler<CreateStock
                         description: req.Description
                     );
                     shelves.Add(shelf);
+                    existingNames.Add(name);
                     existingCodes.Add(code);
                 }
             }
@@ -109,4 +113,3 @@ public sealed class CreateStockShelvesBatchHandler : IRequestHandler<CreateStock
         return sb.ToString();
     }
 }
-

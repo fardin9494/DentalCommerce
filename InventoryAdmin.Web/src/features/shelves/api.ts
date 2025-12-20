@@ -65,3 +65,6 @@ export async function deactivateShelf(id: string): Promise<void> {
   return fetchJson<void>(`/shelves/${id}/deactivate`, { method: 'POST' })
 }
 
+export async function deleteShelf(id: string): Promise<void> {
+  return fetchJson<void>(`/shelves/${id}`, { method: 'DELETE' })
+}

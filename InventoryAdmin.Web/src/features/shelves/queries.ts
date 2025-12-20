@@ -11,6 +11,21 @@ export function useShelves(warehouseId?: string, isActive?: boolean, enabled: bo
   })
 }
 
+export function useDeleteShelf() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: api.deleteShelf,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['shelves'] })
+      toast.success('قفسه حذف شد')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'خطا در حذف قفسه')
+    },
+  })
+}
+
 export function useAllShelves() {
   return useShelves(undefined, undefined)
 }
@@ -93,4 +108,3 @@ export function useDeactivateShelf() {
     },
   })
 }
-

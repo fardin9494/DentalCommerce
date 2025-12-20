@@ -1058,6 +1058,25 @@ shelves.MapPut("/{id:guid}", async (Guid id, Inventory.Application.Features.Shel
     return Results.NoContent();
 });
 
+shelves.MapDelete("/{id:guid}", async (Guid id, IMediator m, ILogger<Program> logger) =>
+{
+    try
+    {
+        await m.Send(new Inventory.Application.Features.Shelves.Commands.DeleteStockShelfCommand(id));
+        return Results.NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to delete shelf {ShelfId}", id);
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error deleting shelf {ShelfId}", id);
+        return Results.Problem(detail: ex.Message, title: "خطا در حذف قفسه");
+    }
+});
+
 shelves.MapPost("/{id:guid}/activate", async (Guid id, IMediator m) =>
 {
     await m.Send(new Inventory.Application.Features.Shelves.Commands.ActivateStockShelfCommand(id));
