@@ -3,6 +3,7 @@ import { Layout } from '../shared/components/Layout'
 import { RouteError } from './RouteError'
 import { ReceiptsListPage } from '../features/receipts/routes/ReceiptsListPage'
 import { ReceiptDetailPage } from '../features/receipts/routes/ReceiptDetailPage'
+import { ReceiptRejectionsListPage } from '../features/receipt-rejections/routes/ReceiptRejectionsListPage'
 import { IssuesListPage } from '../features/issues/routes/IssuesListPage'
 import { IssueDetailPage } from '../features/issues/routes/IssueDetailPage'
 import { PickingPlanPage } from '../features/issues/routes/PickingPlanPage'
@@ -26,6 +27,7 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate to="/receipts" replace /> },
       { path: 'receipts', element: <ReceiptsListPage /> },
       { path: 'receipts/:id', element: <ReceiptDetailPage /> },
+      { path: 'receipt-rejections', element: <ReceiptRejectionsListPage /> },
       { path: 'issues', element: <IssuesListPage /> },
       { path: 'issues/:id', element: <IssueDetailPage /> },
       { path: 'issues/picking-plan', element: <PickingPlanPage /> },
@@ -46,5 +48,4 @@ const router = createBrowserRouter([
 export function AppRouter() {
   return <RouterProvider router={router} />
 }
-
 

@@ -61,7 +61,7 @@ public sealed class PostIssueHandler : IRequestHandler<PostIssueCommand, Unit>
                             }
 
                             // فقط کالاهای Available قابل فروش هستند
-                            if (stock.Status != StockStatus.Available)
+                            if (stock.Status != StockStatus.Available && stock.Status != StockStatus.Reserved)
                             {
                                 throw new InvalidOperationException(
                                     $"کالا با شناسه {stock.Id} (خط {line.LineNo}) در وضعیت {stock.Status} است و قابل فروش نیست. فقط کالاهای آزاد قابل فروش هستند."

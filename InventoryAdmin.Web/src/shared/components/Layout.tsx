@@ -14,9 +14,10 @@ export function Layout() {
     <div className="min-h-screen flex flex-col">
       <header className="bg-white border-b">
         <div className="container-std flex items-center justify-between h-14">
-          <Link to="/" className="font-semibold">Inventory Admin</Link>
+            <Link to="/" className="font-semibold">Inventory Admin</Link>
           <nav className="flex items-center gap-4 text-sm">
             <Link to="/receipts" className={navCls(loc.pathname.startsWith('/receipts'))}>رسیدها</Link>
+            <Link to="/receipt-rejections" className={navCls(loc.pathname.startsWith('/receipt-rejections'))}>اقلام رد شده</Link>
             <Link to="/issues" className={navCls(loc.pathname.startsWith('/issues'))}>خروجی‌ها</Link>
             <Link to="/transfers" className={navCls(loc.pathname.startsWith('/transfers'))}>انتقالات</Link>
             <Link to="/adjustments" className={navCls(loc.pathname.startsWith('/adjustments'))}>اصلاحات</Link>

@@ -385,7 +385,37 @@ namespace Inventory.Infrastructure.Migrations
                         .HasColumnType("decimal(18,3)")
                         .HasDefaultValue(0m);
 
+                    b.Property<decimal>("RejectionApprovedQty")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("RejectionDisposedQty")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)")
+                        .HasDefaultValue(0m);
+
                     b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal>("RejectionReturnedQty")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<int>("RejectionStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("RejectionResolvedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RejectionResolutionNote")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 

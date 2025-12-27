@@ -170,7 +170,15 @@ public sealed class ReceiptLine : BaseEntity<Guid>
     // فیلدهای جدید برای تایید/رد جزئی
     public decimal ApprovedQty { get; private set; } = 0;      // مقدار تایید شده
     public decimal RejectedQty { get; private set; } = 0;      // مقدار رد شده
+    public decimal RejectionApprovedQty { get; private set; } = 0;
+    public decimal RejectionReturnedQty { get; private set; } = 0;
+    public decimal RejectionDisposedQty { get; private set; } = 0;
     public string? RejectionReason { get; private set; }      // دلیل رد
+    public ReceiptRejectionStatus RejectionStatus { get; private set; } = ReceiptRejectionStatus.None;
+    public DateTime? RejectionResolvedAt { get; private set; }
+    public string? RejectionResolutionNote { get; private set; }
+    public decimal RejectionResolvedQty => RejectionApprovedQty + RejectionReturnedQty + RejectionDisposedQty;
+    public decimal RejectionRemainingQty => RejectedQty - RejectionResolvedQty;
 
     private ReceiptLine() { }
 
@@ -226,13 +234,23 @@ public sealed class ReceiptLine : BaseEntity<Guid>
     /// <summary>
     /// رد کردن یک خط - مقدار مشخصی را رد می‌کند و دلیل رد را ثبت می‌کند (می‌تواند افزایش یا کاهش باشد)
     /// </summary>
-    public void Reject(decimal newRejectedQty, string? reason = null)
+        public void Reject(decimal newRejectedQty, string? reason = null)
     {
         if (newRejectedQty < 0) throw new ArgumentOutOfRangeException(nameof(newRejectedQty), "مقدار رد نمی‌تواند منفی باشد.");
         if (ApprovedQty + newRejectedQty > Qty)
             throw new InvalidOperationException($"مجموع مقادیر تایید شده و رد شده نمی‌تواند از مقدار کل خط ({Qty}) بیشتر باشد.");
-        
+        if (newRejectedQty < RejectionResolvedQty)
+            throw new InvalidOperationException("مقدار رد نمی‌تواند از مقدار تعیین تکلیف شده کمتر باشد.");
+
         RejectedQty = newRejectedQty;
+
+        if (newRejectedQty == 0)
+        {
+            RejectionReason = null;
+            ClearRejectionResolution();
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(reason))
         {
             // اگر مقدار رد شده افزایش یافته، دلیل جدید را اضافه می‌کنیم
@@ -248,13 +266,129 @@ public sealed class ReceiptLine : BaseEntity<Guid>
                 RejectionReason = null;
             }
         }
-        else if (newRejectedQty == 0)
+
+        UpdateRejectionResolutionStatus();
+        Touch();
+    }
+
+    public void MarkRejectionPending()
+    {
+        UpdateRejectionResolutionStatus();
+        Touch();
+    }
+
+    public void ResolveRejection(ReceiptRejectionStatus status, string? note = null, DateTime? whenUtc = null)
+    {
+        if (RejectedQty <= 0)
+            throw new InvalidOperationException("برای مقدار رد صفر، وضعیت رسیدگی معنی ندارد.");
+        if (status is ReceiptRejectionStatus.None or ReceiptRejectionStatus.Pending or ReceiptRejectionStatus.Mixed)
+            throw new InvalidOperationException("وضعیت رسیدگی نامعتبر است.");
+
+        var remaining = RejectionRemainingQty;
+        if (remaining <= 0)
+            throw new InvalidOperationException("این خط قبلا تعیین تکلیف شده است.");
+
+        switch (status)
         {
-            // اگر مقدار رد شده صفر شد، دلیل را پاک می‌کنیم
-            RejectionReason = null;
+            case ReceiptRejectionStatus.ApprovedToStock:
+                ResolveRejectionAmounts(remaining, 0, 0, note, whenUtc);
+                break;
+            case ReceiptRejectionStatus.Returned:
+                ResolveRejectionAmounts(0, remaining, 0, note, whenUtc);
+                break;
+            case ReceiptRejectionStatus.Disposed:
+                ResolveRejectionAmounts(0, 0, remaining, note, whenUtc);
+                break;
+            default:
+                throw new InvalidOperationException("وضعیت رسیدگی نامعتبر است.");
         }
     }
 
+    public void ResolveRejectionAmounts(decimal approvedQty, decimal returnedQty, decimal disposedQty, string? note = null, DateTime? whenUtc = null)
+    {
+        if (RejectedQty <= 0)
+            throw new InvalidOperationException("برای مقدار رد صفر، وضعیت رسیدگی معنی ندارد.");
+        if (approvedQty < 0 || returnedQty < 0 || disposedQty < 0)
+            throw new ArgumentOutOfRangeException(nameof(approvedQty), "مقادیر تعیین تکلیف نمی‌توانند منفی باشند.");
+
+        var deltaTotal = approvedQty + returnedQty + disposedQty;
+        if (deltaTotal <= 0)
+            throw new InvalidOperationException("حداقل یکی از مقادیر تعیین تکلیف باید بزرگتر از صفر باشد.");
+
+        var newApproved = RejectionApprovedQty + approvedQty;
+        var newReturned = RejectionReturnedQty + returnedQty;
+        var newDisposed = RejectionDisposedQty + disposedQty;
+        var newResolved = newApproved + newReturned + newDisposed;
+
+        if (newResolved > RejectedQty)
+            throw new InvalidOperationException("مجموع مقادیر تعیین تکلیف نمی‌تواند از مقدار رد شده بیشتر باشد.");
+
+        RejectionApprovedQty = newApproved;
+        RejectionReturnedQty = newReturned;
+        RejectionDisposedQty = newDisposed;
+
+        if (!string.IsNullOrWhiteSpace(note))
+            RejectionResolutionNote = note.Trim();
+
+        UpdateRejectionResolutionStatus(whenUtc);
+        Touch();
+    }
+
+    public void ClearRejectionResolution()
+    {
+        RejectionStatus = ReceiptRejectionStatus.None;
+        RejectionResolvedAt = null;
+        RejectionResolutionNote = null;
+        RejectionApprovedQty = 0;
+        RejectionReturnedQty = 0;
+        RejectionDisposedQty = 0;
+        Touch();
+    }
+
+    private void UpdateRejectionResolutionStatus(DateTime? whenUtc = null)
+    {
+        if (RejectedQty <= 0)
+        {
+            RejectionStatus = ReceiptRejectionStatus.None;
+            RejectionResolvedAt = null;
+            RejectionResolutionNote = null;
+            return;
+        }
+
+        if (RejectionRemainingQty > 0)
+        {
+            RejectionStatus = ReceiptRejectionStatus.Pending;
+            RejectionResolvedAt = null;
+            if (RejectionResolvedQty <= 0)
+                RejectionResolutionNote = null;
+            return;
+        }
+
+        SetFinalRejectionStatus(whenUtc);
+    }
+
+    private void SetFinalRejectionStatus(DateTime? whenUtc = null)
+    {
+        var approved = RejectionApprovedQty > 0;
+        var returned = RejectionReturnedQty > 0;
+        var disposed = RejectionDisposedQty > 0;
+        var kindCount = (approved ? 1 : 0) + (returned ? 1 : 0) + (disposed ? 1 : 0);
+
+        if (kindCount <= 0)
+        {
+            RejectionStatus = ReceiptRejectionStatus.Pending;
+            RejectionResolvedAt = null;
+            return;
+        }
+
+        RejectionStatus = kindCount > 1
+            ? ReceiptRejectionStatus.Mixed
+            : approved ? ReceiptRejectionStatus.ApprovedToStock
+            : returned ? ReceiptRejectionStatus.Returned
+            : ReceiptRejectionStatus.Disposed;
+
+        RejectionResolvedAt = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
+    }
     /// <summary>
     /// محاسبه مقدار تغییر (افزایش یا کاهش) برای تایید
     /// </summary>
@@ -275,3 +409,4 @@ public sealed class ReceiptLine : BaseEntity<Guid>
     /// </summary>
     public decimal RemainingQty => Qty - ApprovedQty - RejectedQty;
 }
+

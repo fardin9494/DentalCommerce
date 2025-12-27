@@ -1,10 +1,13 @@
-using FluentValidation;
+﻿using FluentValidation;
 using Inventory.Application.Features.Adjustments.Commands;
 using Inventory.Application.Features.Issues.Commands;
 using Inventory.Application.Features.Pricing.Commands;
 using Inventory.Application.Features.Pricing.Queries;
 using Inventory.Application.Features.Receipts.Commands;
+using Inventory.Application.Features.ReceiptRejections.Commands;
+using Inventory.Application.Features.ReceiptRejections.Queries;
 using Inventory.Api.Contracts.Receipts;
+using Inventory.Api.Contracts.ReceiptRejections;
 using Inventory.Application.Features.Stock.Commands; // ???????? ????
 using Inventory.Application.Features.Shelves.Commands; // ???????? ????
 using Inventory.Application.Features.Transfers.Commands;
@@ -206,7 +209,7 @@ if (!string.IsNullOrWhiteSpace(adminPassword) || adminPasswordHash is not null)
 var auth = app.MapGroup("/api/inventory").DisableAntiforgery();
 auth.MapGet("/auth/check", () => Results.NoContent());
 
-// --- Receipts (ورود به انبار) ---
+// --- Receipts (┘ê╪▒┘ê╪» ╪¿┘ç ╪º┘å╪¿╪º╪▒) ---
 var receipts = app.MapGroup("/api/inventory/receipts").DisableAntiforgery();
 
 // List receipts with filters and pagination
@@ -262,7 +265,7 @@ receipts.MapPost("/{id:guid}/lines", async (Guid id, AddReceiptLineCommand body,
     catch (Exception ex)
     {
         logger.LogError(ex, "Error adding receipt line for {ReceiptId}", id);
-        return Results.Problem(detail: ex.Message, title: "خطا در افزودن خط رسید");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪º┘ü╪▓┘ê╪»┘å ╪«╪╖ ╪▒╪│█î╪»");
     }
 });
 
@@ -300,7 +303,7 @@ receipts.MapPost("/{id:guid}/receive", async (Guid id, [FromBody] DateTime? when
     catch (Exception ex)
     {
         logger.LogError(ex, "Error receiving receipt {ReceiptId}", id);
-        return Results.Problem(detail: ex.Message, title: "خطا در دریافت رسید");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪»╪▒█î╪º┘ü╪¬ ╪▒╪│█î╪»");
     }
 });
 
@@ -311,7 +314,7 @@ receipts.MapPost("/{id:guid}/approve", async (Guid id, IMediator m) =>
     return Results.NoContent();
 });
 
-// تایید جزئی یک خط از رسید
+// ╪¬╪º█î█î╪» ╪¼╪▓╪ª█î █î┌⌐ ╪«╪╖ ╪º╪▓ ╪▒╪│█î╪»
 receipts.MapPost("/{id:guid}/lines/{lineId:guid}/approve-partial", async (Guid id, Guid lineId, [FromBody] ApproveReceiptLinePartialBody body, IMediator m, ILogger<Program> logger) =>
 {
     try
@@ -327,11 +330,11 @@ receipts.MapPost("/{id:guid}/lines/{lineId:guid}/approve-partial", async (Guid i
     catch (Exception ex)
     {
         logger.LogError(ex, "Error approving receipt line {ReceiptId}/{LineId}", id, lineId);
-        return Results.Problem(detail: ex.Message, title: "خطا در تایید خط رسید");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪º█î█î╪» ╪«╪╖ ╪▒╪│█î╪»");
     }
 });
 
-// رد کردن یک خط از رسید
+// ╪▒╪» ┌⌐╪▒╪»┘å █î┌⌐ ╪«╪╖ ╪º╪▓ ╪▒╪│█î╪»
 receipts.MapPost("/{id:guid}/lines/{lineId:guid}/reject", async (Guid id, Guid lineId, [FromBody] RejectReceiptLineBody body, IMediator m, ILogger<Program> logger) =>
 {
     try
@@ -347,7 +350,7 @@ receipts.MapPost("/{id:guid}/lines/{lineId:guid}/reject", async (Guid id, Guid l
     catch (Exception ex)
     {
         logger.LogError(ex, "Error rejecting receipt line {ReceiptId}/{LineId}", id, lineId);
-        return Results.Problem(detail: ex.Message, title: "خطا در رد خط رسید");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪▒╪» ╪«╪╖ ╪▒╪│█î╪»");
     }
 });
 
@@ -357,8 +360,61 @@ receipts.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
     return Results.NoContent();
 });
 
+// --- Receipt Rejections (اقلام رد شده رسید) ---
+var receiptRejections = app.MapGroup("/api/inventory/receipt-rejections").DisableAntiforgery();
 
-// --- Issues (خروج از انبار) ---
+receiptRejections.MapGet("/", async (
+    Guid? warehouseId,
+    int? status,
+    DateTime? fromDate,
+    DateTime? toDate,
+    string? search,
+    int? page,
+    int? pageSize,
+    IMediator m) =>
+{
+    var query = new GetReceiptRejectionsListQuery(
+        WarehouseId: warehouseId,
+        Status: status.HasValue ? (ReceiptRejectionStatus)status.Value : null,
+        FromDate: fromDate,
+        ToDate: toDate,
+        Search: search,
+        Page: page ?? 1,
+        PageSize: pageSize ?? 20
+    );
+    var result = await m.Send(query);
+    return Results.Ok(result);
+});
+
+receiptRejections.MapPost("/{lineId:guid}/resolve", async (
+    Guid lineId,
+    ResolveReceiptRejectionBody body,
+    IMediator m,
+    ILogger<Program> logger) =>
+{
+    try
+    {
+        await m.Send(new ResolveReceiptRejectionCommand(
+            lineId,
+            body.ApprovedQty,
+            body.ReturnedQty,
+            body.DisposedQty,
+            body.Note));
+        return Results.NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to resolve receipt rejection {LineId}", lineId);
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error resolving receipt rejection {LineId}", lineId);
+        return Results.Problem(detail: ex.Message, title: "خطا در تعیین تکلیف اقلام رد شده");
+    }
+});
+
+// --- Issues (╪«╪▒┘ê╪¼ ╪º╪▓ ╪º┘å╪¿╪º╪▒) ---
 var issues = app.MapGroup("/api/inventory/issues").DisableAntiforgery();
 
 // List issues with filters and pagination
@@ -390,7 +446,7 @@ issues.MapGet("/", async (
     catch (Exception ex)
     {
         logger.LogError(ex, "Error getting issues list");
-        return Results.Problem(detail: ex.Message, title: "خطا در دریافت لیست خروجی‌ها");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪»╪▒█î╪º┘ü╪¬ ┘ä█î╪│╪¬ ╪«╪▒┘ê╪¼█îΓÇî┘ç╪º");
     }
 });
 
@@ -445,7 +501,7 @@ issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fefo", async (Guid id, G
     catch (Exception ex)
     {
         logger.LogError(ex, "Error allocating issue line {LineId} with FEFO", lineId);
-        return Results.Problem(detail: ex.Message, title: "خطا در تخصیص FEFO");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ FEFO");
     }
 });
 
@@ -464,7 +520,7 @@ issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fifo", async (Guid id, G
     catch (Exception ex)
     {
         logger.LogError(ex, "Error allocating issue line {LineId} with FIFO", lineId);
-        return Results.Problem(detail: ex.Message, title: "خطا در تخصیص FIFO");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ FIFO");
     }
 });
 
@@ -483,7 +539,7 @@ issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-lifo", async (Guid id, G
     catch (Exception ex)
     {
         logger.LogError(ex, "Error allocating issue line {LineId} with LIFO", lineId);
-        return Results.Problem(detail: ex.Message, title: "خطا در تخصیص LIFO");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ LIFO");
     }
 });
 
@@ -502,7 +558,7 @@ issues.MapPost("/{id:guid}/post", async (Guid id, [FromBody] DateTime? when, IMe
     catch (Exception ex)
     {
         logger.LogError(ex, "Error posting issue {IssueId}", id);
-        return Results.Problem(detail: ex.Message, title: "خطا در ثبت خروجی");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪½╪¿╪¬ ╪«╪▒┘ê╪¼█î");
     }
 });
 
@@ -513,7 +569,7 @@ issues.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
 });
 
 
-// --- Transfers (انتقال بین انبارها) ---
+// --- Transfers (╪º┘å╪¬┘é╪º┘ä ╪¿█î┘å ╪º┘å╪¿╪º╪▒┘ç╪º) ---
 var transfers = app.MapGroup("/api/inventory/transfers").DisableAntiforgery();
 
 // List transfers with filters and pagination
@@ -547,7 +603,7 @@ transfers.MapGet("/", async (
     catch (Exception ex)
     {
         logger.LogError(ex, "Error getting transfers list");
-        return Results.Problem(detail: ex.Message, title: "خطا در دریافت لیست انتقالات");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪»╪▒█î╪º┘ü╪¬ ┘ä█î╪│╪¬ ╪º┘å╪¬┘é╪º┘ä╪º╪¬");
     }
 });
 
@@ -602,7 +658,7 @@ transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fefo", async (Guid id
     catch (Exception ex)
     {
         logger.LogError(ex, "Error allocating transfer line {LineId} for transfer {TransferId} (FEFO)", lineId, id);
-        return Results.Problem(detail: ex.Message, title: "خطا در تخصیص موجودی (FEFO)");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ ┘à┘ê╪¼┘ê╪»█î (FEFO)");
     }
 });
 
@@ -621,7 +677,7 @@ transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fifo", async (Guid id
     catch (Exception ex)
     {
         logger.LogError(ex, "Error allocating transfer line {LineId} for transfer {TransferId} (FIFO)", lineId, id);
-        return Results.Problem(detail: ex.Message, title: "خطا در تخصیص موجودی (FIFO)");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ ┘à┘ê╪¼┘ê╪»█î (FIFO)");
     }
 });
 
@@ -640,7 +696,7 @@ transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-lifo", async (Guid id
     catch (Exception ex)
     {
         logger.LogError(ex, "Error allocating transfer line {LineId} for transfer {TransferId} (LIFO)", lineId, id);
-        return Results.Problem(detail: ex.Message, title: "خطا در تخصیص موجودی (LIFO)");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ ┘à┘ê╪¼┘ê╪»█î (LIFO)");
     }
 });
 
@@ -664,7 +720,7 @@ transfers.MapPost("/{id:guid}/ship", async (Guid id, IMediator m, ILogger<Progra
     catch (Exception ex)
     {
         logger.LogError(ex, "Error shipping transfer {TransferId}", id);
-        return Results.Problem(detail: ex.Message, title: "خطا در ارسال سند انتقال");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪º╪▒╪│╪º┘ä ╪│┘å╪» ╪º┘å╪¬┘é╪º┘ä");
     }
 });
 
@@ -688,7 +744,7 @@ transfers.MapPost("/{id:guid}/receive", async (Guid id, ReceiveTransferCommand b
     catch (Exception ex)
     {
         logger.LogError(ex, "Error receiving transfer {TransferId} segment {SegmentId}", id, body.SegmentId);
-        return Results.Problem(detail: ex.Message, title: "خطا در ثبت دریافت انتقال");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪½╪¿╪¬ ╪»╪▒█î╪º┘ü╪¬ ╪º┘å╪¬┘é╪º┘ä");
     }
 });
 
@@ -697,37 +753,37 @@ transfers.MapPost("/{id:guid}/complete", async (Guid id, IMediator m, ILogger<Pr
     try
     {
         await m.Send(new CompleteTransferCommand(id));
-        return Results.Ok(new { message = "انتقال با موفقیت تایید شد." });
+        return Results.Ok(new { message = "╪º┘å╪¬┘é╪º┘ä ╪¿╪º ┘à┘ê┘ü┘é█î╪¬ ╪¬╪º█î█î╪» ╪┤╪»." });
     }
     catch (InvalidOperationException ex)
     {
-        logger.LogWarning(ex, "خطا در تایید نهایی انتقال {TransferId}", id);
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪¬╪º█î█î╪» ┘å┘ç╪º█î█î ╪º┘å╪¬┘é╪º┘ä {TransferId}", id);
         return Results.BadRequest(new
         {
             type = "https://tools.ietf.org/html/rfc9110#section-15.6.1",
-            title = "خطا در تایید نهایی انتقال",
+            title = "╪«╪╖╪º ╪»╪▒ ╪¬╪º█î█î╪» ┘å┘ç╪º█î█î ╪º┘å╪¬┘é╪º┘ä",
             status = 400,
             detail = ex.Message
         });
     }
     catch (ArgumentException ex)
     {
-        logger.LogWarning(ex, "خطای اعتبارسنجی در تایید نهایی انتقال {TransferId}", id);
+        logger.LogWarning(ex, "╪«╪╖╪º█î ╪º╪╣╪¬╪¿╪º╪▒╪│┘å╪¼█î ╪»╪▒ ╪¬╪º█î█î╪» ┘å┘ç╪º█î█î ╪º┘å╪¬┘é╪º┘ä {TransferId}", id);
         return Results.BadRequest(new
         {
             type = "https://tools.ietf.org/html/rfc9110#section-15.6.1",
-            title = "خطا در تایید نهایی انتقال",
+            title = "╪«╪╖╪º ╪»╪▒ ╪¬╪º█î█î╪» ┘å┘ç╪º█î█î ╪º┘å╪¬┘é╪º┘ä",
             status = 400,
             detail = ex.Message
         });
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "خطای غیرمنتظره در تایید نهایی انتقال {TransferId}", id);
+        logger.LogError(ex, "╪«╪╖╪º█î ╪║█î╪▒┘à┘å╪¬╪╕╪▒┘ç ╪»╪▒ ╪¬╪º█î█î╪» ┘å┘ç╪º█î█î ╪º┘å╪¬┘é╪º┘ä {TransferId}", id);
         return Results.Problem(
             detail: ex.Message,
             statusCode: 500,
-            title: "خطا در تایید نهایی انتقال"
+            title: "╪«╪╖╪º ╪»╪▒ ╪¬╪º█î█î╪» ┘å┘ç╪º█î█î ╪º┘å╪¬┘é╪º┘ä"
         );
     }
 });
@@ -739,7 +795,7 @@ transfers.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
 });
 
 
-// --- Adjustments (اصلاح موجودی / انبارگردانی) ---
+// --- Adjustments (╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î / ╪º┘å╪¿╪º╪▒┌»╪▒╪»╪º┘å█î) ---
 var adj = app.MapGroup("/api/inventory/adjustments").DisableAntiforgery();
 
 adj.MapGet("/", async (
@@ -771,15 +827,15 @@ adj.MapGet("/", async (
     }
     catch (InvalidOperationException ex)
     {
-        logger.LogWarning(ex, "خطا در دریافت لیست اصلاحات موجودی");
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪»╪▒█î╪º┘ü╪¬ ┘ä█î╪│╪¬ ╪º╪╡┘ä╪º╪¡╪º╪¬ ┘à┘ê╪¼┘ê╪»█î");
         return Results.BadRequest(new { error = ex.Message, type = "InvalidOperation" });
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "خطا در دریافت لیست اصلاحات موجودی");
+        logger.LogError(ex, "╪«╪╖╪º ╪»╪▒ ╪»╪▒█î╪º┘ü╪¬ ┘ä█î╪│╪¬ ╪º╪╡┘ä╪º╪¡╪º╪¬ ┘à┘ê╪¼┘ê╪»█î");
         return Results.Problem(
             detail: ex.Message,
-            title: "خطا در دریافت لیست اصلاحات موجودی",
+            title: "╪«╪╖╪º ╪»╪▒ ╪»╪▒█î╪º┘ü╪¬ ┘ä█î╪│╪¬ ╪º╪╡┘ä╪º╪¡╪º╪¬ ┘à┘ê╪¼┘ê╪»█î",
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
@@ -790,19 +846,19 @@ adj.MapGet("/{id:guid}", async (Guid id, IMediator m, ILogger<Program> logger) =
     try
     {
         var dto = await m.Send(new Inventory.Application.Features.Adjustments.Queries.AdjustmentDetailsQuery(id));
-        return dto is null ? Results.NotFound(new { error = "اصلاح موجودی یافت نشد", id }) : Results.Ok(dto);
+        return dto is null ? Results.NotFound(new { error = "╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î █î╪º┘ü╪¬ ┘å╪┤╪»", id }) : Results.Ok(dto);
     }
     catch (InvalidOperationException ex)
     {
-        logger.LogWarning(ex, "خطا در دریافت جزئیات اصلاح موجودی {AdjustmentId}", id);
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪»╪▒█î╪º┘ü╪¬ ╪¼╪▓╪ª█î╪º╪¬ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}", id);
         return Results.BadRequest(new { error = ex.Message, type = "InvalidOperation", id });
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "خطا در دریافت جزئیات اصلاح موجودی {AdjustmentId}", id);
+        logger.LogError(ex, "╪«╪╖╪º ╪»╪▒ ╪»╪▒█î╪º┘ü╪¬ ╪¼╪▓╪ª█î╪º╪¬ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}", id);
         return Results.Problem(
             detail: ex.Message,
-            title: "خطا در دریافت جزئیات اصلاح موجودی",
+            title: "╪«╪╖╪º ╪»╪▒ ╪»╪▒█î╪º┘ü╪¬ ╪¼╪▓╪ª█î╪º╪¬ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î",
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
@@ -817,20 +873,20 @@ adj.MapPost("/", async (CreateAdjustmentDraftCommand cmd, IMediator m, ILogger<P
     }
     catch (InvalidOperationException ex)
     {
-        logger.LogWarning(ex, "خطا در ایجاد اصلاح موجودی جدید");
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪º█î╪¼╪º╪» ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î ╪¼╪»█î╪»");
         return Results.BadRequest(new { error = ex.Message, type = "InvalidOperation" });
     }
     catch (ArgumentException ex)
     {
-        logger.LogWarning(ex, "خطا در اعتبارسنجی داده‌های ایجاد اصلاح موجودی");
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪º╪╣╪¬╪¿╪º╪▒╪│┘å╪¼█î ╪»╪º╪»┘çΓÇî┘ç╪º█î ╪º█î╪¼╪º╪» ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î");
         return Results.BadRequest(new { error = ex.Message, type = "Validation", paramName = ex.ParamName });
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "خطا در ایجاد اصلاح موجودی جدید");
+        logger.LogError(ex, "╪«╪╖╪º ╪»╪▒ ╪º█î╪¼╪º╪» ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î ╪¼╪»█î╪»");
         return Results.Problem(
             detail: ex.Message,
-            title: "خطا در ایجاد اصلاح موجودی",
+            title: "╪«╪╖╪º ╪»╪▒ ╪º█î╪¼╪º╪» ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î",
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
@@ -845,20 +901,20 @@ adj.MapPost("/{id:guid}/lines", async (Guid id, AddAdjustmentLineCommand body, I
     }
     catch (InvalidOperationException ex)
     {
-        logger.LogWarning(ex, "خطا در افزودن خط به اصلاح موجودی {AdjustmentId}", id);
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪º┘ü╪▓┘ê╪»┘å ╪«╪╖ ╪¿┘ç ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}", id);
         return Results.BadRequest(new { error = ex.Message, type = "InvalidOperation", adjustmentId = id });
     }
     catch (ArgumentException ex)
     {
-        logger.LogWarning(ex, "خطا در اعتبارسنجی داده‌های خط اصلاح موجودی");
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪º╪╣╪¬╪¿╪º╪▒╪│┘å╪¼█î ╪»╪º╪»┘çΓÇî┘ç╪º█î ╪«╪╖ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î");
         return Results.BadRequest(new { error = ex.Message, type = "Validation", paramName = ex.ParamName });
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "خطا در افزودن خط به اصلاح موجودی {AdjustmentId}", id);
+        logger.LogError(ex, "╪«╪╖╪º ╪»╪▒ ╪º┘ü╪▓┘ê╪»┘å ╪«╪╖ ╪¿┘ç ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}", id);
         return Results.Problem(
             detail: ex.Message,
-            title: "خطا در افزودن خط اصلاح موجودی",
+            title: "╪«╪╖╪º ╪»╪▒ ╪º┘ü╪▓┘ê╪»┘å ╪«╪╖ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î",
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
@@ -873,15 +929,15 @@ adj.MapDelete("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMe
     }
     catch (InvalidOperationException ex)
     {
-        logger.LogWarning(ex, "خطا در حذف خط از اصلاح موجودی {AdjustmentId}, LineId: {LineId}", id, lineId);
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪¡╪░┘ü ╪«╪╖ ╪º╪▓ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}, LineId: {LineId}", id, lineId);
         return Results.BadRequest(new { error = ex.Message, type = "InvalidOperation", adjustmentId = id, lineId });
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "خطا در حذف خط از اصلاح موجودی {AdjustmentId}, LineId: {LineId}", id, lineId);
+        logger.LogError(ex, "╪«╪╖╪º ╪»╪▒ ╪¡╪░┘ü ╪«╪╖ ╪º╪▓ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}, LineId: {LineId}", id, lineId);
         return Results.Problem(
             detail: ex.Message,
-            title: "خطا در حذف خط اصلاح موجودی",
+            title: "╪«╪╖╪º ╪»╪▒ ╪¡╪░┘ü ╪«╪╖ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î",
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
@@ -896,20 +952,20 @@ adj.MapPut("/{id:guid}", async (Guid id, UpdateAdjustmentHeaderCommand body, IMe
     }
     catch (InvalidOperationException ex)
     {
-        logger.LogWarning(ex, "خطا در به‌روزرسانی هدر اصلاح موجودی {AdjustmentId}", id);
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪¿┘çΓÇî╪▒┘ê╪▓╪▒╪│╪º┘å█î ┘ç╪»╪▒ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}", id);
         return Results.BadRequest(new { error = ex.Message, type = "InvalidOperation", adjustmentId = id });
     }
     catch (ArgumentException ex)
     {
-        logger.LogWarning(ex, "خطا در اعتبارسنجی داده‌های به‌روزرسانی هدر اصلاح موجودی");
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪º╪╣╪¬╪¿╪º╪▒╪│┘å╪¼█î ╪»╪º╪»┘çΓÇî┘ç╪º█î ╪¿┘çΓÇî╪▒┘ê╪▓╪▒╪│╪º┘å█î ┘ç╪»╪▒ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î");
         return Results.BadRequest(new { error = ex.Message, type = "Validation", paramName = ex.ParamName });
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "خطا در به‌روزرسانی هدر اصلاح موجودی {AdjustmentId}", id);
+        logger.LogError(ex, "╪«╪╖╪º ╪»╪▒ ╪¿┘çΓÇî╪▒┘ê╪▓╪▒╪│╪º┘å█î ┘ç╪»╪▒ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}", id);
         return Results.Problem(
             detail: ex.Message,
-            title: "خطا در به‌روزرسانی هدر اصلاح موجودی",
+            title: "╪«╪╖╪º ╪»╪▒ ╪¿┘çΓÇî╪▒┘ê╪▓╪▒╪│╪º┘å█î ┘ç╪»╪▒ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î",
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
@@ -924,20 +980,20 @@ adj.MapPut("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, Update
     }
     catch (InvalidOperationException ex)
     {
-        logger.LogWarning(ex, "خطا در به‌روزرسانی خط اصلاح موجودی {AdjustmentId}, LineId: {LineId}", id, lineId);
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪¿┘çΓÇî╪▒┘ê╪▓╪▒╪│╪º┘å█î ╪«╪╖ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}, LineId: {LineId}", id, lineId);
         return Results.BadRequest(new { error = ex.Message, type = "InvalidOperation", adjustmentId = id, lineId });
     }
     catch (ArgumentException ex)
     {
-        logger.LogWarning(ex, "خطا در اعتبارسنجی داده‌های به‌روزرسانی خط اصلاح موجودی");
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪º╪╣╪¬╪¿╪º╪▒╪│┘å╪¼█î ╪»╪º╪»┘çΓÇî┘ç╪º█î ╪¿┘çΓÇî╪▒┘ê╪▓╪▒╪│╪º┘å█î ╪«╪╖ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î");
         return Results.BadRequest(new { error = ex.Message, type = "Validation", paramName = ex.ParamName });
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "خطا در به‌روزرسانی خط اصلاح موجودی {AdjustmentId}, LineId: {LineId}", id, lineId);
+        logger.LogError(ex, "╪«╪╖╪º ╪»╪▒ ╪¿┘çΓÇî╪▒┘ê╪▓╪▒╪│╪º┘å█î ╪«╪╖ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}, LineId: {LineId}", id, lineId);
         return Results.Problem(
             detail: ex.Message,
-            title: "خطا در به‌روزرسانی خط اصلاح موجودی",
+            title: "╪«╪╖╪º ╪»╪▒ ╪¿┘çΓÇî╪▒┘ê╪▓╪▒╪│╪º┘å█î ╪«╪╖ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î",
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
@@ -952,15 +1008,15 @@ adj.MapPost("/{id:guid}/post", async (Guid id, IMediator m, ILogger<Program> log
     }
     catch (InvalidOperationException ex)
     {
-        logger.LogWarning(ex, "خطا در ثبت اصلاح موجودی {AdjustmentId}", id);
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ╪½╪¿╪¬ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}", id);
         return Results.BadRequest(new { error = ex.Message, type = "InvalidOperation", adjustmentId = id });
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "خطا در ثبت اصلاح موجودی {AdjustmentId}", id);
+        logger.LogError(ex, "╪«╪╖╪º ╪»╪▒ ╪½╪¿╪¬ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}", id);
         return Results.Problem(
             detail: ex.Message,
-            title: "خطا در ثبت اصلاح موجودی",
+            title: "╪«╪╖╪º ╪»╪▒ ╪½╪¿╪¬ ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î",
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
@@ -975,15 +1031,15 @@ adj.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m, ILogger<Program> l
     }
     catch (InvalidOperationException ex)
     {
-        logger.LogWarning(ex, "خطا در لغو اصلاح موجودی {AdjustmentId}", id);
+        logger.LogWarning(ex, "╪«╪╖╪º ╪»╪▒ ┘ä╪║┘ê ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}", id);
         return Results.BadRequest(new { error = ex.Message, type = "InvalidOperation", adjustmentId = id });
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "خطا در لغو اصلاح موجودی {AdjustmentId}", id);
+        logger.LogError(ex, "╪«╪╖╪º ╪»╪▒ ┘ä╪║┘ê ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î {AdjustmentId}", id);
         return Results.Problem(
             detail: ex.Message,
-            title: "خطا در لغو اصلاح موجودی",
+            title: "╪«╪╖╪º ╪»╪▒ ┘ä╪║┘ê ╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î",
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
@@ -1048,7 +1104,7 @@ shelves.MapPost("/batch", async (Inventory.Application.Features.Shelves.Commands
     catch (Exception ex)
     {
         logger.LogError(ex, "Error batch creating shelves for warehouse {WarehouseId}", cmd.WarehouseId);
-        return Results.Problem(detail: ex.Message, title: "خطا در ایجاد گروهی قفسه‌ها");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪º█î╪¼╪º╪» ┌»╪▒┘ê┘ç█î ┘é┘ü╪│┘çΓÇî┘ç╪º");
     }
 });
 
@@ -1073,7 +1129,7 @@ shelves.MapDelete("/{id:guid}", async (Guid id, IMediator m, ILogger<Program> lo
     catch (Exception ex)
     {
         logger.LogError(ex, "Error deleting shelf {ShelfId}", id);
-        return Results.Problem(detail: ex.Message, title: "خطا در حذف قفسه");
+        return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¡╪░┘ü ┘é┘ü╪│┘ç");
     }
 });
 
@@ -1108,7 +1164,7 @@ ops.MapPost("/move-stock", async (MoveStockItemCommand cmd, IMediator m, ILogger
     {
         logger.LogWarning(ex, "Failed to move stock to shelf");
         return Results.Problem(
-            title: "خطا در انتقال کالا",
+            title: "╪«╪╖╪º ╪»╪▒ ╪º┘å╪¬┘é╪º┘ä ┌⌐╪º┘ä╪º",
             detail: ex.Message,
             statusCode: StatusCodes.Status400BadRequest);
     }
@@ -1116,14 +1172,14 @@ ops.MapPost("/move-stock", async (MoveStockItemCommand cmd, IMediator m, ILogger
     {
         logger.LogError(ex, "Error moving stock to shelf");
         return Results.Problem(
-            title: "خطا در انتقال کالا",
+            title: "╪«╪╖╪º ╪»╪▒ ╪º┘å╪¬┘é╪º┘ä ┌⌐╪º┘ä╪º",
             detail: ex.Message,
             statusCode: StatusCodes.Status500InternalServerError);
     }
 });
 
 
-// --- Warehouses (انبارها) ---
+// --- Warehouses (╪º┘å╪¿╪º╪▒┘ç╪º) ---
 var warehouses = app.MapGroup("/api/inventory/warehouses").DisableAntiforgery();
 
 warehouses.MapGet("/", async (bool? isActive, IMediator m) =>
@@ -1157,7 +1213,7 @@ warehouses.MapPost("/{id:guid}/deactivate", async (Guid id, IMediator m) =>
 });
 
 
-// --- Stock Ledger (کاردکس انبار) ---
+// --- Stock Ledger (┌⌐╪º╪▒╪»┌⌐╪│ ╪º┘å╪¿╪º╪▒) ---
 var stockLedger = app.MapGroup("/api/inventory/stock-ledger").DisableAntiforgery();
 
 stockLedger.MapGet("/{id:guid}", async (Guid id, IMediator m) =>
@@ -1208,7 +1264,7 @@ stockLedger.MapGet("/", async (
     return await m.Send(query);
 });
 
-// --- Stock Items (موجودی‌های انبار) ---
+// --- Stock Items (┘à┘ê╪¼┘ê╪»█îΓÇî┘ç╪º█î ╪º┘å╪¿╪º╪▒) ---
 var stockItems = app.MapGroup("/api/inventory/stock-items").DisableAntiforgery();
 
 stockItems.MapGet("/", async (
@@ -1275,7 +1331,7 @@ stockItems.MapGet("/products", async (
 });
 
 
-// --- Catalog Proxy (برای جستجوی محصولات از کاتالوگ) ---
+// --- Catalog Proxy (╪¿╪▒╪º█î ╪¼╪│╪¬╪¼┘ê█î ┘à╪¡╪╡┘ê┘ä╪º╪¬ ╪º╪▓ ┌⌐╪º╪¬╪º┘ä┘ê┌») ---
 var catalogProxy = app.MapGroup("/api/inventory/catalog").DisableAntiforgery();
 
 // Search products from Catalog API
@@ -1311,7 +1367,7 @@ catalogProxy.MapGet("/products", async (
     catch (Exception ex)
     {
         logger.LogError(ex, "Error fetching products from Catalog API");
-        return Results.Problem("خطا در دریافت لیست محصولات از کاتالوگ");
+        return Results.Problem("╪«╪╖╪º ╪»╪▒ ╪»╪▒█î╪º┘ü╪¬ ┘ä█î╪│╪¬ ┘à╪¡╪╡┘ê┘ä╪º╪¬ ╪º╪▓ ┌⌐╪º╪¬╪º┘ä┘ê┌»");
     }
 });
 
@@ -1341,7 +1397,7 @@ catalogProxy.MapGet("/products/{id:guid}", async (
     catch (Exception ex)
     {
         logger.LogError(ex, "Error fetching product {ProductId} from Catalog API", id);
-        return Results.Problem("خطا در دریافت اطلاعات محصول از کاتالوگ");
+        return Results.Problem("╪«╪╖╪º ╪»╪▒ ╪»╪▒█î╪º┘ü╪¬ ╪º╪╖┘ä╪º╪╣╪º╪¬ ┘à╪¡╪╡┘ê┘ä ╪º╪▓ ┌⌐╪º╪¬╪º┘ä┘ê┌»");
     }
 });
 

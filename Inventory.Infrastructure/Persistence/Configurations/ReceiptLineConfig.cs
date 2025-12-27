@@ -1,4 +1,5 @@
 ﻿using Inventory.Domain.Aggregates;
+using Inventory.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -21,7 +22,13 @@ public sealed class ReceiptLineConfig : IEntityTypeConfiguration<ReceiptLine>
         // فیلدهای جدید برای تایید/رد جزئی
         b.Property(x => x.ApprovedQty).HasPrecision(18, 3).IsRequired().HasDefaultValue(0);
         b.Property(x => x.RejectedQty).HasPrecision(18, 3).IsRequired().HasDefaultValue(0);
+        b.Property(x => x.RejectionApprovedQty).HasPrecision(18, 3).IsRequired().HasDefaultValue(0);
+        b.Property(x => x.RejectionReturnedQty).HasPrecision(18, 3).IsRequired().HasDefaultValue(0);
+        b.Property(x => x.RejectionDisposedQty).HasPrecision(18, 3).IsRequired().HasDefaultValue(0);
         b.Property(x => x.RejectionReason).HasMaxLength(1000);
+        b.Property(x => x.RejectionStatus).HasConversion<int>().IsRequired().HasDefaultValue(ReceiptRejectionStatus.None);
+        b.Property(x => x.RejectionResolvedAt).HasColumnType("datetime2");
+        b.Property(x => x.RejectionResolutionNote).HasMaxLength(1000);
 
         b.HasIndex(x => new { x.ReceiptId, x.LineNo }).IsUnique();
 
