@@ -1,3 +1,4 @@
+using Inventory.Application.Features.Transfers.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +39,7 @@ public sealed class RemoveTransferLineHandler : IRequestHandler<RemoveTransferLi
                             ?? throw new InvalidOperationException($"StockItem با شناسه {seg.StockItemId} پیدا نشد.");
 
                         stockItem.Release(seg.Qty);
+                        await TransferSerialsHelper.ReleaseReservedSerialsAsync(_db, seg.Id, ct);
                     }
 
                     // Clear segments and remove the line

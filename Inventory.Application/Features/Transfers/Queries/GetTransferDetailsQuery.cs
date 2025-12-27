@@ -39,7 +39,13 @@ public sealed record TransferSegmentDto(
     string? ShelfName,
     decimal Qty,
     decimal ReceivedQty,
-    decimal RemainingToReceive
+    decimal RemainingToReceive,
+    IReadOnlyList<TransferSegmentSerialDto> Serials
+);
+
+public sealed record TransferSegmentSerialDto(
+    string SerialNumber,
+    StockSerialStatus Status
 );
 
 public sealed class GetTransferDetailsHandler : IRequestHandler<TransferDetailsQuery, TransferDetailsDto?>
@@ -64,6 +70,37 @@ public sealed class GetTransferDetailsHandler : IRequestHandler<TransferDetailsQ
             .Select(s => s.StockItemId)
             .Distinct()
             .ToList();
+
+        var segmentIds = tr.Lines
+            .SelectMany(l => l.Segments)
+            .Select(s => s.Id)
+            .ToList();
+
+        var serialRows = new List<(Guid SegmentId, TransferSegmentSerialDto Serial)>();
+        if (segmentIds.Count > 0)
+        {
+            var rawSerials = await _db.StockItemSerials
+                .AsNoTracking()
+                .Where(s => s.TransferSegmentId != null && segmentIds.Contains(s.TransferSegmentId.Value))
+                .Select(s => new
+                {
+                    SegmentId = s.TransferSegmentId!.Value,
+                    Serial = new TransferSegmentSerialDto(s.SerialNumber, s.Status)
+                })
+                .ToListAsync(ct);
+
+            serialRows = rawSerials
+                .Select(x => (x.SegmentId, x.Serial))
+                .ToList();
+        }
+
+        var serialsLookup = serialRows
+            .GroupBy(s => s.SegmentId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(x => x.Serial.SerialNumber)
+                      .Select(x => x.Serial)
+                      .ToList() as IReadOnlyList<TransferSegmentSerialDto>);
 
         // Load stock items with their details
         var stockItems = await _db.StockItems
@@ -108,6 +145,9 @@ public sealed class GetTransferDetailsHandler : IRequestHandler<TransferDetailsQ
                     .Select(s =>
                     {
                         var stockInfo = stockItemsDict.TryGetValue(s.StockItemId, out var info) ? info : null;
+                        var segmentSerials = serialsLookup.TryGetValue(s.Id, out var list)
+                            ? list
+                            : Array.Empty<TransferSegmentSerialDto>();
                         return new TransferSegmentDto(
                             s.Id,
                             s.StockItemId,
@@ -117,7 +157,8 @@ public sealed class GetTransferDetailsHandler : IRequestHandler<TransferDetailsQ
                             stockInfo?.ShelfName,
                             s.Qty,
                             s.ReceivedQty,
-                            s.RemainingToReceive
+                            s.RemainingToReceive,
+                            segmentSerials
                         );
                     })
                     .ToList()

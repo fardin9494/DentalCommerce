@@ -1,4 +1,5 @@
 using Inventory.Domain.Aggregates;
+using Inventory.Application.Features.Issues.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -28,12 +29,11 @@ public sealed class AllocateIssueLineLifoHandler : IRequestHandler<AllocateIssue
                         .Include(i => i.Lines)
                         .ThenInclude(l => l.Allocations)
                         .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
-                        ?? throw new InvalidOperationException("سند خروج یافت نشد.");
+                        ?? throw new InvalidOperationException("Issue not found.");
 
                     var line = issue.Lines.FirstOrDefault(l => l.Id == req.LineId);
-                    if (line is null) throw new InvalidOperationException("خط سند مورد نظر یافت نشد.");
+                    if (line is null) throw new InvalidOperationException("Issue line not found.");
 
-                    // آزاد کردن تخصیص‌های قبلی
                     foreach (var alloc in line.Allocations.ToList())
                     {
                         var stock = await _db.StockItems.FirstOrDefaultAsync(x => x.Id == alloc.StockItemId, ct);
@@ -42,6 +42,8 @@ public sealed class AllocateIssueLineLifoHandler : IRequestHandler<AllocateIssue
                             stock.Release(alloc.Qty);
                         }
                     }
+
+                    await IssueSerialsHelper.ReleaseReservedSerialsAsync(_db, line.Id, ct);
                     issue.ClearAllocations(req.LineId);
                     await _db.SaveChangesAsync(ct);
 
@@ -55,24 +57,19 @@ public sealed class AllocateIssueLineLifoHandler : IRequestHandler<AllocateIssue
                         break;
                     }
 
-                    // استراتژی LIFO: بر اساس CreatedAt (جدیدترین اول)
-                    // اگر PreferredWarehouseId مشخص شده باشد، فقط از آن انبار استفاده می‌کنیم
-                    // در غیر اینصورت از تمام انبارها جستجو می‌کنیم
                     var query = _db.StockItems
                         .Where(si => si.ProductId == line.ProductId
                                      && si.VariantId == line.VariantId
                                      && si.ShelfId != null
                                      && (si.OnHand - si.Reserved - si.Blocked) > 0);
 
-                    // اگر PreferredWarehouseId مشخص شده باشد، فقط از آن انبار استفاده می‌کنیم
                     if (req.PreferredWarehouseId.HasValue)
                     {
                         query = query.Where(si => si.WarehouseId == req.PreferredWarehouseId.Value);
                     }
-                    // در غیر اینصورت از تمام انبارها جستجو می‌کنیم (بدون فیلتر WarehouseId)
 
                     var candidates = await query
-                        .OrderByDescending(si => si.CreatedAt) // LIFO: جدیدترین اول
+                        .OrderByDescending(si => si.CreatedAt)
                         .ToListAsync(ct);
 
                     foreach (var stock in candidates)
@@ -83,6 +80,8 @@ public sealed class AllocateIssueLineLifoHandler : IRequestHandler<AllocateIssue
                         decimal toTake = Math.Min(available, qtyNeeded);
 
                         stock.Reserve(toTake);
+                        await IssueSerialsHelper.ReserveSerialsAsync(_db, stock.Id, issue.Id, line.Id, toTake, ct);
+
                         var alloc = issue.AddAllocation(line.Id, stock.Id, toTake);
                         _db.Entry(alloc).State = EntityState.Added;
 
@@ -91,7 +90,7 @@ public sealed class AllocateIssueLineLifoHandler : IRequestHandler<AllocateIssue
                     }
 
                     if (qtyNeeded > 0)
-                        throw new InvalidOperationException($"موجودی قابل فروش کافی در قفسه‌ها یافت نشد. مقدار کسر: {qtyNeeded}");
+                        throw new InvalidOperationException($"Not enough available stock. Remaining: {qtyNeeded}");
 
                     await _db.SaveChangesAsync(ct);
                     await tx.CommitAsync(ct);
@@ -109,4 +108,3 @@ public sealed class AllocateIssueLineLifoHandler : IRequestHandler<AllocateIssue
         return result;
     }
 }
-

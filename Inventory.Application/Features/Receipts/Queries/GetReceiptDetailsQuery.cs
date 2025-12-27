@@ -31,7 +31,8 @@ public sealed record ReceiptLineDto(
     decimal ApprovedQty,
     decimal RejectedQty,
     string? RejectionReason,
-    decimal RemainingQty
+    decimal RemainingQty,
+    int SerialsCount
 );
 
 public sealed class GetReceiptDetailsHandler : IRequestHandler<ReceiptDetailsQuery, ReceiptDetailsDto?>
@@ -48,6 +49,14 @@ public sealed class GetReceiptDetailsHandler : IRequestHandler<ReceiptDetailsQue
 
         if (rec is null) return null;
 
+        var lineIds = rec.Lines.Select(l => l.Id).ToList();
+        var serialCounts = await _db.StockItemSerials
+            .AsNoTracking()
+            .Where(s => lineIds.Contains(s.ReceiptLineId))
+            .GroupBy(s => s.ReceiptLineId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+
         var lines = rec.Lines
             .OrderBy(l => l.LineNo)
             .Select(l => new ReceiptLineDto(
@@ -62,7 +71,8 @@ public sealed class GetReceiptDetailsHandler : IRequestHandler<ReceiptDetailsQue
                 l.ApprovedQty,
                 l.RejectedQty,
                 l.RejectionReason,
-                l.RemainingQty
+                l.RemainingQty,
+                serialCounts.TryGetValue(l.Id, out var count) ? count : 0
             ))
             .ToList();
 

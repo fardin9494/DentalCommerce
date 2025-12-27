@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueries } from '@tanstack/react-query'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -25,6 +25,7 @@ interface PickingItem {
   warehouseName: string | null
   productName?: string
   variantValue?: string
+  serials?: string[]
 }
 
 export function PickingPlanPage() {
@@ -81,6 +82,7 @@ export function PickingPlanPage() {
             shelfName: allocation.shelfName || null,
             warehouseId: allocation.warehouseId || null,
             warehouseName: allocation.warehouseName || null,
+            serials: allocation.serials?.map((s) => s.serialNumber) || [],
           })
         })
       })
@@ -363,8 +365,14 @@ export function PickingPlanPage() {
                                   {item.sku || 'نامشخص'}
                                 </div>
                                 <div className="mt-0.5 text-xs text-slate-500">
-                                  رسید: {item.issueExternalRef || item.issueId.substring(0, 8)} - خط {item.lineNo}
-                                </div>
+                                   رسید: {item.issueExternalRef || item.issueId.substring(0, 8)} - خط {item.lineNo}
+                                 </div>
+                                {item.serials && item.serials.length > 0 && (
+                                  <div className="mt-1 text-xs text-slate-500">
+                                    Serials:{' '}
+                                    <span className="font-mono">{item.serials.join(", ")}</span>
+                                  </div>
+                                )}
                               </div>
                               <div className="col-span-2">
                                 <div className="text-xs text-slate-500">تعداد</div>
@@ -424,4 +432,5 @@ export function PickingPlanPage() {
     </div>
   )
 }
+
 

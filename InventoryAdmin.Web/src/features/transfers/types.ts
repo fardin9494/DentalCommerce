@@ -30,6 +30,12 @@ export const TransferStatusColors: Record<TransferStatus, string> = {
   Canceled: 'bg-red-100 text-red-800',
 }
 
+export const TransferSegmentSerialSchema = z.object({
+  serialNumber: z.string(),
+  status: z.string(),
+})
+export type TransferSegmentSerial = z.infer<typeof TransferSegmentSerialSchema>
+
 export const TransferSegmentSchema = z.object({
   id: z.string().uuid(),
   stockItemId: z.string().uuid(),
@@ -40,6 +46,7 @@ export const TransferSegmentSchema = z.object({
   qty: z.number(),
   receivedQty: z.number(),
   remainingToReceive: z.number(),
+  serials: z.array(TransferSegmentSerialSchema),
 })
 export type TransferSegment = z.infer<typeof TransferSegmentSchema>
 

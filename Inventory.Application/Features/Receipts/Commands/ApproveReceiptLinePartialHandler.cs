@@ -1,4 +1,5 @@
 using Inventory.Domain.Enums;
+using Inventory.Application.Features.Receipts.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -80,6 +81,7 @@ public sealed class ApproveReceiptLinePartialHandler : IRequestHandler<ApproveRe
 
                     // بررسی تکلیف خطوط (بدون تایید خودکار)
 
+                    await ReceiptSerialsHelper.SyncLineSerialStatusesAsync(_db, line, stock.ShelfId.HasValue, ct);
                     await _db.SaveChangesAsync(ct);
                     await tx.CommitAsync(ct);
                     break;

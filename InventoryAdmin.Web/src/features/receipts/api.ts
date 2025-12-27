@@ -1,5 +1,5 @@
 import { fetchJson, toQuery } from '@/lib/api/client'
-import { ReceiptDetailSchema, CreateReceiptSchema, AddReceiptLineSchema, UpdateReceiptHeaderSchema, UpdateReceiptLineSchema, ReceiptsListResultSchema, type ReceiptDetail, type CreateReceiptDto, type AddReceiptLineDto, type UpdateReceiptHeaderDto, type UpdateReceiptLineDto, type ReceiptsListResult, type ReceiptsListFilters } from './types'
+import { ReceiptDetailSchema, CreateReceiptSchema, AddReceiptLineSchema, UpdateReceiptHeaderSchema, UpdateReceiptLineSchema, ReceiptsListResultSchema, ReceiptLineSerialSchema, type ReceiptDetail, type CreateReceiptDto, type AddReceiptLineDto, type UpdateReceiptHeaderDto, type UpdateReceiptLineDto, type ReceiptsListResult, type ReceiptsListFilters, type ReceiptLineSerial } from './types'
 
 export async function getReceiptsList(filters: ReceiptsListFilters = {}): Promise<ReceiptsListResult> {
   const query = toQuery(filters)
@@ -59,6 +59,18 @@ export async function rejectReceiptLine(receiptId: string, lineId: string, qty: 
   return fetchJson<void>(`/receipts/${receiptId}/lines/${lineId}/reject`, {
     method: 'POST',
     json: { qty, reason: reason || null },
+  })
+}
+
+export async function getReceiptLineSerials(receiptId: string, lineId: string): Promise<ReceiptLineSerial[]> {
+  const data = await fetchJson<unknown>(`/receipts/${receiptId}/lines/${lineId}/serials`)
+  return ReceiptLineSerialSchema.array().parse(data)
+}
+
+export async function setReceiptLineSerials(receiptId: string, lineId: string, serials: string[]): Promise<void> {
+  return fetchJson<void>(`/receipts/${receiptId}/lines/${lineId}/serials`, {
+    method: 'PUT',
+    json: { serials },
   })
 }
 

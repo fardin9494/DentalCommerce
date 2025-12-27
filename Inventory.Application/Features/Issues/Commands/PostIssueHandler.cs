@@ -1,4 +1,5 @@
-using Inventory.Domain.Aggregates;
+﻿using Inventory.Domain.Aggregates;
+using Inventory.Application.Features.Issues.Serials;
 using Inventory.Domain.Enums;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
@@ -78,6 +79,8 @@ public sealed class PostIssueHandler : IRequestHandler<PostIssueCommand, Unit>
                             }
 
                             // بررسی موجودی OnHand
+                            await IssueSerialsHelper.MarkIssuedAsync(_db, stock.Id, issue.Id, line.Id, alloc.Qty, when, ct);
+
                             if (stock.OnHand < alloc.Qty)
                             {
                                 throw new InvalidOperationException(

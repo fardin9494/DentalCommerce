@@ -1,5 +1,6 @@
 ﻿using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
+using Inventory.Application.Features.Receipts.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -136,6 +137,7 @@ public sealed class RejectReceiptLineHandler : IRequestHandler<RejectReceiptLine
                     }
 
 
+                    await ReceiptSerialsHelper.SyncLineSerialStatusesAsync(_db, line, stock.ShelfId.HasValue, ct);
                     await _db.SaveChangesAsync(ct);
                     await tx.CommitAsync(ct);
                     break;

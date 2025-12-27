@@ -21,6 +21,7 @@ export const IssueAllocationSchema = z.object({
   shelfName: z.string().nullable().optional(),
   warehouseId: z.string().uuid().nullable().optional(), // اختیاری برای سازگاری با رکوردهای قدیمی
   warehouseName: z.string().nullable().optional(),
+  serials: z.array(z.object({ serialNumber: z.string(), status: z.string() })),
 })
 export type IssueAllocation = z.infer<typeof IssueAllocationSchema>
 
@@ -119,7 +120,6 @@ export interface IssuesListFilters {
   toDate?: string
   search?: string
 }
-
 
 
 

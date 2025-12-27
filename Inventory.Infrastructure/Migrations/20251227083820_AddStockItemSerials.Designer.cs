@@ -4,6 +4,7 @@ using Inventory.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Inventory.Infrastructure.Migrations
 {
     [DbContext(typeof(InventoryDbContext))]
-    partial class InventoryDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251227083820_AddStockItemSerials")]
+    partial class AddStockItemSerials
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -552,15 +555,6 @@ namespace Inventory.Infrastructure.Migrations
                     b.Property<Guid?>("StockItemId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("TransferId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("TransferLineId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("TransferSegmentId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -576,12 +570,6 @@ namespace Inventory.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("StockItemId");
-
-                    b.HasIndex("TransferId");
-
-                    b.HasIndex("TransferLineId");
-
-                    b.HasIndex("TransferSegmentId");
 
                     b.ToTable("StockItemSerial", "inv");
                 });
@@ -950,21 +938,6 @@ namespace Inventory.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("StockItemId")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Inventory.Domain.Aggregates.Transfer", null)
-                        .WithMany()
-                        .HasForeignKey("TransferId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
-                    b.HasOne("Inventory.Domain.Aggregates.TransferLine", null)
-                        .WithMany()
-                        .HasForeignKey("TransferLineId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
-                    b.HasOne("Inventory.Domain.Aggregates.TransferSegment", null)
-                        .WithMany()
-                        .HasForeignKey("TransferSegmentId")
-                        .OnDelete(DeleteBehavior.NoAction);
                 });
 
             modelBuilder.Entity("Inventory.Domain.Aggregates.TransferLine", b =>

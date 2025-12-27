@@ -287,6 +287,44 @@ receipts.MapPut("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, U
     return Results.NoContent();
 });
 
+receipts.MapGet("/{id:guid}/lines/{lineId:guid}/serials", async (Guid id, Guid lineId, IMediator m, ILogger<Program> logger) =>
+{
+    try
+    {
+        var result = await m.Send(new Inventory.Application.Features.Receipts.Queries.GetReceiptLineSerialsQuery(id, lineId));
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to load receipt line serials {ReceiptId}/{LineId}", id, lineId);
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error loading receipt line serials {ReceiptId}/{LineId}", id, lineId);
+        return Results.Problem(detail: ex.Message, title: "خطا در دریافت سریال‌های خط رسید");
+    }
+});
+
+receipts.MapPut("/{id:guid}/lines/{lineId:guid}/serials", async (Guid id, Guid lineId, SetReceiptLineSerialsBody body, IMediator m, ILogger<Program> logger) =>
+{
+    try
+    {
+        await m.Send(new SetReceiptLineSerialsCommand(id, lineId, body.Serials));
+        return Results.NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to update receipt line serials {ReceiptId}/{LineId}", id, lineId);
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error updating receipt line serials {ReceiptId}/{LineId}", id, lineId);
+        return Results.Problem(detail: ex.Message, title: "خطا در به‌روزرسانی سریال‌های خط رسید");
+    }
+});
+
 // ????? ????: ??? Receive ??????? Post ??
 receipts.MapPost("/{id:guid}/receive", async (Guid id, [FromBody] DateTime? when, IMediator m, ILogger<Program> logger) =>
 {
@@ -1290,6 +1328,23 @@ stockItems.MapGet("/", async (
         Page: page ?? 1,
         PageSize: pageSize ?? 20
     );
+    var result = await m.Send(query);
+    return Results.Ok(result);
+});
+
+stockItems.MapGet("/{id:guid}/serials", async (
+    Guid id,
+    string? status,
+    IMediator m) =>
+{
+    StockSerialStatus? parsedStatus = null;
+    if (!string.IsNullOrWhiteSpace(status) &&
+        Enum.TryParse<StockSerialStatus>(status, ignoreCase: true, out var statusValue))
+    {
+        parsedStatus = statusValue;
+    }
+
+    var query = new Inventory.Application.Features.Stock.Queries.GetStockItemSerialsQuery(id, parsedStatus);
     var result = await m.Send(query);
     return Results.Ok(result);
 });

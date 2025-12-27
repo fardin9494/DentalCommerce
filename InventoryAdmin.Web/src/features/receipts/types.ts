@@ -57,8 +57,16 @@ export const ReceiptLineSchema = z.object({
   rejectedQty: z.number().default(0),
   rejectionReason: z.string().nullable().optional(),
   remainingQty: z.number().default(0),
+  serialsCount: z.number().default(0),
 })
 export type ReceiptLine = z.infer<typeof ReceiptLineSchema>
+
+export const ReceiptLineSerialSchema = z.object({
+  id: z.string().uuid(),
+  serialNumber: z.string(),
+  status: z.string(),
+})
+export type ReceiptLineSerial = z.infer<typeof ReceiptLineSerialSchema>
 
 export const ReceiptDetailSchema = z.object({
   id: z.string().uuid(),

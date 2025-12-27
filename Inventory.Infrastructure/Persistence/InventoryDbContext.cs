@@ -15,6 +15,7 @@ public sealed class InventoryDbContext : DbContext
 
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<StockItem> StockItems => Set<StockItem>();
+    public DbSet<StockItemSerial> StockItemSerials => Set<StockItemSerial>();
     public DbSet<StockLedgerEntry> StockLedger => Set<StockLedgerEntry>();
     public DbSet<Receipt> Receipts => Set<Receipt>();
     public DbSet<ReceiptLine> ReceiptLines => Set<ReceiptLine>();

@@ -1,4 +1,5 @@
 ﻿using Inventory.Domain.Aggregates;
+using Inventory.Application.Features.Issues.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +46,7 @@ public sealed class AllocateIssueLineFefoHandler : IRequestHandler<AllocateIssue
                             stock.Release(alloc.Qty);
                         }
                     }
+                    await IssueSerialsHelper.ReleaseReservedSerialsAsync(_db, line.Id, ct);
                     issue.ClearAllocations(req.LineId);
                     await _db.SaveChangesAsync(ct);
 
@@ -94,6 +96,7 @@ public sealed class AllocateIssueLineFefoHandler : IRequestHandler<AllocateIssue
 
                         // الف) رزرو روی موجودی کالا
                         stock.Reserve(toTake);
+                        await IssueSerialsHelper.ReserveSerialsAsync(_db, stock.Id, issue.Id, line.Id, toTake, ct);
 
                         // ب) ثبت تخصیص در سند خروج
                         var alloc = issue.AddAllocation(line.Id, stock.Id, toTake);
@@ -125,3 +128,5 @@ public sealed class AllocateIssueLineFefoHandler : IRequestHandler<AllocateIssue
         return result;
     }
 }
+
+

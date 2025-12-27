@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Spinner } from '@/shared/components/Spinner'
@@ -18,6 +18,7 @@ import { useConfirm } from '@/shared/components/confirm/ConfirmProvider'
 import { swalPrompt } from '@/shared/utils/swal'
 import { EditReceiptLineModal } from '../components/EditReceiptLineModal'
 import { ApproveRejectLineModal } from '../components/ApproveRejectLineModal'
+import { ReceiptLineSerialsModal } from '../components/ReceiptLineSerialsModal'
 import { ProductSearchSelect, type ProductSelection } from '@/shared/components/ProductSearchSelect'
 import DatePicker from 'react-multi-date-picker'
 import DateObject from 'react-date-object'
@@ -65,6 +66,7 @@ export function ReceiptDetailPage() {
   })
   const [editingLine, setEditingLine] = useState<ReceiptLine | null>(null)
   const [approveRejectLine, setApproveRejectLine] = useState<{ line: ReceiptLine; mode: 'approve' | 'reject' } | null>(null)
+  const [serialsLine, setSerialsLine] = useState<ReceiptLine | null>(null)
   const updateLine = useUpdateReceiptLine(id!)
   const approveLinePartial = useApproveReceiptLinePartial(id!)
   const rejectLine = useRejectReceiptLine(id!)
@@ -765,6 +767,16 @@ export function ReceiptDetailPage() {
                             </svg>
                           </button>
                           <button
+                            onClick={() => setSerialsLine(line)}
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                            title={`سریال‌ها (${line.serialsCount.toLocaleString('fa-IR')})`}
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                            </svg>
+                            <span className="text-[10px]">{line.serialsCount.toLocaleString('fa-IR')}</span>
+                          </button>
+                          <button
                             onClick={() => handleRemoveLine(line.id)}
                             disabled={removeLine.isPending}
                             className="rounded-lg p-1.5 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
@@ -832,6 +844,15 @@ export function ReceiptDetailPage() {
         onClose={() => setApproveRejectLine(null)}
         onSubmit={handleApproveRejectLine}
         isSubmitting={approveLinePartial.isPending || rejectLine.isPending}
+      />
+
+      <ReceiptLineSerialsModal
+        isOpen={!!serialsLine}
+        receiptId={id!}
+        line={serialsLine}
+        productName={serialsLine ? getProductName(serialsLine.productId) : undefined}
+        variantName={serialsLine?.variantId ? getVariantName(serialsLine.variantId) : undefined}
+        onClose={() => setSerialsLine(null)}
       />
     </div>
   )

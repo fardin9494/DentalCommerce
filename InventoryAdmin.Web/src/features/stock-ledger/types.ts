@@ -34,6 +34,12 @@ export const StockMovementTypeColors: Record<StockMovementType, string> = {
   ShelfTransferIn: 'bg-purple-100 text-purple-800',
 }
 
+export const StockLedgerSerialSchema = z.object({
+  serialNumber: z.string(),
+  status: z.string(),
+})
+export type StockLedgerSerial = z.infer<typeof StockLedgerSerialSchema>
+
 export const StockLedgerEntrySchema = z.object({
   id: z.string().uuid(),
   timestamp: z.string(),
@@ -95,6 +101,7 @@ export const StockLedgerEntryDetailsSchema = z.object({
   productName: z.string().nullable().optional(),
   variantName: z.string().nullable().optional(),
   sku: z.string().nullable().optional(),
+  serials: z.array(StockLedgerSerialSchema),
   refDocDetails: z.any().nullable().optional(),
 })
 export type StockLedgerEntryDetails = z.infer<typeof StockLedgerEntryDetailsSchema>

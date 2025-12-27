@@ -26,7 +26,13 @@ public sealed record StockLedgerEntryDetailsDto(
     string? ProductName,
     string? VariantName,
     string? Sku,
+    IReadOnlyList<StockLedgerEntrySerialDto> Serials,
     object? RefDocDetails // جزئیات سند مرجع (Receipt, Issue, Transfer, Adjustment)
+);
+
+public sealed record StockLedgerEntrySerialDto(
+    string SerialNumber,
+    StockSerialStatus Status
 );
 
 public sealed class GetStockLedgerEntryDetailsHandler : IRequestHandler<GetStockLedgerEntryDetailsQuery, StockLedgerEntryDetailsDto?>
@@ -58,8 +64,10 @@ public sealed class GetStockLedgerEntryDetailsHandler : IRequestHandler<GetStock
                         si.WarehouseId == entry.WarehouseId &&
                         si.LotNumber == entry.LotNumber &&
                         si.ExpiryDate == entry.ExpiryDate)
-            .Select(si => new { si.Sku })
+            .Select(si => new { si.Id, si.Sku })
             .FirstOrDefaultAsync(ct);
+
+        var serials = await LoadSerialsAsync(entry, stockItem?.Id, ct);
 
         // دریافت جزئیات سند مرجع و به‌روزرسانی note بر اساس وضعیت
         object? refDocDetails = null;
@@ -254,8 +262,85 @@ public sealed class GetStockLedgerEntryDetailsHandler : IRequestHandler<GetStock
             null, // ProductName - می‌توان از Catalog Gateway دریافت کرد
             null, // VariantName - می‌توان از Catalog Gateway دریافت کرد
             stockItem?.Sku,
+            serials,
             refDocDetails
         );
+    }
+
+    private async Task<IReadOnlyList<StockLedgerEntrySerialDto>> LoadSerialsAsync(
+        StockLedgerEntry entry,
+        Guid? stockItemId,
+        CancellationToken ct)
+    {
+        switch (entry.RefDocType)
+        {
+            case "Issue":
+            {
+                var query = _db.StockItemSerials
+                    .AsNoTracking()
+                    .Where(s => s.IssueId == entry.RefDocId &&
+                                (s.Status == StockSerialStatus.Reserved || s.Status == StockSerialStatus.Issued));
+                if (stockItemId.HasValue)
+                    query = query.Where(s => s.StockItemId == stockItemId.Value);
+
+                return await query
+                    .OrderBy(s => s.SerialNumber)
+                    .Select(s => new StockLedgerEntrySerialDto(s.SerialNumber, s.Status))
+                    .ToListAsync(ct);
+            }
+            case "Receipt":
+            {
+                var lineIds = await _db.ReceiptLines
+                    .AsNoTracking()
+                    .Where(l => l.ReceiptId == entry.RefDocId &&
+                                l.ProductId == entry.ProductId &&
+                                l.VariantId == entry.VariantId &&
+                                l.LotNumber == entry.LotNumber &&
+                                l.ExpiryDate == entry.ExpiryDate)
+                    .Select(l => l.Id)
+                    .ToListAsync(ct);
+
+                if (lineIds.Count == 0) return Array.Empty<StockLedgerEntrySerialDto>();
+
+                return await _db.StockItemSerials
+                    .AsNoTracking()
+                    .Where(s => lineIds.Contains(s.ReceiptLineId))
+                    .OrderBy(s => s.SerialNumber)
+                    .Select(s => new StockLedgerEntrySerialDto(s.SerialNumber, s.Status))
+                    .ToListAsync(ct);
+            }
+            case "Transfer":
+            {
+                var lineIds = await _db.TransferLines
+                    .AsNoTracking()
+                    .Where(l => l.TransferId == entry.RefDocId &&
+                                l.ProductId == entry.ProductId &&
+                                l.VariantId == entry.VariantId)
+                    .Select(l => l.Id)
+                    .ToListAsync(ct);
+
+                if (lineIds.Count == 0) return Array.Empty<StockLedgerEntrySerialDto>();
+
+                return await _db.StockItemSerials
+                    .AsNoTracking()
+                    .Where(s => s.TransferLineId != null && lineIds.Contains(s.TransferLineId.Value))
+                    .OrderBy(s => s.SerialNumber)
+                    .Select(s => new StockLedgerEntrySerialDto(s.SerialNumber, s.Status))
+                    .ToListAsync(ct);
+            }
+            case "StockMove":
+            {
+                var targetStockItemId = stockItemId ?? entry.RefDocId;
+                return await _db.StockItemSerials
+                    .AsNoTracking()
+                    .Where(s => s.StockItemId == targetStockItemId)
+                    .OrderBy(s => s.SerialNumber)
+                    .Select(s => new StockLedgerEntrySerialDto(s.SerialNumber, s.Status))
+                    .ToListAsync(ct);
+            }
+        }
+
+        return Array.Empty<StockLedgerEntrySerialDto>();
     }
 }
 

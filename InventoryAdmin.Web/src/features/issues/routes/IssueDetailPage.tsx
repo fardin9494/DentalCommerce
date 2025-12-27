@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+﻿import { useState, useMemo, useRef, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Spinner } from '@/shared/components/Spinner'
@@ -622,6 +622,7 @@ export function IssueDetailPage() {
                                   <th className="text-right p-2 font-medium text-slate-600">انبار</th>
                                   <th className="text-right p-2 font-medium text-slate-600">قفسه</th>
                                   <th className="text-right p-2 font-medium text-slate-600">مقدار</th>
+                                  <th className="text-right p-2 font-medium text-slate-600">Serials</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
@@ -651,6 +652,15 @@ export function IssueDetailPage() {
                                       )}
                                     </td>
                                     <td className="p-2 font-medium">{alloc.qty.toLocaleString('fa-IR')}</td>
+                                    <td className="p-2">
+                                       {alloc.serials && alloc.serials.length > 0 ? (
+                                         <div className="max-w-xs whitespace-normal break-words font-mono text-[11px] text-slate-700">
+                                           {alloc.serials.map((s) => s.serialNumber).join(", ")}
+                                         </div>
+                                       ) : (
+                                         '-'
+                                       )}
+                                     </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -702,6 +712,7 @@ export function IssueDetailPage() {
     </div>
   )
 }
+
 
 
 

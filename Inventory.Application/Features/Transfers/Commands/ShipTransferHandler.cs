@@ -1,5 +1,6 @@
 ﻿using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
+using Inventory.Application.Features.Transfers.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -160,6 +161,8 @@ public sealed class ShipTransferHandler : IRequestHandler<ShipTransferCommand, U
                                     ex
                                 );
                             }
+
+                            await TransferSerialsHelper.MarkInTransitAsync(_db, seg.Id, ct);
                         }
                     }
 

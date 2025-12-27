@@ -533,6 +533,14 @@ export function TransferDetailPage() {
                                       </span>
                                     </div>
                                   )}
+                                  {seg.serials && seg.serials.length > 0 && (
+                                    <div className="mt-1 text-slate-600">
+                                      Serials:{' '}
+                                      <span className="font-mono">
+                                        {seg.serials.map((s) => s.serialNumber).join(', ')}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="text-left">
                                   <div className="font-semibold text-slate-900">

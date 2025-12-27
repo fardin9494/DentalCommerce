@@ -1,6 +1,7 @@
 using Inventory.Application.Common.Interfaces;
 using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
+using Inventory.Application.Features.Receipts.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -79,6 +80,8 @@ public sealed class ReceiveReceiptHandler : IRequestHandler<ReceiveReceiptComman
                                 _db.InventoryCosts.Add(cost);
                             }
                         }
+
+                        await ReceiptSerialsHelper.AttachLineSerialsToStockAsync(_db, l, stock.Id, ct);
 
                         stock.Increase(l.Qty);
                         stock.Block(l.Qty, "Quarantine - Waiting for Approval");

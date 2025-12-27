@@ -1,4 +1,5 @@
-using Inventory.Domain.Aggregates;
+﻿using Inventory.Domain.Aggregates;
+using Inventory.Application.Features.Issues.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -42,6 +43,7 @@ public sealed class AllocateIssueLineFifoHandler : IRequestHandler<AllocateIssue
                             stock.Release(alloc.Qty);
                         }
                     }
+                    await IssueSerialsHelper.ReleaseReservedSerialsAsync(_db, line.Id, ct);
                     issue.ClearAllocations(req.LineId);
                     await _db.SaveChangesAsync(ct);
 
@@ -83,6 +85,7 @@ public sealed class AllocateIssueLineFifoHandler : IRequestHandler<AllocateIssue
                         decimal toTake = Math.Min(available, qtyNeeded);
 
                         stock.Reserve(toTake);
+                        await IssueSerialsHelper.ReserveSerialsAsync(_db, stock.Id, issue.Id, line.Id, toTake, ct);
                         var alloc = issue.AddAllocation(line.Id, stock.Id, toTake);
                         _db.Entry(alloc).State = EntityState.Added;
 
@@ -109,4 +112,7 @@ public sealed class AllocateIssueLineFifoHandler : IRequestHandler<AllocateIssue
         return result;
     }
 }
+
+
+
 

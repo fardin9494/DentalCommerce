@@ -1,3 +1,4 @@
+using Inventory.Application.Features.Transfers.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +34,7 @@ public sealed class CancelTransferHandler : IRequestHandler<CancelTransferComman
                         {
                             var si = await _db.StockItems.FirstAsync(x => x.Id == s.StockItemId, ct);
                             si.Release(s.Qty);
+                            await TransferSerialsHelper.ReleaseReservedSerialsAsync(_db, s.Id, ct);
                         }
                         tr.ClearSegments(l.Id);
                     }

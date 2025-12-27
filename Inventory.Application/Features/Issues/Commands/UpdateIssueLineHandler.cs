@@ -1,4 +1,5 @@
-using Inventory.Infrastructure.Persistence;
+﻿using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Features.Issues.Serials;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,6 +33,7 @@ public sealed class UpdateIssueLineHandler : IRequestHandler<UpdateIssueLineComm
                     stock.Release(alloc.Qty);
                 }
             }
+            await IssueSerialsHelper.ReleaseReservedSerialsAsync(_db, line.Id, ct);
             issue.ClearAllocations(req.LineId);
         }
 

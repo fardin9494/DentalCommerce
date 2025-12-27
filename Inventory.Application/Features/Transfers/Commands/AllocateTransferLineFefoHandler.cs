@@ -1,3 +1,4 @@
+using Inventory.Application.Features.Transfers.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -54,6 +55,7 @@ public sealed class AllocateTransferLineFefoHandler
                         {
                             var si0 = await _db.StockItems.FirstAsync(si => si.Id == s.StockItemId, ct);
                             si0.Release(s.Qty);
+                            await TransferSerialsHelper.ReleaseReservedSerialsAsync(_db, s.Id, ct);
                         }
                         tr.ClearSegments(line.Id);
                         await _db.SaveChangesAsync(ct);
@@ -90,6 +92,7 @@ public sealed class AllocateTransferLineFefoHandler
 
                         var segment = tr.AddSegment(line.Id, c.Id, take);
                         _db.Entry(segment).State = EntityState.Added;
+                        await TransferSerialsHelper.ReserveSerialsAsync(_db, c.Id, tr.Id, line.Id, segment.Id, take, ct);
                         allocations.Add(new TransferAllocationDto(c.Id, take));
                         need -= take;
                     }

@@ -16,6 +16,7 @@ export const StockItemSchema = z.object({
   reserved: z.number(),
   blocked: z.number(),
   available: z.number(),
+  availableSerialsCount: z.number(),
   blockReason: z.string().nullable().optional(),
   shelfId: z.string().uuid().nullable().optional(),
   shelfName: z.string().nullable().optional(),
@@ -49,6 +50,18 @@ export async function getStockItems(filters: StockItemsListFilters = {}): Promis
   const query = toQuery(filters)
   const data = await fetchJson<unknown>(`/stock-items${query}`)
   return StockItemsListResultSchema.parse(data)
+}
+
+export const StockItemSerialSchema = z.object({
+  serialNumber: z.string(),
+  status: z.string(),
+})
+export type StockItemSerial = z.infer<typeof StockItemSerialSchema>
+
+export async function getStockItemSerials(stockItemId: string, status?: string): Promise<StockItemSerial[]> {
+  const query = toQuery({ status })
+  const data = await fetchJson<unknown>(`/stock-items/${stockItemId}/serials${query}`)
+  return z.array(StockItemSerialSchema).parse(data)
 }
 
 // Stock Products (for adjustments - only products that exist in stock)

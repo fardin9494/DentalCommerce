@@ -38,7 +38,13 @@ public sealed record IssueAllocationDto(
     Guid? ShelfId,
     string? ShelfName,
     Guid? WarehouseId, // Changed to nullable
-    string? WarehouseName
+    string? WarehouseName,
+    IReadOnlyList<IssueAllocationSerialDto> Serials
+);
+
+public sealed record IssueAllocationSerialDto(
+    string SerialNumber,
+    StockSerialStatus Status
 );
 
 public sealed class GetIssueDetailsHandler : IRequestHandler<IssueDetailsQuery, IssueDetailsDto?>
@@ -91,6 +97,31 @@ public sealed class GetIssueDetailsHandler : IRequestHandler<IssueDetailsQuery, 
                 emptyLines
             );
         }
+
+        var lineIds = issue.Lines.Select(l => l.Id).ToList();
+
+        var serials = await _db.StockItemSerials
+            .AsNoTracking()
+            .Where(s => s.IssueLineId != null &&
+                        lineIds.Contains(s.IssueLineId.Value) &&
+                        s.StockItemId != null &&
+                        (s.Status == StockSerialStatus.Reserved || s.Status == StockSerialStatus.Issued))
+            .Select(s => new
+            {
+                IssueLineId = s.IssueLineId!.Value,
+                StockItemId = s.StockItemId!.Value,
+                s.SerialNumber,
+                s.Status
+            })
+            .ToListAsync(ct);
+
+        var serialsLookup = serials
+            .GroupBy(s => (s.IssueLineId, s.StockItemId))
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(x => x.SerialNumber)
+                      .Select(x => new IssueAllocationSerialDto(x.SerialNumber, x.Status))
+                      .ToList() as IReadOnlyList<IssueAllocationSerialDto>);
 
         // Load stock items with their details
         var stockItems = await _db.StockItems
@@ -149,6 +180,10 @@ public sealed class GetIssueDetailsHandler : IRequestHandler<IssueDetailsQuery, 
                 l.Allocations
                     .Select(a =>
                     {
+                        var serialKey = (l.Id, a.StockItemId);
+                        var serialsForAlloc = serialsLookup.TryGetValue(serialKey, out var serialList)
+                            ? serialList
+                            : Array.Empty<IssueAllocationSerialDto>();
                         if (!stockItemsDict.TryGetValue(a.StockItemId, out var stockInfo))
                         {
                             // اگر StockItem پیدا نشد، اطلاعات محدود برمی‌گردانیم
@@ -162,7 +197,8 @@ public sealed class GetIssueDetailsHandler : IRequestHandler<IssueDetailsQuery, 
                                 null, // ShelfId
                                 null, // ShelfName
                                 null, // WarehouseId (null instead of Guid.Empty)
-                                null // WarehouseName
+                                null, // WarehouseName
+                                serialsForAlloc
                             );
                         }
 
@@ -176,7 +212,8 @@ public sealed class GetIssueDetailsHandler : IRequestHandler<IssueDetailsQuery, 
                             stockInfo.ShelfId,
                             stockInfo.ShelfName,
                             stockInfo.WarehouseId, // Already nullable
-                            stockInfo.WarehouseName
+                            stockInfo.WarehouseName,
+                            serialsForAlloc
                         );
                     })
                     .ToList()
@@ -194,5 +231,3 @@ public sealed class GetIssueDetailsHandler : IRequestHandler<IssueDetailsQuery, 
         );
     }
 }
-
-

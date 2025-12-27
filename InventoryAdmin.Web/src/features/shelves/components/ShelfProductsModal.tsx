@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { Spinner } from '@/shared/components/Spinner'
 import { useStockItems } from '@/features/stock-items/queries'
+import { StockItemSerialsModal } from '@/features/stock-items/components/StockItemSerialsModal'
+import type { StockItem } from '@/features/stock-items/api'
 import type { Shelf } from '../api'
 
 interface ShelfProductsModalProps {
@@ -11,6 +13,7 @@ interface ShelfProductsModalProps {
 
 export function ShelfProductsModal({ isOpen, shelf, onClose }: ShelfProductsModalProps) {
   const [page, setPage] = useState(1)
+  const [serialsItem, setSerialsItem] = useState<StockItem | null>(null)
   const pageSize = 20
 
   const { data, isLoading, error } = useStockItems(
@@ -109,6 +112,7 @@ export function ShelfProductsModal({ isOpen, shelf, onClose }: ShelfProductsModa
                     <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">شماره لات</th>
                     <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تاریخ انقضا</th>
                     <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تعداد</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">Serials</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -132,6 +136,18 @@ export function ShelfProductsModal({ isOpen, shelf, onClose }: ShelfProductsModa
                       <td className="whitespace-nowrap px-4 py-3">
                         <span className="font-medium text-slate-900">{item.onHand.toLocaleString('fa-IR')}</span>
                       </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                         {item.availableSerialsCount > 0 ? (
+                           <button
+                             onClick={() => setSerialsItem(item)}
+                             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                           >
+                             View ({item.availableSerialsCount.toLocaleString('fa-IR')})
+                           </button>
+                         ) : (
+                           <span className="text-slate-400">-</span>
+                         )}
+                       </td>
                     </tr>
                   ))}
                 </tbody>
@@ -174,7 +190,14 @@ export function ShelfProductsModal({ isOpen, shelf, onClose }: ShelfProductsModa
             بستن
           </button>
         </div>
+        <StockItemSerialsModal
+          isOpen={!!serialsItem}
+          stockItem={serialsItem}
+          onClose={() => setSerialsItem(null)}
+        />
       </div>
     </div>
   )
 }
+
+

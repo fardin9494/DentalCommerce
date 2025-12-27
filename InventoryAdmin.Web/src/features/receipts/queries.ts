@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/shared/components/toast/ToastProvider'
 import * as api from './api'
 import type { ReceiptsListFilters } from './types'
@@ -173,3 +173,27 @@ export function useRejectReceiptLine(receiptId: string) {
 }
 
 
+
+export function useReceiptLineSerials(receiptId: string, lineId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['receipts', 'line-serials', receiptId, lineId],
+    queryFn: () => api.getReceiptLineSerials(receiptId, lineId!),
+    enabled: !!receiptId && !!lineId && enabled,
+  })
+}
+
+export function useSetReceiptLineSerials(receiptId: string, lineId?: string) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: (serials: string[]) => api.setReceiptLineSerials(receiptId, lineId!, serials),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['receipts', 'detail', receiptId] })
+      qc.invalidateQueries({ queryKey: ['receipts', 'line-serials', receiptId, lineId] })
+      toast.success('سریال‌ها با موفقیت ذخیره شدند')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'خطا در ذخیره سریال‌ها')
+    },
+  })
+}

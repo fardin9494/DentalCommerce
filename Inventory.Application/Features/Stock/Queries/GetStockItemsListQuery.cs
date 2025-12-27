@@ -1,4 +1,5 @@
 using Inventory.Application.Common.Interfaces;
+using Inventory.Domain.Enums;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -40,6 +41,7 @@ public sealed record StockItemListItemDto(
     decimal Reserved,
     decimal Blocked,
     decimal Available,
+    int AvailableSerialsCount,
     string? BlockReason,
     Guid? ShelfId,
     string? ShelfName,
@@ -188,6 +190,18 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
                 })
                 .ToListAsync(ct);
 
+            var rawItemIds = rawItems.Select(x => x.Id).ToList();
+            var serialCounts = rawItemIds.Count == 0
+                ? new Dictionary<Guid, int>()
+                : await _db.StockItemSerials
+                    .AsNoTracking()
+                    .Where(s => s.StockItemId != null &&
+                                rawItemIds.Contains(s.StockItemId.Value) &&
+                                s.Status == StockSerialStatus.Available)
+                    .GroupBy(s => s.StockItemId!.Value)
+                    .Select(g => new { StockItemId = g.Key, Count = g.Count() })
+                    .ToDictionaryAsync(x => x.StockItemId, x => x.Count, ct);
+
             var warehouseIds = rawItems.Select(x => x.WarehouseId).Distinct().ToList();
             var warehouses = await _db.Warehouses
                 .AsNoTracking()
@@ -207,6 +221,7 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
             {
                 var (productName, variantValue) = await GetCatalogNamesAsync(item.ProductId, item.VariantId);
                 var available = item.OnHand - item.Reserved - item.Blocked;
+                var availableSerialsCount = serialCounts.TryGetValue(item.Id, out var count) ? count : 0;
                 items.Add(new StockItemListItemDto(
                     item.Id,
                     item.ProductId,
@@ -222,6 +237,7 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
                     item.Reserved,
                     item.Blocked,
                     available,
+                    availableSerialsCount,
                     item.BlockReason,
                     item.ShelfId,
                     item.ShelfId.HasValue && shelves.TryGetValue(item.ShelfId.Value, out var shelfName) ? shelfName : null,
@@ -257,6 +273,18 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
             })
             .ToListAsync(ct);
 
+        var allRawItemIds = allRawItems.Select(x => x.Id).ToList();
+        var allSerialCounts = allRawItemIds.Count == 0
+            ? new Dictionary<Guid, int>()
+            : await _db.StockItemSerials
+                .AsNoTracking()
+                .Where(s => s.StockItemId != null &&
+                            allRawItemIds.Contains(s.StockItemId.Value) &&
+                            s.Status == StockSerialStatus.Available)
+                .GroupBy(s => s.StockItemId!.Value)
+                .Select(g => new { StockItemId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.StockItemId, x => x.Count, ct);
+
         var allWarehouseIds = allRawItems.Select(x => x.WarehouseId).Distinct().ToList();
         var allWarehouses = await _db.Warehouses
             .AsNoTracking()
@@ -285,6 +313,7 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
                 continue;
 
             var available = item.OnHand - item.Reserved - item.Blocked;
+            var availableSerialsCount = allSerialCounts.TryGetValue(item.Id, out var count) ? count : 0;
             matched.Add(new StockItemListItemDto(
                 item.Id,
                 item.ProductId,
@@ -300,6 +329,7 @@ public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsList
                 item.Reserved,
                 item.Blocked,
                 available,
+                availableSerialsCount,
                 item.BlockReason,
                 item.ShelfId,
                 item.ShelfId.HasValue && allShelves.TryGetValue(item.ShelfId.Value, out var shelfName) ? shelfName : null,

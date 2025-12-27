@@ -1,4 +1,5 @@
-using Inventory.Infrastructure.Persistence;
+﻿using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Features.Issues.Serials;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -35,6 +36,7 @@ public sealed class CancelIssueHandler : IRequestHandler<CancelIssueCommand, Uni
                             var si = await _db.StockItems.FirstAsync(x => x.Id == a.StockItemId, ct);
                             si.Release(a.Qty);
                         }
+                        await IssueSerialsHelper.ReleaseReservedSerialsAsync(_db, l.Id, ct);
                         issue.ClearAllocations(l.Id);
                     }
 

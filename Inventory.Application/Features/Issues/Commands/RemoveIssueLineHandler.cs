@@ -1,4 +1,5 @@
-using Inventory.Infrastructure.Persistence;
+﻿using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Features.Issues.Serials;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,6 +31,7 @@ public sealed class RemoveIssueLineHandler : IRequestHandler<RemoveIssueLineComm
             }
         }
 
+        await IssueSerialsHelper.ReleaseReservedSerialsAsync(_db, line.Id, ct);
         issue.RemoveLine(req.LineId);
         await _db.SaveChangesAsync(ct);
         return Unit.Value;

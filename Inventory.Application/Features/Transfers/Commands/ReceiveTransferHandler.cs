@@ -1,5 +1,6 @@
 ﻿using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
+using Inventory.Application.Features.Transfers.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -153,6 +154,9 @@ public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferComm
                             ex
                         );
                     }
+
+                    var isShelved = destItem.ShelfId != null;
+                    await TransferSerialsHelper.ReceiveSerialsAsync(_db, segment.Id, destItem.Id, req.Qty, isShelved, ct);
 
                     try
                     {

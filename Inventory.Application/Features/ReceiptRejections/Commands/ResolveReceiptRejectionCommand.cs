@@ -1,5 +1,6 @@
 ﻿using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
+using Inventory.Application.Features.Receipts.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -52,6 +53,7 @@ public sealed class ResolveReceiptRejectionHandler : IRequestHandler<ResolveRece
                         .FirstOrDefaultAsync(r => r.Id == line.ReceiptId, ct)
                         ?? throw new InvalidOperationException("Receipt not found.");
 
+                    var isShelved = false;
                     if (req.ApprovedQty > 0)
                     {
                         var stock = await _db.StockItems.FirstOrDefaultAsync(si =>
@@ -62,6 +64,7 @@ public sealed class ResolveReceiptRejectionHandler : IRequestHandler<ResolveRece
                             si.ExpiryDate == line.ExpiryDate, ct)
                             ?? throw new InvalidOperationException("Stock item for receipt line not found.");
 
+                        isShelved = stock.ShelfId.HasValue;
                         if (stock.ShelfId.HasValue)
                         {
                             stock.Increase(req.ApprovedQty);
@@ -94,6 +97,7 @@ public sealed class ResolveReceiptRejectionHandler : IRequestHandler<ResolveRece
                     }
 
                     line.ResolveRejectionAmounts(req.ApprovedQty, req.ReturnedQty, req.DisposedQty, req.Note);
+                    await ReceiptSerialsHelper.ResolveRejectedSerialsAsync(_db, line, isShelved, req.ApprovedQty, req.ReturnedQty, req.DisposedQty, ct);
 
                     await _db.SaveChangesAsync(ct);
                     await tx.CommitAsync(ct);

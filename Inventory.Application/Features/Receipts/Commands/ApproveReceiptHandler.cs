@@ -1,3 +1,4 @@
+﻿using Inventory.Application.Features.Receipts.Serials;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -47,6 +48,8 @@ public sealed class ApproveReceiptHandler : IRequestHandler<ApproveReceiptComman
                                 si.ExpiryDate == l.ExpiryDate, ct)
                                 ?? throw new InvalidOperationException($"موجودی مربوط به خط {l.LineNo} یافت نشد.");
 
+                            await ReceiptSerialsHelper.SyncLineSerialStatusesAsync(_db, l, stock.ShelfId.HasValue, ct);
+
                             // آزاد کردن فقط مقدار باقیمانده Blocked (ممکن است بخشی قبلاً در ApproveReceiptLinePartialHandler آزاد شده باشد)
                             var remainingBlocked = stock.Blocked;
                             if (remainingBlocked > 0)
@@ -94,3 +97,4 @@ public sealed class ApproveReceiptHandler : IRequestHandler<ApproveReceiptComman
         return Unit.Value;
     }
 }
+
