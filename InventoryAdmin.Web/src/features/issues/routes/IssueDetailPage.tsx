@@ -2,7 +2,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Spinner } from '@/shared/components/Spinner'
-import { useIssue, useAddIssueLine, useRemoveIssueLine, useAllocateIssueLineFefo, useAllocateIssueLineFifo, useAllocateIssueLineLifo, usePostIssue, useCancelIssue } from '../queries'
+import { useIssue, useAddIssueLine, useRemoveIssueLine, useAllocateIssueLineFefo, useAllocateIssueLineFifo, useAllocateIssueLineLifo, useAllocateIssueLineSerials, usePostIssue, useCancelIssue } from '../queries'
 import { useConfirm } from '@/shared/components/confirm/ConfirmProvider'
 import { AllocateMethodModal } from '../components/AllocateMethodModal'
 import { ProductSearchSelect, type ProductSelection } from '@/shared/components/ProductSearchSelect'
@@ -35,12 +35,14 @@ export function IssueDetailPage() {
   const allocateFefo = useAllocateIssueLineFefo(id!)
   const allocateFifo = useAllocateIssueLineFifo(id!)
   const allocateLifo = useAllocateIssueLineLifo(id!)
+  const allocateSerials = useAllocateIssueLineSerials(id!)
   const post = usePostIssue(id!)
   const cancel = useCancelIssue(id!)
   const confirm = useConfirm()
   const [allocateModalOpen, setAllocateModalOpen] = useState(false)
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
   const [expandedLineId, setExpandedLineId] = useState<string | null>(null)
+  const [allocateTab, setAllocateTab] = useState<'system' | 'serials'>('system')
 
   // Inline add line state
   const [isAddingNewLine, setIsAddingNewLine] = useState(false)
@@ -171,8 +173,9 @@ export function IssueDetailPage() {
     await removeLine.mutateAsync(lineId)
   }
 
-  function handleOpenAllocateModal(lineId: string) {
+  function handleOpenAllocateModal(lineId: string, tab: 'system' | 'serials' = 'system') {
     setSelectedLineId(lineId)
+    setAllocateTab(tab)
     setAllocateModalOpen(true)
   }
 
@@ -210,6 +213,31 @@ export function IssueDetailPage() {
           await allocateLifo.mutateAsync({ lineId: selectedLineId, preferredWarehouseId })
           break
       }
+    } finally {
+      setAllocateModalOpen(false)
+      setSelectedLineId(null)
+    }
+  }
+
+  async function handleAllocateSerials(serials: string[], preferredWarehouseId?: string) {
+    if (!selectedLineId) return
+    if (serials.length === 0) return
+
+    const line = issue?.lines.find(l => l.id === selectedLineId)
+    if (!line) return
+
+    const warehouseName = preferredWarehouseId
+      ? warehouses?.find(w => w.id === preferredWarehouseId)?.name
+      : 'همه انبارها'
+
+    const ok = await confirm.confirm({
+      title: 'تخصیص سریال‌ها',
+      message: `آیا می‌خواهید ${serials.length.toLocaleString('fa-IR')} سریال را برای خط ${line.lineNo} ${preferredWarehouseId ? `از انبار ${warehouseName}` : 'از تمام انبارها'} تخصیص دهید؟`
+    })
+    if (!ok) return
+
+    try {
+      await allocateSerials.mutateAsync({ lineId: selectedLineId, serials })
     } finally {
       setAllocateModalOpen(false)
       setSelectedLineId(null)
@@ -589,6 +617,15 @@ export function IssueDetailPage() {
                                 </svg>
                               </button>
                               <button
+                                onClick={() => handleOpenAllocateModal(line.id, 'serials')}
+                                className="rounded-lg p-1.5 text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-700"
+                                title="انتخاب سریال‌ها"
+                              >
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 6.75h15m-15 5.25h15m-15 5.25h15" />
+                                </svg>
+                              </button>
+                              <button
                                 onClick={() => handleRemoveLine(line.id)}
                                 disabled={removeLine.isPending}
                                 className="rounded-lg p-1.5 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
@@ -622,7 +659,7 @@ export function IssueDetailPage() {
                                   <th className="text-right p-2 font-medium text-slate-600">انبار</th>
                                   <th className="text-right p-2 font-medium text-slate-600">قفسه</th>
                                   <th className="text-right p-2 font-medium text-slate-600">مقدار</th>
-                                  <th className="text-right p-2 font-medium text-slate-600">Serials</th>
+                                  <th className="text-right p-2 font-medium text-slate-600">سریال‌ها</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
@@ -699,14 +736,19 @@ export function IssueDetailPage() {
       {selectedLineId && (
         <AllocateMethodModal
           isOpen={allocateModalOpen}
+          issueId={id!}
+          lineId={selectedLineId}
+          requestedQty={issue?.lines.find(l => l.id === selectedLineId)?.requestedQty || 0}
           onClose={() => {
             setAllocateModalOpen(false)
             setSelectedLineId(null)
           }}
           onSelect={handleAllocate}
+          onSelectSerials={handleAllocateSerials}
           lineNo={issue?.lines.find(l => l.id === selectedLineId)?.lineNo || 0}
-          isAllocating={allocateFefo.isPending || allocateFifo.isPending || allocateLifo.isPending}
+          isAllocating={allocateFefo.isPending || allocateFifo.isPending || allocateLifo.isPending || allocateSerials.isPending}
           defaultWarehouseId={issue?.warehouseId || undefined}
+          initialTab={allocateTab}
         />
       )}
     </div>

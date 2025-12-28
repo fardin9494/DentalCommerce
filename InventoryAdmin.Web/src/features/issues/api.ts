@@ -1,5 +1,5 @@
 import { fetchJson } from '@/lib/api/client'
-import { IssueDetailSchema, CreateIssueSchema, AddIssueLineSchema, UpdateIssueHeaderSchema, UpdateIssueLineSchema, IssuesListResultSchema, type IssueDetail, type CreateIssueDto, type AddIssueLineDto, type UpdateIssueHeaderDto, type UpdateIssueLineDto, type IssuesListResult, type IssuesListFilters } from './types'
+import { IssueDetailSchema, CreateIssueSchema, AddIssueLineSchema, UpdateIssueHeaderSchema, UpdateIssueLineSchema, IssuesListResultSchema, IssueLineSerialOptionSchema, type IssueDetail, type CreateIssueDto, type AddIssueLineDto, type UpdateIssueHeaderDto, type UpdateIssueLineDto, type IssuesListResult, type IssuesListFilters, type IssueLineSerialOption } from './types'
 
 export async function getIssuesList(filters: IssuesListFilters = {}): Promise<IssuesListResult> {
   const params = new URLSearchParams()
@@ -67,6 +67,18 @@ export async function allocateIssueLineLifo(issueId: string, lineId: string, pre
   })
 }
 
+export async function getIssueLineAvailableSerials(issueId: string, lineId: string, warehouseId?: string): Promise<IssueLineSerialOption[]> {
+  const params = new URLSearchParams()
+  if (warehouseId) params.set('warehouseId', warehouseId)
+  const query = params.toString()
+  const data = await fetchJson<unknown>(`/issues/${issueId}/lines/${lineId}/available-serials${query ? `?${query}` : ''}`)
+  return IssueLineSerialOptionSchema.array().parse(data)
+}
+
+export async function allocateIssueLineSerials(issueId: string, lineId: string, serials: string[]): Promise<void> {
+  return fetchJson<void>(`/issues/${issueId}/lines/${lineId}/allocate-serials`, { method: 'POST', json: { serials } })
+}
+
 export async function postIssue(issueId: string, whenUtc?: string): Promise<void> {
   return fetchJson<void>(`/issues/${issueId}/post`, { method: 'POST', json: whenUtc || null })
 }
@@ -74,7 +86,6 @@ export async function postIssue(issueId: string, whenUtc?: string): Promise<void
 export async function cancelIssue(issueId: string): Promise<void> {
   return fetchJson<void>(`/issues/${issueId}/cancel`, { method: 'POST' })
 }
-
 
 
 

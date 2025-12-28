@@ -8,6 +8,8 @@ using Inventory.Application.Features.ReceiptRejections.Commands;
 using Inventory.Application.Features.ReceiptRejections.Queries;
 using Inventory.Api.Contracts.Receipts;
 using Inventory.Api.Contracts.ReceiptRejections;
+using Inventory.Api.Contracts.Issues;
+using Inventory.Api.Contracts.Transfers;
 using Inventory.Application.Features.Stock.Commands; // ???????? ????
 using Inventory.Application.Features.Shelves.Commands; // ???????? ????
 using Inventory.Application.Features.Transfers.Commands;
@@ -581,6 +583,55 @@ issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-lifo", async (Guid id, G
     }
 });
 
+issues.MapGet("/{id:guid}/lines/{lineId:guid}/available-serials", async (
+    Guid id,
+    Guid lineId,
+    Guid? warehouseId,
+    IMediator m,
+    ILogger<Program> logger) =>
+{
+    try
+    {
+        var query = new Inventory.Application.Features.Issues.Queries.GetIssueLineAvailableSerialsQuery(id, lineId, warehouseId);
+        var result = await m.Send(query);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to load available serials for issue line {LineId}", lineId);
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error loading available serials for issue line {LineId}", lineId);
+        return Results.Problem(detail: ex.Message, title: "خطا در دریافت سریال‌های موجود");
+    }
+});
+
+issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-serials", async (
+    Guid id,
+    Guid lineId,
+    AllocateIssueLineSerialsBody body,
+    IMediator m,
+    ILogger<Program> logger) =>
+{
+    try
+    {
+        await m.Send(new AllocateIssueLineSerialsCommand(id, lineId, body.Serials ?? Array.Empty<string>()));
+        return Results.NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to allocate serials for issue line {LineId}", lineId);
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error allocating serials for issue line {LineId}", lineId);
+        return Results.Problem(detail: ex.Message, title: "خطا در تخصیص سریال‌های خروج");
+    }
+});
+
 issues.MapPost("/{id:guid}/post", async (Guid id, [FromBody] DateTime? when, IMediator m, ILogger<Program> logger) =>
 {
     try
@@ -735,6 +786,54 @@ transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-lifo", async (Guid id
     {
         logger.LogError(ex, "Error allocating transfer line {LineId} for transfer {TransferId} (LIFO)", lineId, id);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ ┘à┘ê╪¼┘ê╪»█î (LIFO)");
+    }
+});
+
+transfers.MapGet("/{id:guid}/lines/{lineId:guid}/available-serials", async (
+    Guid id,
+    Guid lineId,
+    IMediator m,
+    ILogger<Program> logger) =>
+{
+    try
+    {
+        var query = new Inventory.Application.Features.Transfers.Queries.GetTransferLineAvailableSerialsQuery(id, lineId);
+        var result = await m.Send(query);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to load available serials for transfer line {LineId}", lineId);
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error loading available serials for transfer line {LineId}", lineId);
+        return Results.Problem(detail: ex.Message, title: "خطا در دریافت سریال‌های قابل تخصیص");
+    }
+});
+
+transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-serials", async (
+    Guid id,
+    Guid lineId,
+    AllocateTransferLineSerialsBody body,
+    IMediator m,
+    ILogger<Program> logger) =>
+{
+    try
+    {
+        await m.Send(new AllocateTransferLineSerialsCommand(id, lineId, body.Serials ?? Array.Empty<string>()));
+        return Results.NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Failed to allocate serials for transfer line {LineId}", lineId);
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error allocating serials for transfer line {LineId}", lineId);
+        return Results.Problem(detail: ex.Message, title: "خطا در تخصیص سریال‌ها");
     }
 });
 

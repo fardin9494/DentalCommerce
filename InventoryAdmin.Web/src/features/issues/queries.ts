@@ -112,6 +112,30 @@ export function useAllocateIssueLineLifo(issueId: string) {
   })
 }
 
+export function useIssueLineAvailableSerials(issueId: string, lineId: string, warehouseId?: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: ['issues', 'line-serials', issueId, lineId, warehouseId],
+    queryFn: () => api.getIssueLineAvailableSerials(issueId, lineId, warehouseId),
+    enabled: enabled && !!issueId && !!lineId,
+  })
+}
+
+export function useAllocateIssueLineSerials(issueId: string) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: ({ lineId, serials }: { lineId: string; serials: string[] }) =>
+      api.allocateIssueLineSerials(issueId, lineId, serials),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['issues', 'detail', issueId] })
+      toast.success('تخصیص سریال با موفقیت انجام شد')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'خطا در تخصیص سریال')
+    },
+  })
+}
+
 export function usePostIssue(issueId: string) {
   const qc = useQueryClient()
   const toast = useToast()
@@ -141,7 +165,6 @@ export function useCancelIssue(issueId: string) {
     },
   })
 }
-
 
 
 

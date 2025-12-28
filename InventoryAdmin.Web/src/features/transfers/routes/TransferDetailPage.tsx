@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Spinner } from '@/shared/components/Spinner'
@@ -11,6 +11,7 @@ import {
   useAllocateTransferLineFefo,
   useAllocateTransferLineFifo,
   useAllocateTransferLineLifo,
+  useAllocateTransferLineSerials,
   useShipTransfer,
   useReceiveTransfer,
   useCompleteTransfer,
@@ -39,6 +40,7 @@ export function TransferDetailPage() {
   const allocateFefo = useAllocateTransferLineFefo(id!)
   const allocateFifo = useAllocateTransferLineFifo(id!)
   const allocateLifo = useAllocateTransferLineLifo(id!)
+  const allocateSerials = useAllocateTransferLineSerials(id!)
   const ship = useShipTransfer(id!)
   const receive = useReceiveTransfer(id!)
   const complete = useCompleteTransfer(id!)
@@ -49,7 +51,8 @@ export function TransferDetailPage() {
   const [receivingSegment, setReceivingSegment] = useState<{ segment: TransferSegment; line: TransferLine } | null>(
     null
   )
-  const [allocatingLineId, setAllocatingLineId] = useState<string | null>(null)
+  const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
+  const [allocateTab, setAllocateTab] = useState<'system' | 'serials'>('system')
 
   // جمع‌آوری productId های تمام خطوط برای fetch کردن نام محصولات
   const productIds = useMemo(() => transfer?.lines.map((line) => line.productId) || [], [transfer?.lines])
@@ -132,32 +135,64 @@ export function TransferDetailPage() {
       docDateUtc: docDate ? new Date(docDate).toISOString() : null,
     })
   }
-
-  async function handleAllocateFefo(lineId: string) {
-    const ok = await confirm.confirm({
-      title: 'تخصیص موجودی (FEFO)',
-      message: 'آیا می‌خواهید موجودی این خط را به صورت خودکار با روش FEFO (اول انقضا، اول خروج) تخصیص دهید؟',
-    })
-    if (!ok) return
-    await allocateFefo.mutateAsync(lineId)
+  function handleOpenAllocateModal(lineId: string, tab: 'system' | 'serials' = 'system') {
+    setSelectedLineId(lineId)
+    setAllocateTab(tab)
   }
 
-  async function handleAllocateFifo(lineId: string) {
+  async function handleAllocate(method: 'fefo' | 'fifo' | 'lifo') {
+    if (!selectedLineId) return
+
+    const line = transfer?.lines.find((l) => l.id === selectedLineId)
+    if (!line) return
+
+    const methodLabels = {
+      fefo: 'FEFO',
+      fifo: 'FIFO',
+      lifo: 'LIFO',
+    }
+
     const ok = await confirm.confirm({
-      title: 'تخصیص موجودی (FIFO)',
-      message: 'آیا می‌خواهید موجودی این خط را به صورت خودکار با روش FIFO (اول ورود، اول خروج) تخصیص دهید؟',
+      title: `تخصیص ${methodLabels[method]}`,
+      message: `آیا می‌خواهید خط ${line.lineNo} را با روش ${methodLabels[method]} تخصیص دهید؟`,
     })
     if (!ok) return
-    await allocateFifo.mutateAsync(lineId)
+
+    try {
+      switch (method) {
+        case 'fefo':
+          await allocateFefo.mutateAsync(selectedLineId)
+          break
+        case 'fifo':
+          await allocateFifo.mutateAsync(selectedLineId)
+          break
+        case 'lifo':
+          await allocateLifo.mutateAsync(selectedLineId)
+          break
+      }
+    } finally {
+      setSelectedLineId(null)
+    }
   }
 
-  async function handleAllocateLifo(lineId: string) {
+  async function handleAllocateSerials(serials: string[]) {
+    if (!selectedLineId) return
+    if (serials.length === 0) return
+
+    const line = transfer?.lines.find((l) => l.id === selectedLineId)
+    if (!line) return
+
     const ok = await confirm.confirm({
-      title: 'تخصیص موجودی (LIFO)',
-      message: 'آیا می‌خواهید موجودی این خط را به صورت خودکار با روش LIFO (آخر ورود، اول خروج) تخصیص دهید؟',
+      title: 'تخصیص سریال‌ها',
+      message: `آیا می‌خواهید ${serials.length.toLocaleString('fa-IR')} سریال را برای خط ${line.lineNo} تخصیص دهید؟`,
     })
     if (!ok) return
-    await allocateLifo.mutateAsync(lineId)
+
+    try {
+      await allocateSerials.mutateAsync({ lineId: selectedLineId, serials })
+    } finally {
+      setSelectedLineId(null)
+    }
   }
 
   async function handleShip() {
@@ -250,7 +285,7 @@ export function TransferDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             {isDraft && (
               <>
-                <button
+                            <button
                   onClick={() => setShowAddLineModal(true)}
                   className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
                 >
@@ -564,9 +599,10 @@ export function TransferDetailPage() {
                       <td className="whitespace-nowrap px-4 py-3 relative">
                         <div className="flex items-center gap-1">
                           {line.remainingQty > 0 && (
+                            <>
                             <button
-                              onClick={() => setAllocatingLineId(line.id)}
-                              disabled={allocateFefo.isPending || allocateFifo.isPending || allocateLifo.isPending}
+                              onClick={() => handleOpenAllocateModal(line.id)}
+                              disabled={allocateFefo.isPending || allocateFifo.isPending || allocateLifo.isPending || allocateSerials.isPending}
                               className="rounded-lg p-1.5 text-blue-500 transition-colors hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
                               title="تخصیص موجودی"
                             >
@@ -578,6 +614,17 @@ export function TransferDetailPage() {
                                 />
                               </svg>
                             </button>
+                            <button
+                              onClick={() => handleOpenAllocateModal(line.id, 'serials')}
+                              disabled={allocateFefo.isPending || allocateFifo.isPending || allocateLifo.isPending || allocateSerials.isPending}
+                              className="rounded-lg p-1.5 text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
+                              title="انتخاب سریال‌ها"
+                            >
+                              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 6.75h15m-15 5.25h15m-15 5.25h15" />
+                              </svg>
+                            </button>
+                            </>
                           )}
                           <button
                             onClick={() => setEditingLine(line)}
@@ -800,15 +847,26 @@ export function TransferDetailPage() {
         isSubmitting={updateLine.isPending}
       />
 
-      {/* Allocate Method Modal */}
-      <AllocateMethodModal
-        isOpen={!!allocatingLineId}
-        onClose={() => setAllocatingLineId(null)}
-        onSelectFefo={() => allocatingLineId && handleAllocateFefo(allocatingLineId)}
-        onSelectFifo={() => allocatingLineId && handleAllocateFifo(allocatingLineId)}
-        onSelectLifo={() => allocatingLineId && handleAllocateLifo(allocatingLineId)}
-        isAllocating={allocateFefo.isPending || allocateFifo.isPending || allocateLifo.isPending}
-      />
+            {/* Allocate Method Modal */}
+      {selectedLineId && (
+        <AllocateMethodModal
+          isOpen={true}
+          transferId={id!}
+          lineId={selectedLineId}
+          lineNo={transfer?.lines.find((l) => l.id === selectedLineId)?.lineNo || 0}
+          requestedQty={transfer?.lines.find((l) => l.id === selectedLineId)?.requestedQty || 0}
+          onClose={() => setSelectedLineId(null)}
+          onSelect={handleAllocate}
+          onSelectSerials={handleAllocateSerials}
+          isAllocating={
+            allocateFefo.isPending ||
+            allocateFifo.isPending ||
+            allocateLifo.isPending ||
+            allocateSerials.isPending
+          }
+          initialTab={allocateTab}
+        />
+      )}
 
       {/* Receive Segment Modal */}
       <ReceiveSegmentModal
@@ -821,3 +879,11 @@ export function TransferDetailPage() {
     </div>
   )
 }
+
+
+
+
+
+
+
+

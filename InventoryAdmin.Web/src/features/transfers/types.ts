@@ -36,6 +36,17 @@ export const TransferSegmentSerialSchema = z.object({
 })
 export type TransferSegmentSerial = z.infer<typeof TransferSegmentSerialSchema>
 
+export const TransferLineSerialOptionSchema = z.object({
+  serialNumber: z.string(),
+  stockItemId: z.string().uuid(),
+  sku: z.string().nullable().optional(),
+  lotNumber: z.string().nullable().optional(),
+  expiryDate: z.string().nullable().optional(),
+  shelfId: z.string().uuid().nullable().optional(),
+  shelfName: z.string().nullable().optional(),
+})
+export type TransferLineSerialOption = z.infer<typeof TransferLineSerialOptionSchema>
+
 export const TransferSegmentSchema = z.object({
   id: z.string().uuid(),
   stockItemId: z.string().uuid(),

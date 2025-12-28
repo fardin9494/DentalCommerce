@@ -37,6 +37,19 @@ export const IssueLineSchema = z.object({
 })
 export type IssueLine = z.infer<typeof IssueLineSchema>
 
+export const IssueLineSerialOptionSchema = z.object({
+  serialNumber: z.string(),
+  stockItemId: z.string().uuid(),
+  sku: z.string().nullable().optional(),
+  lotNumber: z.string().nullable().optional(),
+  expiryDate: z.string().nullable().optional(),
+  warehouseId: z.string().uuid(),
+  warehouseName: z.string().nullable().optional(),
+  shelfId: z.string().uuid().nullable().optional(),
+  shelfName: z.string().nullable().optional(),
+})
+export type IssueLineSerialOption = z.infer<typeof IssueLineSerialOptionSchema>
+
 export const IssueDetailSchema = z.object({
   id: z.string().uuid(),
   warehouseId: z.string().uuid().nullable().optional(),
@@ -120,6 +133,5 @@ export interface IssuesListFilters {
   toDate?: string
   search?: string
 }
-
 
 

@@ -1,4 +1,4 @@
-using Inventory.Domain.Aggregates;
+﻿using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
@@ -177,6 +177,9 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
                         // در مقصد، چون در قفسه است، Available می‌شود (نیازی به Block نیست)
                     }
 
+                    await MoveSerialsAsync(source, dest, movingAvailable, movingBlocked, ct);
+
+
                     // ثبت در کاردکس: کاهش از قفسه مبدا
                     var sourceEntry = StockLedgerEntry.Create(
                         timestampUtc: DateTime.UtcNow,
@@ -245,4 +248,63 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
 
         return Unit.Value;
     }
+    private async Task MoveSerialsAsync(
+        StockItem source,
+        StockItem dest,
+        decimal movingAvailable,
+        decimal movingBlocked,
+        CancellationToken ct)
+    {
+        if (movingAvailable <= 0 && movingBlocked <= 0) return;
+
+        var hasSerials = await _db.StockItemSerials.AnyAsync(s => s.StockItemId == source.Id, ct);
+        if (!hasSerials) return;
+
+        var availableQty = movingAvailable > 0 ? EnsureWholeQty(movingAvailable) : 0;
+        var blockedQty = movingBlocked > 0 ? EnsureWholeQty(movingBlocked) : 0;
+        var isShelved = dest.ShelfId.HasValue;
+
+        if (availableQty > 0)
+        {
+            var availableSerials = await _db.StockItemSerials
+                .Where(s => s.StockItemId == source.Id && s.Status == StockSerialStatus.Available)
+                .OrderBy(s => s.SerialNumber)
+                .Take(availableQty)
+                .ToListAsync(ct);
+
+            if (availableSerials.Count < availableQty)
+                throw new InvalidOperationException("Not enough available serials to move.");
+
+            foreach (var serial in availableSerials)
+            {
+                serial.MoveToStock(dest.Id, isShelved);
+            }
+        }
+
+        if (blockedQty > 0)
+        {
+            var awaitingSerials = await _db.StockItemSerials
+                .Where(s => s.StockItemId == source.Id && s.Status == StockSerialStatus.AwaitingShelving)
+                .OrderBy(s => s.SerialNumber)
+                .Take(blockedQty)
+                .ToListAsync(ct);
+
+            if (awaitingSerials.Count < blockedQty)
+                throw new InvalidOperationException("Not enough awaiting shelving serials to move.");
+
+            foreach (var serial in awaitingSerials)
+            {
+                serial.MoveToStock(dest.Id, isShelved);
+            }
+        }
+    }
+
+    private static int EnsureWholeQty(decimal qty)
+    {
+        var truncated = decimal.Truncate(qty);
+        if (qty != truncated)
+            throw new InvalidOperationException("Serialized stock moves require whole-number quantities.");
+        return (int)truncated;
+    }
 }
+

@@ -112,7 +112,7 @@ export function ShelfProductsModal({ isOpen, shelf, onClose }: ShelfProductsModa
                     <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">شماره لات</th>
                     <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تاریخ انقضا</th>
                     <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">تعداد</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">Serials</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">سریال‌ها</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -142,7 +142,7 @@ export function ShelfProductsModal({ isOpen, shelf, onClose }: ShelfProductsModa
                              onClick={() => setSerialsItem(item)}
                              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
                            >
-                             View ({item.availableSerialsCount.toLocaleString('fa-IR')})
+                             مشاهده ({item.availableSerialsCount.toLocaleString('fa-IR')})
                            </button>
                          ) : (
                            <span className="text-slate-400">-</span>

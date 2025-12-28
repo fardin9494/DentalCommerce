@@ -41,6 +41,16 @@ public sealed class StockItemSerial : BaseEntity<Guid>
         Touch();
     }
 
+    public void MoveToStock(Guid stockItemId, bool isShelved)
+    {
+        if (stockItemId == Guid.Empty) throw new ArgumentOutOfRangeException(nameof(stockItemId));
+        StockItemId = stockItemId;
+        Status = isShelved ? StockSerialStatus.Available : StockSerialStatus.AwaitingShelving;
+        ClearIssueRef();
+        ClearTransferRef();
+        Touch();
+    }
+
     public void MarkAvailable(bool isShelved)
     {
         Status = isShelved ? StockSerialStatus.Available : StockSerialStatus.AwaitingShelving;

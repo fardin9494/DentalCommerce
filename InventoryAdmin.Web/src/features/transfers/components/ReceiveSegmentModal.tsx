@@ -118,6 +118,24 @@ export function ReceiveSegmentModal({
           )}
         </div>
 
+        {segment.serials.length > 0 && (
+          <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-medium text-slate-700">Serials</div>
+            <div className="mt-2 max-h-40 overflow-y-auto text-xs text-slate-600">
+              <div className="flex flex-wrap gap-2">
+                {segment.serials.map((serial) => (
+                  <span
+                    key={serial.serialNumber}
+                    className="rounded-full border border-slate-200 bg-white px-2 py-1 font-mono text-[11px] text-slate-700"
+                  >
+                    {serial.serialNumber}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>

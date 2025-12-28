@@ -149,6 +149,30 @@ export function useAllocateTransferLineLifo(transferId: string) {
   })
 }
 
+export function useTransferLineAvailableSerials(transferId: string, lineId: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: ['transfers', 'line-serials', transferId, lineId],
+    queryFn: () => api.getTransferLineAvailableSerials(transferId, lineId),
+    enabled: enabled && !!transferId && !!lineId,
+  })
+}
+
+export function useAllocateTransferLineSerials(transferId: string) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  return useMutation({
+    mutationFn: ({ lineId, serials }: { lineId: string; serials: string[] }) =>
+      api.allocateTransferLineSerials(transferId, lineId, serials),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transfers', 'detail', transferId] })
+      toast.success('تخصیص سریال با موفقیت انجام شد')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'خطا در تخصیص سریال')
+    },
+  })
+}
+
 export function useShipTransfer(transferId: string) {
   const qc = useQueryClient()
   const toast = useToast()

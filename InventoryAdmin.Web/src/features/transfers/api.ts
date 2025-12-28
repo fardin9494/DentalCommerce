@@ -8,6 +8,7 @@ import {
   UpdateTransferHeaderSchema,
   UpdateTransferLineSchema,
   ReceiveTransferSchema,
+  TransferLineSerialOptionSchema,
   type TransferDetail,
   type TransfersListFilters,
   type CreateTransferDto,
@@ -15,6 +16,7 @@ import {
   type UpdateTransferHeaderDto,
   type UpdateTransferLineDto,
   type ReceiveTransferDto,
+  type TransferLineSerialOption,
 } from './types'
 
 export const TransfersListResultSchema = z.object({
@@ -75,6 +77,15 @@ export async function allocateTransferLineFifo(transferId: string, lineId: strin
 
 export async function allocateTransferLineLifo(transferId: string, lineId: string): Promise<Array<{ stockItemId: string; qty: number }>> {
   return fetchJson<Array<{ stockItemId: string; qty: number }>>(`/transfers/${transferId}/lines/${lineId}/allocate-lifo`, { method: 'POST' })
+}
+
+export async function getTransferLineAvailableSerials(transferId: string, lineId: string): Promise<TransferLineSerialOption[]> {
+  const data = await fetchJson<unknown>(`/transfers/${transferId}/lines/${lineId}/available-serials`)
+  return TransferLineSerialOptionSchema.array().parse(data)
+}
+
+export async function allocateTransferLineSerials(transferId: string, lineId: string, serials: string[]): Promise<void> {
+  return fetchJson<void>(`/transfers/${transferId}/lines/${lineId}/allocate-serials`, { method: 'POST', json: { serials } })
 }
 
 export async function shipTransfer(transferId: string): Promise<void> {
