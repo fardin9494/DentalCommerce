@@ -33,13 +33,13 @@ public sealed class AllocateIssueLineSerialsHandler : IRequestHandler<AllocateIs
                         .Include(i => i.Lines)
                         .ThenInclude(l => l.Allocations)
                         .FirstOrDefaultAsync(i => i.Id == req.IssueId, ct)
-                        ?? throw new InvalidOperationException("Ø³Ù†Ø¯ Ø®Ø±ÙˆØ¬ Ù¾ÛŒØ¯Ø§ Ù†Ø´Ø¯.");
+                        ?? throw new InvalidOperationException("Issue not found.");
 
                     if (issue.Status != IssueStatus.Draft)
-                        throw new InvalidOperationException("ØªØ®ØµÛŒØµ Ø³Ø±ÛŒØ§Ù„ ÙÙ‚Ø· Ø¯Ø± ÙˆØ¶Ø¹ÛŒØª Ù¾ÛŒØ´â€ŒÙ†ÙˆÛŒØ³ Ù…Ù…Ú©Ù† Ø§Ø³Øª.");
+                        throw new InvalidOperationException("Serial allocation is only allowed for draft issues.");
 
                     var line = issue.Lines.FirstOrDefault(l => l.Id == req.LineId)
-                               ?? throw new InvalidOperationException("Ø®Ø· Ø³Ù†Ø¯ Ø®Ø±ÙˆØ¬ Ù¾ÛŒØ¯Ø§ Ù†Ø´Ø¯.");
+                               ?? throw new InvalidOperationException("Issue line not found.");
 
                     var normalized = (req.Serials ?? Array.Empty<string>())
                         .Select(s => s?.Trim())
@@ -52,21 +52,21 @@ public sealed class AllocateIssueLineSerialsHandler : IRequestHandler<AllocateIs
                         .ToList();
 
                     if (distinct.Count == 0)
-                        throw new InvalidOperationException("Ù‡ÛŒÚ† Ø³Ø±ÛŒØ§Ù„ÛŒ Ø§Ù†ØªØ®Ø§Ø¨ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.");
+                        throw new InvalidOperationException("No serials selected.");
 
                     if (distinct.Count != normalized.Count)
-                        throw new InvalidOperationException("Ø³Ø±ÛŒØ§Ù„â€ŒÙ‡Ø§ Ø¨Ø§ÛŒØ¯ ÛŒÚ©ØªØ§ Ø¨Ø§Ø´Ù†Ø¯.");
+                        throw new InvalidOperationException("Serials must be unique.");
 
                     var qtyInt = EnsureWholeQty(line.RequestedQty);
                     if (distinct.Count != qtyInt)
-                        throw new InvalidOperationException("ØªØ¹Ø¯Ø§Ø¯ Ø³Ø±ÛŒØ§Ù„â€ŒÙ‡Ø§ Ø¨Ø§ÛŒØ¯ Ø¨Ø±Ø§Ø¨Ø± Ù…Ù‚Ø¯Ø§Ø± Ø®Ø· Ø¨Ø§Ø´Ø¯.");
+                        throw new InvalidOperationException("Serial count must match the requested quantity.");
 
                     var serialEntities = await _db.StockItemSerials
                         .Where(s => distinct.Contains(s.SerialNumber))
                         .ToListAsync(ct);
 
                     if (serialEntities.Count != distinct.Count)
-                        throw new InvalidOperationException("Ø¨Ø±Ø®ÛŒ Ø³Ø±ÛŒØ§Ù„â€ŒÙ‡Ø§ Ù¾ÛŒØ¯Ø§ Ù†Ø´Ø¯Ù†Ø¯.");
+                        throw new InvalidOperationException("Some serials could not be found.");
 
                     var notAvailable = serialEntities
                         .Where(s => !(s.Status == StockSerialStatus.Available ||
@@ -75,10 +75,10 @@ public sealed class AllocateIssueLineSerialsHandler : IRequestHandler<AllocateIs
                         .ToList();
 
                     if (notAvailable.Count > 0)
-                        throw new InvalidOperationException("Ø¨Ø±Ø®ÛŒ Ø³Ø±ÛŒØ§Ù„â€ŒÙ‡Ø§ Ø¯Ø± ÙˆØ¶Ø¹ÛŒØª Ù‚Ø§Ø¨Ù„ ØªØ®ØµÛŒØµ Ù†ÛŒØ³ØªÙ†Ø¯.");
+                        throw new InvalidOperationException("Some serials are not available for allocation.");
 
                     if (serialEntities.Any(s => s.StockItemId == null))
-                        throw new InvalidOperationException("Ø¨Ø±Ø®ÛŒ Ø³Ø±ÛŒØ§Ù„â€ŒÙ‡Ø§ Ø¨Ù‡ Ù…ÙˆØ¬ÙˆØ¯ÛŒ Ù…ØªØµÙ„ Ù†ÛŒØ³ØªÙ†Ø¯.");
+                        throw new InvalidOperationException("Some serials are not linked to stock items.");
 
                     var stockItemIds = serialEntities.Select(s => s.StockItemId!.Value).Distinct().ToList();
                     var stockItems = await _db.StockItems
@@ -86,14 +86,14 @@ public sealed class AllocateIssueLineSerialsHandler : IRequestHandler<AllocateIs
                         .ToListAsync(ct);
 
                     if (stockItems.Count != stockItemIds.Count)
-                        throw new InvalidOperationException("Ø§Ø·Ù„Ø§Ø¹Ø§Øª Ù…ÙˆØ¬ÙˆØ¯ÛŒ Ø³Ø±ÛŒØ§Ù„â€ŒÙ‡Ø§ Ù†Ø§Ù‚Øµ Ø§Ø³Øª.");
+                        throw new InvalidOperationException("Stock item data is incomplete for selected serials.");
 
                     var matchesProduct = stockItems.All(si =>
                         si.ProductId == line.ProductId &&
                         (line.VariantId.HasValue ? si.VariantId == line.VariantId.Value : si.VariantId == null));
 
                     if (!matchesProduct)
-                        throw new InvalidOperationException("Ø¨Ø±Ø®ÛŒ Ø³Ø±ÛŒØ§Ù„â€ŒÙ‡Ø§ Ù…ØªØ¹Ù„Ù‚ Ø¨Ù‡ Ø§ÛŒÙ† Ù…Ø­ØµÙˆÙ„ Ù†ÛŒØ³ØªÙ†Ø¯.");
+                        throw new InvalidOperationException("Some serials do not belong to this product.");
 
                     foreach (var alloc in line.Allocations.ToList())
                     {
@@ -106,6 +106,7 @@ public sealed class AllocateIssueLineSerialsHandler : IRequestHandler<AllocateIs
 
                     await IssueSerialsHelper.ReleaseReservedSerialsAsync(_db, line.Id, ct);
                     issue.ClearAllocations(line.Id);
+                    await _db.SaveChangesAsync(ct);
 
                     var stockLookup = stockItems.ToDictionary(si => si.Id, si => si);
                     foreach (var group in serialEntities.GroupBy(s => s.StockItemId!.Value))
@@ -115,21 +116,29 @@ public sealed class AllocateIssueLineSerialsHandler : IRequestHandler<AllocateIs
                             stock.Reserve(group.Count());
                         }
 
-                        issue.AddAllocation(line.Id, group.Key, group.Count());
+                        var alloc = issue.AddAllocation(line.Id, group.Key, group.Count());
+                        _db.Entry(alloc).State = EntityState.Added;
+
                         foreach (var serial in group)
+                        {
                             serial.Reserve(issue.Id, line.Id);
+                        }
                     }
 
                     await _db.SaveChangesAsync(ct);
                     await tx.CommitAsync(ct);
                     break;
                 }
+                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+                {
+                    await tx.RollbackAsync(ct);
+                    _db.ChangeTracker.Clear();
+                }
                 catch (DbUpdateConcurrencyException ex)
                 {
                     await tx.RollbackAsync(ct);
                     _db.ChangeTracker.Clear();
-                    if (attempt == maxAttempts)
-                        throw new InvalidOperationException("Concurrent update detected. Please try again.", ex);
+                    throw new InvalidOperationException("Concurrent update detected. Please try again.", ex);
                 }
             }
         });
@@ -144,4 +153,5 @@ public sealed class AllocateIssueLineSerialsHandler : IRequestHandler<AllocateIs
         return (int)truncated;
     }
 }
+
 

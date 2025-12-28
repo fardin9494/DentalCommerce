@@ -92,13 +92,14 @@ export function PutAwayPage() {
     setSearchParams(new URLSearchParams())
   }
 
-  async function handleAssignShelf(data: { shelfId: string; qty: number; note?: string }) {
+  async function handleAssignShelf(data: { shelfId: string; qty: number; note?: string; serials?: string[] }) {
     if (!assigningItem) return
     await moveToShelf.mutateAsync({
       sourceStockItemId: assigningItem.id,
       targetShelfId: data.shelfId,
       qty: data.qty,
       note: data.note,
+      serials: data.serials,
     })
     setAssigningItem(null)
   }
@@ -387,4 +388,3 @@ export function PutAwayPage() {
     </div>
   )
 }
-

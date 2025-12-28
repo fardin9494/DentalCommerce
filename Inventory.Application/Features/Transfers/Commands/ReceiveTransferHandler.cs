@@ -85,7 +85,8 @@ public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferComm
                             si.VariantId == srcItem.VariantId &&
                             si.WarehouseId == destWarehouseId &&
                             si.LotNumber == srcItem.LotNumber &&
-                            si.ExpiryDate == srcItem.ExpiryDate,
+                            si.ExpiryDate == srcItem.ExpiryDate &&
+                            si.ShelfId == null,
                         ct);
 
                     if (destItem is null)
@@ -117,6 +118,10 @@ public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferComm
                     {
                         // افزایش موجودی مقصد
                         destItem.Increase(req.Qty);
+                        if (destItem.ShelfId == null)
+                        {
+                            destItem.Block(req.Qty, "Awaiting Shelving");
+                        }
                     }
                     catch (ArgumentOutOfRangeException ex)
                     {

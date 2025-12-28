@@ -99,13 +99,14 @@ export function ShelfTransferPage() {
     setSearchParams(new URLSearchParams())
   }
 
-  async function handleTransfer(data: { targetShelfId: string; qty: number; note?: string }) {
+  async function handleTransfer(data: { targetShelfId: string; qty: number; note?: string; serials?: string[] }) {
     if (!transferringItem) return
     await moveStock.mutateAsync({
       sourceStockItemId: transferringItem.id,
       targetShelfId: data.targetShelfId,
       qty: data.qty,
       note: data.note,
+      serials: data.serials,
     })
     setTransferringItem(null)
   }

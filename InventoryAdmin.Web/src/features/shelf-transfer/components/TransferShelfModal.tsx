@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { Spinner } from '@/shared/components/Spinner'
 import { useActiveShelves } from '../../shelves/queries'
+import { useStockItemSerials } from '../../stock-items/queries'
 import type { StockItem } from '../../stock-items/api'
 
 interface TransferShelfModalProps {
   isOpen: boolean
   stockItem: StockItem | null
   onClose: () => void
-  onSubmit: (data: { targetShelfId: string; qty: number; note?: string }) => void
+  onSubmit: (data: { targetShelfId: string; qty: number; note?: string; serials?: string[] }) => void
   isSubmitting?: boolean
 }
 
@@ -16,32 +17,60 @@ export function TransferShelfModal({ isOpen, stockItem, onClose, onSubmit, isSub
   const [targetShelfId, setTargetShelfId] = useState('')
   const [qty, setQty] = useState('')
   const [note, setNote] = useState('')
+  const [serialSearch, setSerialSearch] = useState('')
+  const [selectedSerials, setSelectedSerials] = useState<string[]>([])
+  const serialStatus = 'Available'
+  const serialsEnabled = isOpen && !!stockItem
+  const { data: serials, isLoading: loadingSerials, error: serialsError } = useStockItemSerials(
+    stockItem?.id,
+    serialStatus,
+    serialsEnabled
+  )
 
   // Initialize form when stockItem changes
   useEffect(() => {
-    if (stockItem) {
+    if (stockItem && isOpen) {
       setQty(stockItem.available.toString())
       setNote('')
       setTargetShelfId('')
+      setSerialSearch('')
+      setSelectedSerials([])
     }
-  }, [stockItem])
+  }, [stockItem, isOpen])
+
+  useEffect(() => {
+    if (!serials || serials.length === 0) return
+    setSelectedSerials((prev) => prev.filter((s) => serials.some((x) => x.serialNumber === s)))
+  }, [serials])
+
+  const filteredSerials = useMemo(() => {
+    if (!serials) return []
+    const term = serialSearch.trim().toLowerCase()
+    if (!term) return serials
+    return serials.filter((serial) => serial.serialNumber.toLowerCase().includes(term))
+  }, [serials, serialSearch])
 
   if (!isOpen || !stockItem) return null
 
   // Filter out the current shelf from the list
-  const availableShelves = shelves?.filter(s => s.id !== stockItem.shelfId) || []
+  const availableShelves = shelves?.filter((s) => s.id !== stockItem.shelfId) || []
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!targetShelfId || !qty) return
+    if (!targetShelfId) return
 
-    const qtyNum = parseFloat(qty)
-    if (isNaN(qtyNum) || qtyNum <= 0 || qtyNum > stockItem.onHand) return
+    const qtyNum = hasSerials ? selectedSerials.length : parseFloat(qty)
+    if (hasSerials) {
+      if (selectedSerials.length === 0) return
+    } else {
+      if (!qty || isNaN(qtyNum) || qtyNum <= 0 || qtyNum > maxQty) return
+    }
 
     onSubmit({
       targetShelfId,
       qty: qtyNum,
       note: note.trim() || undefined,
+      serials: hasSerials ? selectedSerials : undefined,
     })
   }
 
@@ -49,7 +78,36 @@ export function TransferShelfModal({ isOpen, stockItem, onClose, onSubmit, isSub
     onClose()
   }
 
+  function toggleSerial(serialNumber: string) {
+    setSelectedSerials((prev) => {
+      if (prev.includes(serialNumber)) {
+        return prev.filter((s) => s !== serialNumber)
+      }
+      return [...prev, serialNumber]
+    })
+  }
+
+  function selectAllSerials() {
+    if (serialLimit === 0 || filteredSerials.length === 0) return
+    setSelectedSerials((prev) => {
+      const next = new Set(prev)
+      for (const serial of filteredSerials) {
+        if (next.size >= serialLimit) break
+        next.add(serial.serialNumber)
+      }
+      return Array.from(next)
+    })
+  }
+
   const maxQty = stockItem.onHand
+  const hasSerials = (serials?.length ?? 0) > 0
+  const serialLimit = hasSerials ? Math.min(Math.trunc(maxQty), serials?.length ?? 0) : 0
+  const selectionLimitReached = hasSerials && selectedSerials.length >= serialLimit
+  const qtyValue = hasSerials ? selectedSerials.length.toString() : qty
+  const canSubmitSerials = hasSerials && selectedSerials.length > 0 && selectedSerials.length <= serialLimit
+  const canSubmitQty = !hasSerials && !!qty && parseFloat(qty) > 0 && parseFloat(qty) <= maxQty
+  const maxQtyDisplay = hasSerials ? serialLimit : maxQty
+  const canSelectAllSerials = hasSerials && filteredSerials.length > 0 && selectedSerials.length < serialLimit
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -75,7 +133,7 @@ export function TransferShelfModal({ isOpen, stockItem, onClose, onSubmit, isSub
         <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
           <div className="text-sm font-medium text-emerald-800">کالای انتخابی</div>
           <div className="mt-1 font-medium text-slate-900">
-            {stockItem.productName || 'نامشخص'}
+            {stockItem.productName || 'کالای نامشخص'}
             {stockItem.variantValue && <span className="text-emerald-600"> - {stockItem.variantValue}</span>}
           </div>
           <div className="mt-0.5 flex items-center gap-4 text-xs text-slate-600">
@@ -83,7 +141,7 @@ export function TransferShelfModal({ isOpen, stockItem, onClose, onSubmit, isSub
             <span>•</span>
             <span>موجودی کل: {stockItem.onHand.toLocaleString('fa-IR')}</span>
             <span>•</span>
-            <span>آزاد: {stockItem.available.toLocaleString('fa-IR')}</span>
+            <span>موجودی آزاد: {stockItem.available.toLocaleString('fa-IR')}</span>
           </div>
           {stockItem.lotNumber && (
             <div className="mt-1 text-xs text-slate-500">لات: {stockItem.lotNumber}</div>
@@ -120,7 +178,7 @@ export function TransferShelfModal({ isOpen, stockItem, onClose, onSubmit, isSub
               </div>
             ) : availableShelves.length === 0 ? (
               <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
-                هیچ قفسه دیگری در این انبار یافت نشد.
+                هیچ قفسه فعالی برای این انبار پیدا نشد.
               </div>
             ) : (
               <select
@@ -146,18 +204,92 @@ export function TransferShelfModal({ isOpen, stockItem, onClose, onSubmit, isSub
             </label>
             <input
               type="number"
-              value={qty}
+              value={qtyValue}
               onChange={(e) => setQty(e.target.value)}
-              min="0.01"
-              max={maxQty}
-              step="0.01"
+              min={hasSerials ? 1 : 0.01}
+              max={maxQtyDisplay}
+              step={hasSerials ? 1 : 0.01}
               required
+              disabled={hasSerials}
               className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
             />
             <p className="mt-1 text-xs text-slate-500">
-              حداکثر: {maxQty.toLocaleString('fa-IR')} (موجودی کل)
+              حداکثر: {maxQtyDisplay.toLocaleString('fa-IR')} (موجودی آزاد)
             </p>
           </div>
+
+          {hasSerials && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">سریال‌ها</label>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                <div className="flex items-center justify-between">
+                  <span>انتخاب شده</span>
+                  <span className="font-semibold">
+                    {selectedSerials.length}/{serialLimit}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  value={serialSearch}
+                  onChange={(e) => setSerialSearch(e.target.value)}
+                  placeholder="جستجو در سریال‌ها..."
+                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+                <button
+                  type="button"
+                  onClick={selectAllSerials}
+                  disabled={!canSelectAllSerials}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                >
+                  انتخاب همه
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSerials([])}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  پاک کردن
+                </button>
+              </div>
+
+              {loadingSerials ? (
+                <div className="flex items-center justify-center py-4">
+                  <Spinner className="h-5 w-5 text-emerald-600" />
+                </div>
+              ) : serialsError ? (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {(serialsError as Error).message || 'خطا در دریافت سریال‌ها'}
+                </div>
+              ) : filteredSerials.length === 0 ? (
+                <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">
+                  سریالی یافت نشد.
+                </div>
+              ) : (
+                <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white">
+                  <div className="divide-y divide-slate-100">
+                    {filteredSerials.map((serial) => {
+                      const isChecked = selectedSerials.includes(serial.serialNumber)
+                      const isDisabled = !isChecked && selectionLimitReached
+                      return (
+                        <label key={serial.serialNumber} className="flex items-start gap-3 px-4 py-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={isSubmitting || isDisabled}
+                            onChange={() => toggleSerial(serial.serialNumber)}
+                            className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <div className="font-mono text-slate-900">{serial.serialNumber}</div>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Note */}
           <div>
@@ -186,11 +318,9 @@ export function TransferShelfModal({ isOpen, stockItem, onClose, onSubmit, isSub
               disabled={
                 isSubmitting ||
                 !targetShelfId ||
-                !qty ||
-                parseFloat(qty) <= 0 ||
-                parseFloat(qty) > maxQty ||
                 loadingShelves ||
-                availableShelves.length === 0
+                availableShelves.length === 0 ||
+                (hasSerials ? !canSubmitSerials : !canSubmitQty)
               }
               className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-50"
             >
@@ -218,4 +348,3 @@ export function TransferShelfModal({ isOpen, stockItem, onClose, onSubmit, isSub
     </div>
   )
 }
-

@@ -6,6 +6,7 @@ export interface MoveStockBetweenShelvesDto {
   targetShelfId: string
   qty: number
   note?: string
+  serials?: string[]
 }
 
 export async function getAssignedStockItems(filters: StockItemsListFilters = {}): Promise<StockItemsListResult> {

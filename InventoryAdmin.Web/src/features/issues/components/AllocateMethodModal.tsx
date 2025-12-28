@@ -91,8 +91,23 @@ export function AllocateMethodModal({
     })
   }
 
+  function selectAllSerials() {
+    if (requiredQty === null || filteredSerials.length === 0) return
+    setSelectedSerials((prev) => {
+      const next = new Set(prev)
+      for (const serial of filteredSerials) {
+        if (next.size >= requiredQty) break
+        next.add(serial.serialNumber)
+      }
+      return Array.from(next)
+    })
+  }
+
+
   const selectionLimitReached = requiredQty !== null && selectedSerials.length >= requiredQty
   const canSubmitSerials = requiredQty !== null && selectedSerials.length === requiredQty
+  const canSelectAllSerials =
+    requiredQty !== null && filteredSerials.length > 0 && selectedSerials.length < requiredQty
 
   if (!isOpen) return null
 
@@ -232,6 +247,14 @@ export function AllocateMethodModal({
                     placeholder="جستجو در سریال‌ها..."
                     className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   />
+                  <button
+                    type="button"
+                    onClick={selectAllSerials}
+                    disabled={!canSelectAllSerials}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    انتخاب همه
+                  </button>
                   <button
                     type="button"
                     onClick={() => setSelectedSerials([])}

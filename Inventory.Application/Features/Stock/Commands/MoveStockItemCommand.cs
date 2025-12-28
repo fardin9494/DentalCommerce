@@ -23,4 +23,5 @@ public sealed class MoveStockItemCommand : IRequest<Unit>
     /// یادداشت اختیاری برای ثبت در کاردکس (مثلاً دلیل جابجایی)
     /// </summary>
     public string? Note { get; set; }
+    public IReadOnlyList<string>? Serials { get; set; }
 }

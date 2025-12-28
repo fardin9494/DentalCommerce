@@ -29,7 +29,18 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
                     if (source.ShelfId == req.TargetShelfId)
                         throw new InvalidOperationException("محل مقصد با مبدا یکسان است.");
 
-                    if (req.Qty > source.OnHand)
+                    var qtyToMove = req.Qty;
+                    var selectedSerials = NormalizeSerials(req.Serials, out var hasDuplicateSerials);
+                    if (hasDuplicateSerials)
+                        throw new InvalidOperationException("Duplicate serials are not allowed.");
+                    if (selectedSerials.Count > 0)
+                    {
+                        var qtyInt = EnsureWholeQty(qtyToMove);
+                        if (qtyInt != selectedSerials.Count)
+                            throw new InvalidOperationException("Qty must match the number of serials.");
+                    }
+
+                    if (qtyToMove > source.OnHand)
                         throw new InvalidOperationException("مقدار درخواستی بیش از موجودی است.");
 
                     decimal movingAvailable = 0;
@@ -38,10 +49,10 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
                     if (source.ShelfId.HasValue)
                     {
                         // انتقال بین قفسه‌ها - فقط کالاهای Available قابل انتقال هستند
-                        if (req.Qty > source.Available)
-                            throw new InvalidOperationException($"مقدار درخواستی ({req.Qty}) بیش از موجودی آزاد ({source.Available}) است.");
+                        if (qtyToMove > source.Available)
+                            throw new InvalidOperationException($"مقدار درخواستی ({qtyToMove}) بیش از موجودی آزاد ({source.Available}) است.");
                         
-                        movingAvailable = req.Qty;
+                        movingAvailable = qtyToMove;
                     }
                     else
                     {
@@ -50,66 +61,77 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
                             throw new InvalidOperationException("فقط موجودی‌های مسدود (موجودی‌های جدید) قابل چیدن در قفسه هستند.");
 
                         // برای موجودی‌های جدید (Blocked و بدون قفسه)، همه موجودی Blocked است
-                        if (req.Qty > source.Blocked)
-                            throw new InvalidOperationException($"مقدار درخواستی ({req.Qty}) بیش از موجودی مسدود ({source.Blocked}) است.");
+                        if (qtyToMove > source.Blocked)
+                            throw new InvalidOperationException($"مقدار درخواستی ({qtyToMove}) بیش از موجودی مسدود ({source.Blocked}) است.");
                         
-                        // بررسی اینکه آیا رسید مربوطه تایید نهایی شده یا نه
-                        // تا زمانی که رسید تایید نهایی نشده، امکان چیدن در قفسه وجود ندارد
-                        try
+                        // Allow shelving transfer-in stock without receipt checks.
+                        var hasTransferIn = await _db.StockLedger
+                            .AsNoTracking()
+                            .Where(l => l.MovementType == StockMovementType.TransferIn &&
+                                        l.WarehouseId == source.WarehouseId &&
+                                        l.ProductId == source.ProductId &&
+                                        l.VariantId == source.VariantId &&
+                                        l.LotNumber == source.LotNumber &&
+                                        l.ExpiryDate == source.ExpiryDate)
+                            .AnyAsync(ct);
+
+                        if (!hasTransferIn)
                         {
-                            var receiptExists = await _db.Receipts
-                                .Include(r => r.Lines)
-                                .Where(r => r.WarehouseId == source.WarehouseId &&
-                                          r.Status == ReceiptStatus.Approved && // فقط رسیدهای تایید نهایی شده
-                                          r.Lines.Any(l =>
-                                              l.ProductId == source.ProductId &&
-                                              l.VariantId == source.VariantId &&
-                                              l.LotNumber == source.LotNumber &&
-                                              l.ExpiryDate == source.ExpiryDate))
-                                .AnyAsync(ct);
-                            
-                            if (!receiptExists)
+                            try
                             {
-                                // بررسی اینکه آیا رسید دریافت شده (اما تایید نهایی نشده) وجود دارد یا نه
-                                var receiptReceived = await _db.Receipts
+                                var receiptExists = await _db.Receipts
                                     .Include(r => r.Lines)
                                     .Where(r => r.WarehouseId == source.WarehouseId &&
-                                              r.Status == ReceiptStatus.Received && // رسید دریافت شده
+                                              r.Status == ReceiptStatus.Approved && // ??? ??????? ????? ????? ???
                                               r.Lines.Any(l =>
                                                   l.ProductId == source.ProductId &&
                                                   l.VariantId == source.VariantId &&
                                                   l.LotNumber == source.LotNumber &&
                                                   l.ExpiryDate == source.ExpiryDate))
-                                    .FirstOrDefaultAsync(ct);
-                                
-                                if (receiptReceived != null)
+                                    .AnyAsync(ct);
+
+                                if (!receiptExists)
                                 {
-                                    throw new InvalidOperationException(
-                                        $"امکان چیدن در قفسه وجود ندارد. رسید مربوطه (شناسه: {receiptReceived.Id}) هنوز تایید نهایی نشده است. " +
-                                        "لطفاً ابتدا رسید را تایید نهایی کنید.");
-                                }
-                                else
-                                {
-                                    throw new InvalidOperationException(
-                                        "امکان چیدن در قفسه وجود ندارد. رسید مربوطه باید ابتدا تایید نهایی شود.");
+                                    // ????? ????? ??? ???? ?????? ??? (??? ????? ????? ????) ???? ???? ?? ??
+                                    var receiptReceived = await _db.Receipts
+                                        .Include(r => r.Lines)
+                                        .Where(r => r.WarehouseId == source.WarehouseId &&
+                                                  r.Status == ReceiptStatus.Received && // ???? ?????? ???
+                                                  r.Lines.Any(l =>
+                                                      l.ProductId == source.ProductId &&
+                                                      l.VariantId == source.VariantId &&
+                                                      l.LotNumber == source.LotNumber &&
+                                                      l.ExpiryDate == source.ExpiryDate))
+                                        .FirstOrDefaultAsync(ct);
+
+                                    if (receiptReceived != null)
+                                    {
+                                        throw new InvalidOperationException(
+                                            $"????? ???? ?? ???? ???? ?????. ???? ?????? (?????: {receiptReceived.Id}) ???? ????? ????? ???? ???. " +
+                                            "????? ????? ???? ?? ????? ????? ????.");
+                                    }
+                                    else
+                                    {
+                                        throw new InvalidOperationException(
+                                            "????? ???? ?? ???? ???? ?????. ???? ?????? ???? ????? ????? ????? ???.");
+                                    }
                                 }
                             }
+                            catch (InvalidOperationException)
+                            {
+                                // ?????? InvalidOperationException ?? ?????? throw ???????
+                                throw;
+                            }
+                            catch (Exception ex)
+                            {
+                                // ?????? ???? ?? ?? ???? ????? throw ???????
+                                throw new InvalidOperationException(
+                                    $"??? ?? ????? ????? ????: {ex.Message}. ????? ???? ?? ???? ???? ?????. ???? ?????? ???? ????? ????? ????? ???.",
+                                    ex);
+                            }
                         }
-                        catch (InvalidOperationException)
-                        {
-                            // خطاهای InvalidOperationException را دوباره throw می‌کنیم
-                            throw;
-                        }
-                        catch (Exception ex)
-                        {
-                            // خطاهای دیگر را با پیام مناسب throw می‌کنیم
-                            throw new InvalidOperationException(
-                                $"خطا در بررسی وضعیت رسید: {ex.Message}. امکان چیدن در قفسه وجود ندارد. رسید مربوطه باید ابتدا تایید نهایی شود.",
-                                ex);
-                        }
-                        
-                        // همه موجودی Blocked است، پس باید همه را Unblock کنیم
-                        movingBlocked = req.Qty;
+
+                        movingBlocked = qtyToMove;
                     }
 
                     var dest = await _db.StockItems.FirstOrDefaultAsync(si =>
@@ -163,7 +185,6 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
                     {
                         source.Decrease(movingAvailable);
                         dest.Increase(movingAvailable);
-                        // در مقصد، چون در قفسه است، Available می‌شود (نیازی به Block نیست)
                     }
 
                     if (movingBlocked > 0)
@@ -174,10 +195,9 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
                         source.Decrease(movingBlocked);
                         // افزایش در dest
                         dest.Increase(movingBlocked);
-                        // در مقصد، چون در قفسه است، Available می‌شود (نیازی به Block نیست)
                     }
 
-                    await MoveSerialsAsync(source, dest, movingAvailable, movingBlocked, ct);
+                    await MoveSerialsAsync(source, dest, movingAvailable, movingBlocked, selectedSerials, ct);
 
 
                     // ثبت در کاردکس: کاهش از قفسه مبدا
@@ -253,16 +273,46 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
         StockItem dest,
         decimal movingAvailable,
         decimal movingBlocked,
+        IReadOnlyList<string> selectedSerials,
         CancellationToken ct)
     {
         if (movingAvailable <= 0 && movingBlocked <= 0) return;
 
         var hasSerials = await _db.StockItemSerials.AnyAsync(s => s.StockItemId == source.Id, ct);
-        if (!hasSerials) return;
+        if (!hasSerials)
+        {
+            if (selectedSerials.Count > 0)
+                throw new InvalidOperationException("Serials were provided but the stock item has no serials.");
+            return;
+        }
+
+        var isShelved = dest.ShelfId.HasValue;
+
+        if (selectedSerials.Count > 0)
+        {
+            var serials = await _db.StockItemSerials
+                .Where(s => s.StockItemId == source.Id && selectedSerials.Contains(s.SerialNumber))
+                .ToListAsync(ct);
+
+            if (serials.Count != selectedSerials.Count)
+                throw new InvalidOperationException("Selected serials were not found in source stock.");
+
+            if (movingAvailable > 0 && serials.Any(s => s.Status != StockSerialStatus.Available))
+                throw new InvalidOperationException("Selected serials are not available.");
+
+            if (movingBlocked > 0 && serials.Any(s => s.Status != StockSerialStatus.AwaitingShelving))
+                throw new InvalidOperationException("Selected serials are not awaiting shelving.");
+
+            foreach (var serial in serials)
+            {
+                serial.MoveToStock(dest.Id, isShelved);
+            }
+
+            return;
+        }
 
         var availableQty = movingAvailable > 0 ? EnsureWholeQty(movingAvailable) : 0;
         var blockedQty = movingBlocked > 0 ? EnsureWholeQty(movingBlocked) : 0;
-        var isShelved = dest.ShelfId.HasValue;
 
         if (availableQty > 0)
         {
@@ -306,5 +356,32 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
             throw new InvalidOperationException("Serialized stock moves require whole-number quantities.");
         return (int)truncated;
     }
+
+    private static IReadOnlyList<string> NormalizeSerials(
+        IReadOnlyList<string>? serials,
+        out bool hasDuplicates)
+    {
+        hasDuplicates = false;
+        if (serials is null || serials.Count == 0) return Array.Empty<string>();
+
+        var cleaned = new List<string>(serials.Count);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var serial in serials)
+        {
+            if (string.IsNullOrWhiteSpace(serial)) continue;
+            var trimmed = serial.Trim();
+            if (!seen.Add(trimmed))
+            {
+                hasDuplicates = true;
+                continue;
+            }
+            cleaned.Add(trimmed);
+        }
+
+        return cleaned;
+    }
 }
+
+
+
 

@@ -41,6 +41,7 @@ export interface MoveToShelfDto {
   targetShelfId: string
   qty: number
   note?: string
+  serials?: string[]
 }
 
 export async function getUnassignedStockItems(filters: UnassignedStockItemsFilters = {}): Promise<UnassignedStockItemsResult> {
