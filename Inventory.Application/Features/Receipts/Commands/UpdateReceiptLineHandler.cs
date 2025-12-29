@@ -1,5 +1,5 @@
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,8 +7,8 @@ namespace Inventory.Application.Features.Receipts.Commands;
 
 public sealed class UpdateReceiptLineHandler : IRequestHandler<UpdateReceiptLineCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public UpdateReceiptLineHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public UpdateReceiptLineHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(UpdateReceiptLineCommand req, CancellationToken ct)
     {

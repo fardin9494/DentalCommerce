@@ -1,5 +1,5 @@
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -51,8 +51,8 @@ public sealed record ReceiptRejectionListItemDto(
 
 public sealed class GetReceiptRejectionsListHandler : IRequestHandler<GetReceiptRejectionsListQuery, ReceiptRejectionsListResult>
 {
-    private readonly InventoryDbContext _db;
-    public GetReceiptRejectionsListHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public GetReceiptRejectionsListHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<ReceiptRejectionsListResult> Handle(GetReceiptRejectionsListQuery req, CancellationToken ct)
     {

@@ -1,5 +1,5 @@
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,8 +15,8 @@ public sealed record StockItemSerialDto(
 
 public sealed class GetStockItemSerialsHandler : IRequestHandler<GetStockItemSerialsQuery, IReadOnlyList<StockItemSerialDto>>
 {
-    private readonly InventoryDbContext _db;
-    public GetStockItemSerialsHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public GetStockItemSerialsHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<IReadOnlyList<StockItemSerialDto>> Handle(GetStockItemSerialsQuery req, CancellationToken ct)
     {

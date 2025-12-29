@@ -1,5 +1,5 @@
 ﻿using Inventory.Domain.Aggregates;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,8 +9,8 @@ namespace Inventory.Application.Features.Pricing.Commands;
 
 public sealed class SetInventoryCostHandler : IRequestHandler<SetInventoryCostCommand, Guid>
 {
-    private readonly InventoryDbContext _db;
-    public SetInventoryCostHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public SetInventoryCostHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Guid> Handle(SetInventoryCostCommand req, CancellationToken ct)
     {

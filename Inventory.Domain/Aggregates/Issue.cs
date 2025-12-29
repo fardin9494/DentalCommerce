@@ -1,5 +1,6 @@
 ﻿using BuildingBlocks.Domain;
 using Inventory.Domain.Enums;
+using Inventory.Domain.Markers;
 using Inventory.Domain.Naming;
 
 namespace Inventory.Domain.Aggregates;
@@ -118,7 +119,7 @@ public sealed class Issue : AggregateRoot<Guid>
     }
 }
 
-public sealed class IssueLine : BaseEntity<Guid>
+public sealed class IssueLine : BaseEntity<Guid>, IHasRowVersion
 {
     private readonly List<IssueAllocation> _allocations = new();
 
@@ -172,7 +173,7 @@ public sealed class IssueLine : BaseEntity<Guid>
     }
 }
 
-public sealed class IssueAllocation : BaseEntity<Guid>
+public sealed class IssueAllocation : BaseEntity<Guid>, IHasRowVersion
 {
     public Guid IssueLineId { get; private set; }
     public Guid StockItemId { get; private set; }

@@ -3,6 +3,7 @@ using Inventory.Application.Features.Adjustments.Commands;
 using Inventory.Application.Features.Issues.Commands;
 using Inventory.Application.Features.Pricing.Commands;
 using Inventory.Application.Features.Pricing.Queries;
+using Inventory.Application.Abstractions;
 using Inventory.Application.Features.Receipts.Commands;
 using Inventory.Application.Features.ReceiptRejections.Commands;
 using Inventory.Application.Features.ReceiptRejections.Queries;
@@ -40,6 +41,8 @@ builder.Services.AddDbContext<InventoryDbContext>(opt =>
         sql.EnableRetryOnFailure();
     });
 });
+builder.Services.AddScoped<IInventoryDbContext>(sp => sp.GetRequiredService<InventoryDbContext>());
+builder.Services.AddScoped<ITransactionRunner, EfTransactionRunner>();
 
 builder.Services.AddMediatR(cfg =>
 {

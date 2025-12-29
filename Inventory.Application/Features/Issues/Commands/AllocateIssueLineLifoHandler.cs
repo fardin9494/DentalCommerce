@@ -1,6 +1,6 @@
 using Inventory.Domain.Aggregates;
 using Inventory.Application.Features.Issues.Serials;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,22 +8,26 @@ namespace Inventory.Application.Features.Issues.Commands;
 
 public sealed class AllocateIssueLineLifoHandler : IRequestHandler<AllocateIssueLineLifoCommand, IReadOnlyList<AllocationDto>>
 {
-    private readonly InventoryDbContext _db;
-    public AllocateIssueLineLifoHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    private readonly ITransactionRunner _tx;
+
+    public AllocateIssueLineLifoHandler(IInventoryDbContext db, ITransactionRunner tx)
+    {
+        _db = db;
+        _tx = tx;
+    }
 
     public async Task<IReadOnlyList<AllocationDto>> Handle(AllocateIssueLineLifoCommand req, CancellationToken ct)
     {
-        var strategy = _db.Database.CreateExecutionStrategy();
         const int maxAttempts = 5;
 
         IReadOnlyList<AllocationDto> result = Array.Empty<AllocationDto>();
 
-        await strategy.ExecuteAsync(async () =>
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            try
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
+                result = await _tx.ExecuteAsync(async ct =>
                 {
                     var issue = await _db.Issues
                         .Include(i => i.Lines)
@@ -52,9 +56,7 @@ public sealed class AllocateIssueLineLifoHandler : IRequestHandler<AllocateIssue
 
                     if (qtyNeeded <= 0)
                     {
-                        result = allocatedResult;
-                        await tx.CommitAsync(ct);
-                        break;
+                        return allocatedResult;
                     }
 
                     var query = _db.StockItems
@@ -93,17 +95,15 @@ public sealed class AllocateIssueLineLifoHandler : IRequestHandler<AllocateIssue
                         throw new InvalidOperationException($"Not enough available stock. Remaining: {qtyNeeded}");
 
                     await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    result = allocatedResult;
-                    break;
-                }
-                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
-                {
-                    await tx.RollbackAsync(ct);
-                    _db.ChangeTracker.Clear();
-                }
+                    return allocatedResult;
+                }, ct);
+                break;
             }
-        });
+            catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+            {
+                _db.ChangeTracker.Clear();
+            }
+        }
 
         return result;
     }

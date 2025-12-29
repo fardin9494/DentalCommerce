@@ -1,4 +1,4 @@
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,8 +8,8 @@ public sealed record DeleteStockShelfCommand(Guid ShelfId) : IRequest<Unit>;
 
 public sealed class DeleteStockShelfHandler : IRequestHandler<DeleteStockShelfCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public DeleteStockShelfHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public DeleteStockShelfHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(DeleteStockShelfCommand req, CancellationToken ct)
     {

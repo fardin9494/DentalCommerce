@@ -1,6 +1,6 @@
 using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,8 +37,8 @@ public sealed record StockLedgerEntrySerialDto(
 
 public sealed class GetStockLedgerEntryDetailsHandler : IRequestHandler<GetStockLedgerEntryDetailsQuery, StockLedgerEntryDetailsDto?>
 {
-    private readonly InventoryDbContext _db;
-    public GetStockLedgerEntryDetailsHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public GetStockLedgerEntryDetailsHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<StockLedgerEntryDetailsDto?> Handle(GetStockLedgerEntryDetailsQuery req, CancellationToken ct)
     {

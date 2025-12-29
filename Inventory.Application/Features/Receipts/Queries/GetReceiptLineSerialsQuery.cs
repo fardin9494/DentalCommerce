@@ -1,5 +1,5 @@
 ﻿using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,8 +15,8 @@ public sealed record GetReceiptLineSerialsQuery(Guid ReceiptId, Guid LineId) : I
 
 public sealed class GetReceiptLineSerialsHandler : IRequestHandler<GetReceiptLineSerialsQuery, IReadOnlyList<ReceiptLineSerialDto>>
 {
-    private readonly InventoryDbContext _db;
-    public GetReceiptLineSerialsHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public GetReceiptLineSerialsHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<IReadOnlyList<ReceiptLineSerialDto>> Handle(GetReceiptLineSerialsQuery req, CancellationToken ct)
     {

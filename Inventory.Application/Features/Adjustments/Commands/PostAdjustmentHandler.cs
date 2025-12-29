@@ -1,7 +1,7 @@
 using Inventory.Application.Common.Interfaces;
 using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,13 +9,18 @@ namespace Inventory.Application.Features.Adjustments.Commands;
 
 public sealed class PostAdjustmentHandler : IRequestHandler<PostAdjustmentCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
+    private readonly IInventoryDbContext _db;
     private readonly ICatalogGateway _catalogGateway;
+    private readonly ITransactionRunner _tx;
 
-    public PostAdjustmentHandler(InventoryDbContext db, ICatalogGateway catalogGateway)
+    public PostAdjustmentHandler(
+        IInventoryDbContext db,
+        ICatalogGateway catalogGateway,
+        ITransactionRunner tx)
     {
         _db = db;
         _catalogGateway = catalogGateway;
+        _tx = tx;
     }
 
     public async Task<Unit> Handle(PostAdjustmentCommand req, CancellationToken ct)
@@ -33,15 +38,13 @@ public sealed class PostAdjustmentHandler : IRequestHandler<PostAdjustmentComman
         if (adj.Lines.Count == 0)
             throw new InvalidOperationException("سند بدون آیتم قابل ثبت نیست.");
 
-        var strategy = _db.Database.CreateExecutionStrategy();
+        const int maxAttempts = 5;
 
-        await strategy.ExecuteAsync(async () =>
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            const int maxAttempts = 5;
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            try
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
+                await _tx.ExecuteAsync(async ct =>
                 {
                     foreach (var l in adj.Lines)
                     {
@@ -202,24 +205,22 @@ public sealed class PostAdjustmentHandler : IRequestHandler<PostAdjustmentComman
                     adj.Post(req.WhenUtc);
 
                     await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    break;
-                }
-                catch (DbUpdateConcurrencyException)
-                {
-                    await tx.RollbackAsync(ct);
-                    _db.ChangeTracker.Clear();
+                }, ct);
+                break;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                _db.ChangeTracker.Clear();
 
                     adj = await _db.Adjustments
                         .Include(a => a.Lines)
                         .FirstOrDefaultAsync(a => a.Id == req.AdjustmentId, ct)
                         ?? throw new InvalidOperationException("سند اصلاح در تلاش مجدد یافت نشد.");
 
-                    if (attempt == maxAttempts)
-                        throw;
-                }
+                if (attempt == maxAttempts)
+                    throw;
             }
-        });
+        }
 
         return Unit.Value;
     }

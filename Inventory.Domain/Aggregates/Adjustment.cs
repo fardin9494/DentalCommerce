@@ -1,5 +1,6 @@
 using BuildingBlocks.Domain;
 using Inventory.Domain.Enums;
+using Inventory.Domain.Markers;
 using Inventory.Domain.Naming;
 
 namespace Inventory.Domain.Aggregates;
@@ -108,7 +109,7 @@ public sealed class Adjustment : AggregateRoot<Guid>
     }
 }
 
-public sealed class AdjustmentLine : BaseEntity<Guid>
+public sealed class AdjustmentLine : BaseEntity<Guid>, IHasRowVersion
 {
     public Guid AdjustmentId { get; private set; }
     public int LineNo { get; private set; }

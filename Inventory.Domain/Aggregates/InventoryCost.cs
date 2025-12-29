@@ -1,4 +1,5 @@
 ﻿using BuildingBlocks.Domain;
+using Inventory.Domain.Markers;
 
 namespace Inventory.Domain.Aggregates;
 
@@ -6,7 +7,7 @@ namespace Inventory.Domain.Aggregates;
 /// نگهداری قیمت تمام شده (خرید) برای یک آیتم در انبار.
 /// این اطلاعات محرمانه است و نباید به مشتری نشان داده شود.
 /// </summary>
-public sealed class InventoryCost : BaseEntity<Guid>
+public sealed class InventoryCost : BaseEntity<Guid>, IHasRowVersion
 {
     public Guid StockItemId { get; private set; }
     public decimal Amount { get; private set; } // قیمت خرید/تولید

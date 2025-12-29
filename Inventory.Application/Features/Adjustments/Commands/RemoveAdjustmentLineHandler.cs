@@ -1,4 +1,4 @@
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,8 +6,8 @@ namespace Inventory.Application.Features.Adjustments.Commands;
 
 public sealed class RemoveAdjustmentLineHandler : IRequestHandler<RemoveAdjustmentLineCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public RemoveAdjustmentLineHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public RemoveAdjustmentLineHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(RemoveAdjustmentLineCommand req, CancellationToken ct)
     {

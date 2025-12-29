@@ -1,5 +1,5 @@
 ﻿using Inventory.Domain.Aggregates;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,8 +7,8 @@ namespace Inventory.Application.Features.Transfers.Commands;
 
 public sealed class CreateTransferDraftHandler : IRequestHandler<CreateTransferDraftCommand, Guid>
 {
-    private readonly InventoryDbContext _db;
-    public CreateTransferDraftHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public CreateTransferDraftHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Guid> Handle(CreateTransferDraftCommand req, CancellationToken ct)
     {

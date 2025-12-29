@@ -1,5 +1,5 @@
 using Inventory.Domain.Aggregates;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
@@ -17,8 +17,8 @@ public sealed record CreateStockShelvesBatchCommand(
 
 public sealed class CreateStockShelvesBatchHandler : IRequestHandler<CreateStockShelvesBatchCommand, int>
 {
-    private readonly InventoryDbContext _db;
-    public CreateStockShelvesBatchHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public CreateStockShelvesBatchHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<int> Handle(CreateStockShelvesBatchCommand req, CancellationToken ct)
     {

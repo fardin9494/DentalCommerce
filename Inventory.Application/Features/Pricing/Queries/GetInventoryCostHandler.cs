@@ -1,4 +1,4 @@
-﻿using Inventory.Infrastructure.Persistence;
+﻿using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,8 +7,8 @@ namespace Inventory.Application.Features.Pricing.Queries;
 public sealed class GetInventoryCostHandler
     : IRequestHandler<GetInventoryCostQuery, InventoryCostDto>
 {
-    private readonly InventoryDbContext _db;
-    public GetInventoryCostHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public GetInventoryCostHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<InventoryCostDto> Handle(GetInventoryCostQuery req, CancellationToken ct)
     {

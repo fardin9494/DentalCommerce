@@ -1,4 +1,4 @@
-﻿using Inventory.Infrastructure.Persistence;
+﻿using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,9 +7,9 @@ namespace Inventory.Application.Features.Pricing.Queries;
 public sealed class GetAvailableStockCostHandler
     : IRequestHandler<GetAvailableStockCostQuery, StockCostDto>
 {
-    private readonly InventoryDbContext _db;
+    private readonly IInventoryDbContext _db;
 
-    public GetAvailableStockCostHandler(InventoryDbContext db) => _db = db;
+    public GetAvailableStockCostHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<StockCostDto> Handle(GetAvailableStockCostQuery req, CancellationToken ct)
     {

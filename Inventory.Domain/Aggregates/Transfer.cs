@@ -1,5 +1,6 @@
 ﻿using BuildingBlocks.Domain;
 using Inventory.Domain.Enums;
+using Inventory.Domain.Markers;
 using Inventory.Domain.Naming;
 
 namespace Inventory.Domain.Aggregates;
@@ -172,7 +173,7 @@ public sealed class Transfer : AggregateRoot<Guid>
 
 }
 
-public sealed class TransferLine : BaseEntity<Guid>
+public sealed class TransferLine : BaseEntity<Guid>, IHasRowVersion
 {
     private readonly List<TransferSegment> _segments = new();
 
@@ -221,7 +222,7 @@ public sealed class TransferLine : BaseEntity<Guid>
     internal void ClearSegments() => _segments.Clear();
 }
 
-public sealed class TransferSegment : BaseEntity<Guid>
+public sealed class TransferSegment : BaseEntity<Guid>, IHasRowVersion
 {
     public Guid TransferLineId { get; private set; }
     public Guid StockItemId { get; private set; }  // از مبدا

@@ -1,5 +1,5 @@
 using Inventory.Domain.Aggregates;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,8 +9,8 @@ public sealed record CreateWarehouseCommand(string Code, string Name) : IRequest
 
 public sealed class CreateWarehouseHandler : IRequestHandler<CreateWarehouseCommand, Guid>
 {
-    private readonly InventoryDbContext _db;
-    public CreateWarehouseHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public CreateWarehouseHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Guid> Handle(CreateWarehouseCommand req, CancellationToken ct)
     {

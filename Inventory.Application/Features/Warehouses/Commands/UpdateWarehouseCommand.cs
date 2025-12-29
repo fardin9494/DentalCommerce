@@ -1,4 +1,4 @@
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,8 +8,8 @@ public sealed record UpdateWarehouseCommand(Guid Id, string Name) : IRequest<Uni
 
 public sealed class UpdateWarehouseHandler : IRequestHandler<UpdateWarehouseCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public UpdateWarehouseHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public UpdateWarehouseHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(UpdateWarehouseCommand req, CancellationToken ct)
     {

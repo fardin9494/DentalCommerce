@@ -1,5 +1,5 @@
 using Inventory.Application.Common.Interfaces;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,10 +7,10 @@ namespace Inventory.Application.Features.Adjustments.Commands;
 
 public sealed class AddAdjustmentLineHandler : IRequestHandler<AddAdjustmentLineCommand, Guid>
 {
-    private readonly InventoryDbContext _db;
+    private readonly IInventoryDbContext _db;
     private readonly ICatalogGateway _catalogGateway;
 
-    public AddAdjustmentLineHandler(InventoryDbContext db, ICatalogGateway catalogGateway)
+    public AddAdjustmentLineHandler(IInventoryDbContext db, ICatalogGateway catalogGateway)
     {
         _db = db;
         _catalogGateway = catalogGateway;

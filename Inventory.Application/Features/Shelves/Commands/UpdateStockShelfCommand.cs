@@ -1,4 +1,4 @@
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,8 +8,8 @@ public sealed record UpdateStockShelfCommand(Guid Id, string Name, string? Descr
 
 public sealed class UpdateStockShelfHandler : IRequestHandler<UpdateStockShelfCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public UpdateStockShelfHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public UpdateStockShelfHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(UpdateStockShelfCommand req, CancellationToken ct)
     {

@@ -1,5 +1,5 @@
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Inventory.Application.Features.Issues.Serials;
@@ -7,7 +7,7 @@ namespace Inventory.Application.Features.Issues.Serials;
 public static class IssueSerialsHelper
 {
     public static async Task ReserveSerialsAsync(
-        InventoryDbContext db,
+        IInventoryDbContext db,
         Guid stockItemId,
         Guid issueId,
         Guid issueLineId,
@@ -35,7 +35,7 @@ public static class IssueSerialsHelper
     }
 
     public static async Task ReleaseReservedSerialsAsync(
-        InventoryDbContext db,
+        IInventoryDbContext db,
         Guid issueLineId,
         CancellationToken ct)
     {
@@ -52,7 +52,7 @@ public static class IssueSerialsHelper
     }
 
     public static async Task MarkIssuedAsync(
-        InventoryDbContext db,
+        IInventoryDbContext db,
         Guid stockItemId,
         Guid issueId,
         Guid issueLineId,

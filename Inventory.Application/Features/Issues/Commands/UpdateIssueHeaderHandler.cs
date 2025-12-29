@@ -1,4 +1,4 @@
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,8 +6,8 @@ namespace Inventory.Application.Features.Issues.Commands;
 
 public sealed class UpdateIssueHeaderHandler : IRequestHandler<UpdateIssueHeaderCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public UpdateIssueHeaderHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public UpdateIssueHeaderHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(UpdateIssueHeaderCommand req, CancellationToken ct)
     {

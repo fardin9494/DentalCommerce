@@ -1,4 +1,4 @@
-﻿using Inventory.Infrastructure.Persistence;
+﻿using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,8 +6,8 @@ namespace Inventory.Application.Features.Receipts.Commands;
 
 public sealed class RemoveReceiptLineHandler : IRequestHandler<RemoveReceiptLineCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public RemoveReceiptLineHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public RemoveReceiptLineHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(RemoveReceiptLineCommand req, CancellationToken ct)
     {

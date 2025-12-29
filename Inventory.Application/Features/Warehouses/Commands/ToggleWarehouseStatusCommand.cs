@@ -1,4 +1,4 @@
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,8 +9,8 @@ public sealed record DeactivateWarehouseCommand(Guid Id) : IRequest<Unit>;
 
 public sealed class ActivateWarehouseHandler : IRequestHandler<ActivateWarehouseCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public ActivateWarehouseHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public ActivateWarehouseHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(ActivateWarehouseCommand req, CancellationToken ct)
     {
@@ -26,8 +26,8 @@ public sealed class ActivateWarehouseHandler : IRequestHandler<ActivateWarehouse
 
 public sealed class DeactivateWarehouseHandler : IRequestHandler<DeactivateWarehouseCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public DeactivateWarehouseHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public DeactivateWarehouseHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(DeactivateWarehouseCommand req, CancellationToken ct)
     {

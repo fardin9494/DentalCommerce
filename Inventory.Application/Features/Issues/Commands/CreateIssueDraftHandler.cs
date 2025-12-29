@@ -1,5 +1,5 @@
 ﻿using Inventory.Domain.Aggregates;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,8 +7,8 @@ namespace Inventory.Application.Features.Issues.Commands;
 
 public sealed class CreateIssueDraftHandler : IRequestHandler<CreateIssueDraftCommand, Guid>
 {
-    private readonly InventoryDbContext _db;
-    public CreateIssueDraftHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public CreateIssueDraftHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Guid> Handle(CreateIssueDraftCommand req, CancellationToken ct)
     {

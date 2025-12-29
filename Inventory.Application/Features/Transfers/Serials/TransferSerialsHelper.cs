@@ -1,5 +1,5 @@
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Inventory.Application.Features.Transfers.Serials;
@@ -7,7 +7,7 @@ namespace Inventory.Application.Features.Transfers.Serials;
 public static class TransferSerialsHelper
 {
     public static async Task ReserveSerialsAsync(
-        InventoryDbContext db,
+        IInventoryDbContext db,
         Guid stockItemId,
         Guid transferId,
         Guid transferLineId,
@@ -36,7 +36,7 @@ public static class TransferSerialsHelper
     }
 
     public static async Task ReleaseReservedSerialsAsync(
-        InventoryDbContext db,
+        IInventoryDbContext db,
         Guid transferSegmentId,
         CancellationToken ct)
     {
@@ -69,7 +69,7 @@ public static class TransferSerialsHelper
     }
 
     public static async Task MarkInTransitAsync(
-        InventoryDbContext db,
+        IInventoryDbContext db,
         Guid transferSegmentId,
         CancellationToken ct)
     {
@@ -86,7 +86,7 @@ public static class TransferSerialsHelper
     }
 
     public static async Task ReceiveSerialsAsync(
-        InventoryDbContext db,
+        IInventoryDbContext db,
         Guid transferSegmentId,
         Guid destStockItemId,
         decimal qty,

@@ -1,5 +1,5 @@
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -50,8 +50,8 @@ public sealed record TransferSegmentSerialDto(
 
 public sealed class GetTransferDetailsHandler : IRequestHandler<TransferDetailsQuery, TransferDetailsDto?>
 {
-    private readonly InventoryDbContext _db;
-    public GetTransferDetailsHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public GetTransferDetailsHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<TransferDetailsDto?> Handle(TransferDetailsQuery req, CancellationToken ct)
     {

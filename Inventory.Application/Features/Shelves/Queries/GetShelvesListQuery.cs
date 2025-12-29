@@ -1,4 +1,4 @@
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,8 +26,8 @@ public sealed record ShelfListItemDto(
 
 public sealed class GetShelvesListHandler : IRequestHandler<GetShelvesListQuery, IReadOnlyList<ShelfListItemDto>>
 {
-    private readonly InventoryDbContext _db;
-    public GetShelvesListHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public GetShelvesListHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<IReadOnlyList<ShelfListItemDto>> Handle(GetShelvesListQuery req, CancellationToken ct)
     {

@@ -1,6 +1,6 @@
 ﻿using Inventory.Domain.Aggregates;
 using Inventory.Application.Features.Issues.Serials;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,22 +8,26 @@ namespace Inventory.Application.Features.Issues.Commands;
 
 public sealed class AllocateIssueLineFefoHandler : IRequestHandler<AllocateIssueLineFefoCommand, IReadOnlyList<AllocationDto>>
 {
-    private readonly InventoryDbContext _db;
-    public AllocateIssueLineFefoHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    private readonly ITransactionRunner _tx;
+
+    public AllocateIssueLineFefoHandler(IInventoryDbContext db, ITransactionRunner tx)
+    {
+        _db = db;
+        _tx = tx;
+    }
 
     public async Task<IReadOnlyList<AllocationDto>> Handle(AllocateIssueLineFefoCommand req, CancellationToken ct)
     {
-        var strategy = _db.Database.CreateExecutionStrategy();
         const int maxAttempts = 5;
 
         IReadOnlyList<AllocationDto> result = Array.Empty<AllocationDto>();
 
-        await strategy.ExecuteAsync(async () =>
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            try
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
+                result = await _tx.ExecuteAsync(async ct =>
                 {
                     // 1. بارگذاری سند خروج و خطوط آن
                     var issue = await _db.Issues
@@ -58,9 +62,7 @@ public sealed class AllocateIssueLineFefoHandler : IRequestHandler<AllocateIssue
 
                     if (qtyNeeded <= 0)
                     {
-                        result = allocatedResult;
-                        await tx.CommitAsync(ct);
-                        break; // قبلاً کامل تخصیص داده شده است
+                        return allocatedResult;
                     }
 
                     // 2. استراتژی FEFO: پیدا کردن کاندیداها
@@ -113,20 +115,19 @@ public sealed class AllocateIssueLineFefoHandler : IRequestHandler<AllocateIssue
                         throw new InvalidOperationException($"موجودی قابل فروش کافی در قفسه‌ها یافت نشد. مقدار کسر: {qtyNeeded}");
 
                     await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    result = allocatedResult;
-                    break;
-                }
-                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
-                {
-                    await tx.RollbackAsync(ct);
-                    _db.ChangeTracker.Clear();
-                }
+                    return allocatedResult;
+                }, ct);
+                break;
             }
-        });
+            catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+            {
+                _db.ChangeTracker.Clear();
+            }
+        }
 
         return result;
     }
 }
+
 
 

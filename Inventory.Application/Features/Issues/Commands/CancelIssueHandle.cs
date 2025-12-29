@@ -1,4 +1,4 @@
-﻿using Inventory.Infrastructure.Persistence;
+﻿using Inventory.Application.Abstractions;
 using Inventory.Application.Features.Issues.Serials;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -7,20 +7,24 @@ namespace Inventory.Application.Features.Issues.Commands;
 
 public sealed class CancelIssueHandler : IRequestHandler<CancelIssueCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public CancelIssueHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    private readonly ITransactionRunner _tx;
+
+    public CancelIssueHandler(IInventoryDbContext db, ITransactionRunner tx)
+    {
+        _db = db;
+        _tx = tx;
+    }
 
     public async Task<Unit> Handle(CancelIssueCommand req, CancellationToken ct)
     {
-        var strategy = _db.Database.CreateExecutionStrategy();
         const int maxAttempts = 5;
 
-        await strategy.ExecuteAsync(async () =>
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            try
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
+                await _tx.ExecuteAsync(async ct =>
                 {
                     var issue = await _db.Issues
                                     .AsSplitQuery()
@@ -42,16 +46,14 @@ public sealed class CancelIssueHandler : IRequestHandler<CancelIssueCommand, Uni
 
                     issue.Cancel();
                     await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    break;
-                }
-                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
-                {
-                    await tx.RollbackAsync(ct);
-                    _db.ChangeTracker.Clear();
-                }
+                }, ct);
+                break;
             }
-        });
+            catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+            {
+                _db.ChangeTracker.Clear();
+            }
+        }
 
         return Unit.Value;
     }

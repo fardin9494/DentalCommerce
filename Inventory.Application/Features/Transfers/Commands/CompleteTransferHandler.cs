@@ -1,5 +1,5 @@
 using Inventory.Domain.Aggregates;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,8 +7,8 @@ namespace Inventory.Application.Features.Transfers.Commands;
 
 public sealed class CompleteTransferHandler : IRequestHandler<CompleteTransferCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public CompleteTransferHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public CompleteTransferHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(CompleteTransferCommand req, CancellationToken ct)
     {

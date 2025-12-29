@@ -1,5 +1,5 @@
 ﻿using Inventory.Application.Features.Receipts.Serials;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,20 +12,24 @@ public sealed class ApproveReceiptCommand : IRequest<Unit>
 
 public sealed class ApproveReceiptHandler : IRequestHandler<ApproveReceiptCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public ApproveReceiptHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    private readonly ITransactionRunner _tx;
+
+    public ApproveReceiptHandler(IInventoryDbContext db, ITransactionRunner tx)
+    {
+        _db = db;
+        _tx = tx;
+    }
 
     public async Task<Unit> Handle(ApproveReceiptCommand req, CancellationToken ct)
     {
-        var strategy = _db.Database.CreateExecutionStrategy();
         const int maxAttempts = 5;
 
-        await strategy.ExecuteAsync(async () =>
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            try
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
+                await _tx.ExecuteAsync(async ct =>
                 {
                     var rec = await _db.Receipts.Include(r => r.Lines)
                         .FirstOrDefaultAsync(r => r.Id == req.ReceiptId, ct)
@@ -74,17 +78,15 @@ public sealed class ApproveReceiptHandler : IRequestHandler<ApproveReceiptComman
                     }
 
                     await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    break;
+                }, ct);
+                break;
                 }
                 catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
                 {
-                    await tx.RollbackAsync(ct);
                     _db.ChangeTracker.Clear();
                 }
                 catch (Exception ex) when (attempt < maxAttempts)
                 {
-                    await tx.RollbackAsync(ct);
                     _db.ChangeTracker.Clear();
                     // Log the exception for debugging
                     throw new InvalidOperationException(
@@ -92,7 +94,6 @@ public sealed class ApproveReceiptHandler : IRequestHandler<ApproveReceiptComman
                         $"Inner: {ex.InnerException?.Message}", ex);
                 }
             }
-        });
 
         return Unit.Value;
     }

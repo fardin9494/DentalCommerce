@@ -1,5 +1,5 @@
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -40,8 +40,8 @@ public sealed record IssueListItemDto(
 
 public sealed class GetIssuesListHandler : IRequestHandler<GetIssuesListQuery, IssuesListResult>
 {
-    private readonly InventoryDbContext _db;
-    public GetIssuesListHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public GetIssuesListHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<IssuesListResult> Handle(GetIssuesListQuery req, CancellationToken ct)
     {

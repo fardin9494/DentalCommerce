@@ -1,6 +1,6 @@
 using Inventory.Application.Features.Transfers.Serials;
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,20 +15,24 @@ public sealed record AllocateTransferLineSerialsCommand(
 public sealed class AllocateTransferLineSerialsHandler
     : IRequestHandler<AllocateTransferLineSerialsCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public AllocateTransferLineSerialsHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    private readonly ITransactionRunner _tx;
+
+    public AllocateTransferLineSerialsHandler(IInventoryDbContext db, ITransactionRunner tx)
+    {
+        _db = db;
+        _tx = tx;
+    }
 
     public async Task<Unit> Handle(AllocateTransferLineSerialsCommand req, CancellationToken ct)
     {
-        var strategy = _db.Database.CreateExecutionStrategy();
         const int maxAttempts = 5;
 
-        await strategy.ExecuteAsync(async () =>
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            try
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
+                await _tx.ExecuteAsync(async ct =>
                 {
                     var transfer = await _db.Transfers
                         .Include(t => t.Lines)
@@ -130,16 +134,14 @@ public sealed class AllocateTransferLineSerialsHandler
                     }
 
                     await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    break;
-                }
-                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
-                {
-                    await tx.RollbackAsync(ct);
-                    _db.ChangeTracker.Clear();
-                }
+                }, ct);
+                break;
             }
-        });
+            catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+            {
+                _db.ChangeTracker.Clear();
+            }
+        }
 
         return Unit.Value;
     }

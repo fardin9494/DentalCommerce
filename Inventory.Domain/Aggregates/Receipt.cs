@@ -1,5 +1,6 @@
 ﻿using BuildingBlocks.Domain;
 using Inventory.Domain.Enums;
+using Inventory.Domain.Markers;
 using Inventory.Domain.Naming;
 
 namespace Inventory.Domain.Aggregates;
@@ -156,7 +157,7 @@ public sealed class Receipt : AggregateRoot<Guid>
     }
 }
 
-public sealed class ReceiptLine : BaseEntity<Guid>
+public sealed class ReceiptLine : BaseEntity<Guid>, IHasRowVersion
 {
     public Guid ReceiptId { get; private set; }
     public int LineNo { get; private set; }           // شماره خط

@@ -1,4 +1,4 @@
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,8 +6,8 @@ namespace Inventory.Application.Features.Transfers.Commands;
 
 public sealed class UpdateTransferHeaderHandler : IRequestHandler<UpdateTransferHeaderCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public UpdateTransferHeaderHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public UpdateTransferHeaderHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(UpdateTransferHeaderCommand req, CancellationToken ct)
     {

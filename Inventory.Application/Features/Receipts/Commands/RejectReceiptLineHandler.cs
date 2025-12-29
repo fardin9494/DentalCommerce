@@ -1,7 +1,7 @@
 ﻿using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
 using Inventory.Application.Features.Receipts.Serials;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,21 +9,24 @@ namespace Inventory.Application.Features.Receipts.Commands;
 
 public sealed class RejectReceiptLineHandler : IRequestHandler<RejectReceiptLineCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
+    private readonly IInventoryDbContext _db;
+    private readonly ITransactionRunner _tx;
 
-    public RejectReceiptLineHandler(InventoryDbContext db) => _db = db;
+    public RejectReceiptLineHandler(IInventoryDbContext db, ITransactionRunner tx)
+    {
+        _db = db;
+        _tx = tx;
+    }
 
     public async Task<Unit> Handle(RejectReceiptLineCommand req, CancellationToken ct)
     {
-        var strategy = _db.Database.CreateExecutionStrategy();
         const int maxAttempts = 5;
 
-        await strategy.ExecuteAsync(async () =>
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            try
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
+                await _tx.ExecuteAsync(async ct =>
                 {
                     var rec = await _db.Receipts
                         .Include(r => r.Lines)
@@ -139,16 +142,14 @@ public sealed class RejectReceiptLineHandler : IRequestHandler<RejectReceiptLine
 
                     await ReceiptSerialsHelper.SyncLineSerialStatusesAsync(_db, line, stock.ShelfId.HasValue, ct);
                     await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    break;
-                }
-                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
-                {
-                    await tx.RollbackAsync(ct);
-                    _db.ChangeTracker.Clear();
-                }
+                }, ct);
+                break;
             }
-        });
+            catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+            {
+                _db.ChangeTracker.Clear();
+            }
+        }
 
         return Unit.Value;
     }

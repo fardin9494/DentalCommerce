@@ -1,6 +1,6 @@
 using Inventory.Application.Common.Interfaces;
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -51,9 +51,9 @@ public sealed record StockItemListItemDto(
 
 public sealed class GetStockItemsListHandler : IRequestHandler<GetStockItemsListQuery, StockItemsListResult>
 {
-    private readonly InventoryDbContext _db;
+    private readonly IInventoryDbContext _db;
     private readonly ICatalogGateway _catalogGateway;
-    public GetStockItemsListHandler(InventoryDbContext db, ICatalogGateway catalogGateway)
+    public GetStockItemsListHandler(IInventoryDbContext db, ICatalogGateway catalogGateway)
     {
         _db = db;
         _catalogGateway = catalogGateway;

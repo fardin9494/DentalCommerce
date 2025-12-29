@@ -1,7 +1,7 @@
 ﻿using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
 using Inventory.Application.Features.Receipts.Serials;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,8 +17,14 @@ public sealed record ResolveReceiptRejectionCommand(
 
 public sealed class ResolveReceiptRejectionHandler : IRequestHandler<ResolveReceiptRejectionCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public ResolveReceiptRejectionHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    private readonly ITransactionRunner _tx;
+
+    public ResolveReceiptRejectionHandler(IInventoryDbContext db, ITransactionRunner tx)
+    {
+        _db = db;
+        _tx = tx;
+    }
 
     public async Task<Unit> Handle(ResolveReceiptRejectionCommand req, CancellationToken ct)
     {
@@ -28,15 +34,13 @@ public sealed class ResolveReceiptRejectionHandler : IRequestHandler<ResolveRece
         if (req.ApprovedQty + req.ReturnedQty + req.DisposedQty <= 0)
             throw new InvalidOperationException("At least one resolution quantity must be greater than zero.");
 
-        var strategy = _db.Database.CreateExecutionStrategy();
         const int maxAttempts = 5;
 
-        await strategy.ExecuteAsync(async () =>
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            try
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
+                await _tx.ExecuteAsync(async ct =>
                 {
                     var line = await _db.ReceiptLines
                         .FirstOrDefaultAsync(l => l.Id == req.ReceiptLineId, ct)
@@ -100,16 +104,14 @@ public sealed class ResolveReceiptRejectionHandler : IRequestHandler<ResolveRece
                     await ReceiptSerialsHelper.ResolveRejectedSerialsAsync(_db, line, isShelved, req.ApprovedQty, req.ReturnedQty, req.DisposedQty, ct);
 
                     await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    break;
-                }
-                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
-                {
-                    await tx.RollbackAsync(ct);
-                    _db.ChangeTracker.Clear();
-                }
+                }, ct);
+                break;
             }
-        });
+            catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+            {
+                _db.ChangeTracker.Clear();
+            }
+        }
 
         return Unit.Value;
     }

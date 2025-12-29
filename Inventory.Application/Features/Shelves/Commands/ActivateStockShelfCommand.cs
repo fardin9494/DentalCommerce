@@ -1,5 +1,5 @@
 using Inventory.Domain.Aggregates;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,8 +9,8 @@ public sealed record ActivateStockShelfCommand(Guid Id) : IRequest<Unit>;
 
 public sealed class ActivateStockShelfHandler : IRequestHandler<ActivateStockShelfCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public ActivateStockShelfHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public ActivateStockShelfHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(ActivateStockShelfCommand req, CancellationToken ct)
     {

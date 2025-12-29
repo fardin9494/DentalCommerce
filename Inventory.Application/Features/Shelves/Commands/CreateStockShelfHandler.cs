@@ -1,6 +1,6 @@
 ﻿using BuildingBlocks.Domain;
 using Inventory.Domain.Aggregates;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,8 +10,8 @@ public record CreateStockShelfCommand(Guid WarehouseId, string Name, string? Des
 
 public class CreateStockShelfHandler : IRequestHandler<CreateStockShelfCommand, Guid>
 {
-    private readonly InventoryDbContext _db;
-    public CreateStockShelfHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public CreateStockShelfHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Guid> Handle(CreateStockShelfCommand req, CancellationToken ct)
     {

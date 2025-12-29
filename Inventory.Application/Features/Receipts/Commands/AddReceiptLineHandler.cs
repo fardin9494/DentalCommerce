@@ -1,35 +1,43 @@
 ﻿using Inventory.Application.Common.Interfaces;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Inventory.Application.Features.Receipts.Commands;
 
 public sealed class AddReceiptLineHandler : IRequestHandler<AddReceiptLineCommand, Guid>
 {
-    private readonly InventoryDbContext _db;
+    private readonly IInventoryDbContext _db;
     private readonly ICatalogGateway _catalogGateway;
+    private readonly ITransactionRunner _tx;
+    private readonly ILogger<AddReceiptLineHandler> _logger;
 
-    public AddReceiptLineHandler(InventoryDbContext db, ICatalogGateway catalogGateway)
+    public AddReceiptLineHandler(
+        IInventoryDbContext db,
+        ICatalogGateway catalogGateway,
+        ITransactionRunner tx,
+        ILogger<AddReceiptLineHandler> logger)
     {
         _db = db;
         _catalogGateway = catalogGateway;
+        _tx = tx;
+        _logger = logger;
     }
 
     public async Task<Guid> Handle(AddReceiptLineCommand req, CancellationToken ct)
     {
-        var strategy = _db.Database.CreateExecutionStrategy();
         const int maxAttempts = 3;
 
-        return await strategy.ExecuteAsync(async () =>
+        DbUpdateConcurrencyException? lastEx = null;
+        List<string> lastEntities = new();
+        List<string> lastStates = new();
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            DbUpdateConcurrencyException? lastEx = null;
-            List<string> lastEntities = new();
-            List<string> lastStates = new();
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            try
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
+                return await _tx.ExecuteAsync(async ct =>
                 {
                     var rec = await _db.Receipts
                         .Include(r => r.Lines)
@@ -50,13 +58,12 @@ public sealed class AddReceiptLineHandler : IRequestHandler<AddReceiptLineComman
                     _db.Entry(line).State = EntityState.Added;
 
                     await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
                     return line.Id;
-                }
-                catch (DbUpdateConcurrencyException ex)
-                {
+                }, ct);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
                     lastEx = ex;
-                    await tx.RollbackAsync(ct);
 
                     // تلاش مجدد پس از بارگذاری مجدد موجودیت‌هایی که در خطای همزمانی دخیل بوده‌اند
                     lastEntities = ex.Entries
@@ -75,7 +82,12 @@ public sealed class AddReceiptLineHandler : IRequestHandler<AddReceiptLineComman
                         .Distinct()
                         .ToList();
 
-                    Console.Error.WriteLine($"[Concurrency] attempt {attempt} for ReceiptId={req.ReceiptId} -> Entities: {string.Join(", ", lastEntities)} | States: {string.Join(", ", lastStates)}");
+                    _logger.LogWarning(
+                        "Concurrency attempt {Attempt} for ReceiptId {ReceiptId} -> Entities: {Entities} | States: {States}",
+                        attempt,
+                        req.ReceiptId,
+                        string.Join(", ", lastEntities),
+                        string.Join(", ", lastStates));
 
                     foreach (var entry in ex.Entries)
                     {
@@ -113,6 +125,5 @@ public sealed class AddReceiptLineHandler : IRequestHandler<AddReceiptLineComman
             throw new InvalidOperationException(
                 $"رکورد توسط کاربر دیگری تغییر یافته است. لطفا دوباره تلاش کنید.{entities}{states}{trackedInfo}",
                 lastEx);
-        });
     }
 }

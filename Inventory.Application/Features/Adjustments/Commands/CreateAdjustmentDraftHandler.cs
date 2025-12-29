@@ -1,13 +1,13 @@
 ﻿namespace Inventory.Application.Features.Adjustments.Commands;
 
 using Inventory.Domain.Aggregates;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 
 public sealed class CreateAdjustmentDraftHandler : IRequestHandler<CreateAdjustmentDraftCommand, Guid>
 {
-    private readonly InventoryDbContext _db;
-    public CreateAdjustmentDraftHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public CreateAdjustmentDraftHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Guid> Handle(CreateAdjustmentDraftCommand req, CancellationToken ct)
     {

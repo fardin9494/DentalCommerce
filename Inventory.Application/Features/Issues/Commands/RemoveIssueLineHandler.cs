@@ -1,4 +1,4 @@
-﻿using Inventory.Infrastructure.Persistence;
+﻿using Inventory.Application.Abstractions;
 using Inventory.Application.Features.Issues.Serials;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -7,8 +7,8 @@ namespace Inventory.Application.Features.Issues.Commands;
 
 public sealed class RemoveIssueLineHandler : IRequestHandler<RemoveIssueLineCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public RemoveIssueLineHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public RemoveIssueLineHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(RemoveIssueLineCommand req, CancellationToken ct)
     {

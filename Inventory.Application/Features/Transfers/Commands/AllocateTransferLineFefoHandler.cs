@@ -1,5 +1,5 @@
 using Inventory.Application.Features.Transfers.Serials;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,22 +8,26 @@ namespace Inventory.Application.Features.Transfers.Commands;
 public sealed class AllocateTransferLineFefoHandler
     : IRequestHandler<AllocateTransferLineFefoCommand, IReadOnlyList<TransferAllocationDto>>
 {
-    private readonly InventoryDbContext _db;
-    public AllocateTransferLineFefoHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    private readonly ITransactionRunner _tx;
+
+    public AllocateTransferLineFefoHandler(IInventoryDbContext db, ITransactionRunner tx)
+    {
+        _db = db;
+        _tx = tx;
+    }
 
     public async Task<IReadOnlyList<TransferAllocationDto>> Handle(AllocateTransferLineFefoCommand req, CancellationToken ct)
     {
-        var strategy = _db.Database.CreateExecutionStrategy();
         const int maxAttempts = 5;
 
         IReadOnlyList<TransferAllocationDto> result = Array.Empty<TransferAllocationDto>();
 
-        await strategy.ExecuteAsync(async () =>
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            try
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
+                result = await _tx.ExecuteAsync(async ct =>
                 {
                     var tr = await _db.Transfers
                         .AsSplitQuery()
@@ -43,9 +47,7 @@ public sealed class AllocateTransferLineFefoHandler
                     if (need <= 0)
                     {
                         // Already fully allocated, return existing segments
-                        result = existingSegments;
-                        await tx.CommitAsync(ct);
-                        break;
+                        return existingSegments;
                     }
 
                     // Clear existing segments and release reservations
@@ -101,17 +103,15 @@ public sealed class AllocateTransferLineFefoHandler
                         throw new InvalidOperationException("موجودی کافی برای تخصیص باقی‌مانده نیست.");
 
                     await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    result = allocations;
-                    break;
-                }
-                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
-                {
-                    await tx.RollbackAsync(ct);
-                    _db.ChangeTracker.Clear();
-                }
+                    return allocations;
+                }, ct);
+                break;
             }
-        });
+            catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+            {
+                _db.ChangeTracker.Clear();
+            }
+        }
 
         return result;
     }

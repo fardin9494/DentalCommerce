@@ -1,4 +1,4 @@
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,8 +15,8 @@ public sealed record WarehouseListItemDto(
 
 public sealed class GetWarehousesListHandler : IRequestHandler<GetWarehousesListQuery, IReadOnlyList<WarehouseListItemDto>>
 {
-    private readonly InventoryDbContext _db;
-    public GetWarehousesListHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public GetWarehousesListHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<IReadOnlyList<WarehouseListItemDto>> Handle(GetWarehousesListQuery req, CancellationToken ct)
     {

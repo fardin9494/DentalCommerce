@@ -1,6 +1,6 @@
 using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,8 +14,8 @@ public sealed record SetReceiptLineSerialsCommand(
 
 public sealed class SetReceiptLineSerialsHandler : IRequestHandler<SetReceiptLineSerialsCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public SetReceiptLineSerialsHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public SetReceiptLineSerialsHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(SetReceiptLineSerialsCommand req, CancellationToken ct)
     {

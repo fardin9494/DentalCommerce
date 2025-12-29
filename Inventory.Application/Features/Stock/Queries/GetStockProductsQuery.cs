@@ -1,5 +1,5 @@
 using Inventory.Application.Common.Interfaces;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,9 +36,9 @@ public sealed record StockProductDto(
 
 public sealed class GetStockProductsHandler : IRequestHandler<GetStockProductsQuery, StockProductsResult>
 {
-    private readonly InventoryDbContext _db;
+    private readonly IInventoryDbContext _db;
     private readonly ICatalogGateway _catalogGateway;
-    public GetStockProductsHandler(InventoryDbContext db, ICatalogGateway catalogGateway)
+    public GetStockProductsHandler(IInventoryDbContext db, ICatalogGateway catalogGateway)
     {
         _db = db;
         _catalogGateway = catalogGateway;

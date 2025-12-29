@@ -1,5 +1,5 @@
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,8 +23,8 @@ public sealed record IssueLineAvailableSerialDto(
 public sealed class GetIssueLineAvailableSerialsHandler
     : IRequestHandler<GetIssueLineAvailableSerialsQuery, IReadOnlyList<IssueLineAvailableSerialDto>>
 {
-    private readonly InventoryDbContext _db;
-    public GetIssueLineAvailableSerialsHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public GetIssueLineAvailableSerialsHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<IReadOnlyList<IssueLineAvailableSerialDto>> Handle(GetIssueLineAvailableSerialsQuery req, CancellationToken ct)
     {

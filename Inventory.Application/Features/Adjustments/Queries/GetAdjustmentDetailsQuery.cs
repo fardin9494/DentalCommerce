@@ -1,5 +1,5 @@
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -31,8 +31,8 @@ public sealed record AdjustmentLineDto(
 
 public sealed class GetAdjustmentDetailsHandler : IRequestHandler<AdjustmentDetailsQuery, AdjustmentDetailsDto?>
 {
-    private readonly InventoryDbContext _db;
-    public GetAdjustmentDetailsHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public GetAdjustmentDetailsHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<AdjustmentDetailsDto?> Handle(AdjustmentDetailsQuery req, CancellationToken ct)
     {

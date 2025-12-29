@@ -1,7 +1,7 @@
 ﻿using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
 using Inventory.Application.Features.Transfers.Serials;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,8 +9,14 @@ namespace Inventory.Application.Features.Transfers.Commands;
 
 public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public ReceiveTransferHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    private readonly ITransactionRunner _tx;
+
+    public ReceiveTransferHandler(IInventoryDbContext db, ITransactionRunner tx)
+    {
+        _db = db;
+        _tx = tx;
+    }
 
     public async Task<Unit> Handle(ReceiveTransferCommand req, CancellationToken ct)
     {
@@ -40,15 +46,13 @@ public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferComm
 
         var destWarehouseId = tr.DestinationWarehouseId;
 
-        var strategy = _db.Database.CreateExecutionStrategy();
+        const int maxAttempts = 5;
 
-        await strategy.ExecuteAsync(async () =>
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            const int maxAttempts = 5;
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            try
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
+                await _tx.ExecuteAsync(async ct =>
                 {
                     // Reload transfer and segment in case of retry
                     if (attempt > 1)
@@ -180,40 +184,35 @@ public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferComm
                     }
 
                     await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    break;
-                }
-                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+                }, ct);
+                break;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
                 {
-                    await tx.RollbackAsync(ct);
                     _db.ChangeTracker.Clear();
                     // Continue to next attempt - reload will happen at the beginning of the loop
                 }
                 catch (InvalidOperationException)
                 {
                     // Re-throw business logic errors as-is
-                    await tx.RollbackAsync(ct);
                     _db.ChangeTracker.Clear();
                     throw;
                 }
                 catch (ArgumentException)
                 {
                     // Re-throw argument errors as-is
-                    await tx.RollbackAsync(ct);
                     _db.ChangeTracker.Clear();
                     throw;
                 }
                 catch (Exception) when (attempt < maxAttempts)
                 {
                     // Log and retry for other exceptions
-                    await tx.RollbackAsync(ct);
                     _db.ChangeTracker.Clear();
                     // Continue to next attempt
                 }
                 catch (Exception ex)
                 {
                     // Last attempt failed, wrap and throw
-                    await tx.RollbackAsync(ct);
                     _db.ChangeTracker.Clear();
                     throw new InvalidOperationException(
                         $"خطا در ثبت دریافت سند انتقال {req.TransferId} برای سگمنت {req.SegmentId} پس از {maxAttempts} تلاش: {ex.Message}",
@@ -221,7 +220,6 @@ public sealed class ReceiveTransferHandler : IRequestHandler<ReceiveTransferComm
                     );
                 }
             }
-        });
 
         return Unit.Value;
     }

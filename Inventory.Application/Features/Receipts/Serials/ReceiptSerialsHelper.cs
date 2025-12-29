@@ -1,6 +1,6 @@
 using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Inventory.Application.Features.Receipts.Serials;
@@ -8,7 +8,7 @@ namespace Inventory.Application.Features.Receipts.Serials;
 public static class ReceiptSerialsHelper
 {
     public static async Task AttachLineSerialsToStockAsync(
-        InventoryDbContext db,
+        IInventoryDbContext db,
         ReceiptLine line,
         Guid stockItemId,
         CancellationToken ct)
@@ -30,7 +30,7 @@ public static class ReceiptSerialsHelper
     }
 
     public static async Task SyncLineSerialStatusesAsync(
-        InventoryDbContext db,
+        IInventoryDbContext db,
         ReceiptLine line,
         bool isShelved,
         CancellationToken ct)
@@ -76,7 +76,7 @@ public static class ReceiptSerialsHelper
     }
 
     public static async Task ResolveRejectedSerialsAsync(
-        InventoryDbContext db,
+        IInventoryDbContext db,
         ReceiptLine line,
         bool isShelved,
         decimal approvedQty,

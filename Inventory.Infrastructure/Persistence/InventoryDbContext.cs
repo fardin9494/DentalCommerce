@@ -1,13 +1,16 @@
-using BuildingBlocks.Domain;
+﻿using BuildingBlocks.Domain;
+using Inventory.Application.Abstractions;
 using Inventory.Domain.Aggregates;
+using Inventory.Domain.Markers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using System;
+using System.Data;
 using System.Reflection;
 
 namespace Inventory.Infrastructure.Persistence;
 
-public sealed class InventoryDbContext : DbContext
+public sealed class InventoryDbContext : DbContext, IInventoryDbContext
 {
     public const string DefaultSchema = "inv";
 
@@ -48,44 +51,34 @@ public sealed class InventoryDbContext : DbContext
 
             var isAggregateRoot = IsAggregateRoot(entityType.ClrType);
             
-            // ابتدا سعی می‌کنیم RowVersion را از AggregateRoot پیدا کنیم
+            // Ø§Ø¨ØªØ¯Ø§ Ø³Ø¹ÛŒ Ù…ÛŒâ€ŒÚ©Ù†ÛŒÙ… RowVersion Ø±Ø§ Ø§Ø² AggregateRoot Ù¾ÛŒØ¯Ø§ Ú©Ù†ÛŒÙ…
             var prop = entityType.FindProperty(rowVersionPropertyName);
             
-            // اگر پیدا نشد و entity یک child entity است که در دیتابیس RowVersion دارد،
-            // باید آن را به صورت shadow property اضافه کنیم
+            // Ø§Ú¯Ø± Ù¾ÛŒØ¯Ø§ Ù†Ø´Ø¯ Ùˆ entity ÛŒÚ© child entity Ø§Ø³Øª Ú©Ù‡ Ø¯Ø± Ø¯ÛŒØªØ§Ø¨ÛŒØ³ RowVersion Ø¯Ø§Ø±Ø¯ØŒ
+            // Ø¨Ø§ÛŒØ¯ Ø¢Ù† Ø±Ø§ Ø¨Ù‡ ØµÙˆØ±Øª shadow property Ø§Ø¶Ø§ÙÙ‡ Ú©Ù†ÛŒÙ…
             if (prop is null && !isAggregateRoot)
             {
-                // بررسی می‌کنیم که آیا این entity در migration قبلی RowVersion داشته یا نه
-                // لیست entities که در migration AddRowVersionToInventoryDocs RowVersion اضافه شده:
-                var entitiesWithRowVersionInDb = new[]
+                if (typeof(IHasRowVersion).IsAssignableFrom(entityType.ClrType))
                 {
-                    "ReceiptLine", "IssueLine", "IssueAllocation", "TransferLine", 
-                    "TransferSegment", "AdjustmentLine", "InventoryCost"
-                };
-                
-                var entityName = entityType.ClrType.Name;
-                if (entitiesWithRowVersionInDb.Contains(entityName))
-                {
-                    // اضافه کردن RowVersion به صورت shadow property برای child entities
                     var entityBuilder = modelBuilder.Entity(entityType.ClrType);
                     entityBuilder.Property<byte[]>("RowVersion")
-                        .IsRequired() // non-nullable برای هماهنگی با دیتابیس
+                        .IsRequired()
                         .HasColumnType("rowversion")
                         .ValueGeneratedOnAddOrUpdate()
-                        .IsConcurrencyToken(false); // برای child entities concurrency token نیست
+                        .IsConcurrencyToken(false);
                 }
-                
+
                 continue;
             }
             
-            // اگر RowVersion پیدا شد (از AggregateRoot)
+            // Ø§Ú¯Ø± RowVersion Ù¾ÛŒØ¯Ø§ Ø´Ø¯ (Ø§Ø² AggregateRoot)
             if (prop is not null)
             {
-                // پیکربندی RowVersion
+                // Ù¾ÛŒÚ©Ø±Ø¨Ù†Ø¯ÛŒ RowVersion
                 prop.ValueGenerated = ValueGenerated.OnAddOrUpdate;
                 prop.SetColumnType("rowversion");
                 
-                // فقط برای AggregateRoots به عنوان ConcurrencyToken استفاده می‌شود
+                // ÙÙ‚Ø· Ø¨Ø±Ø§ÛŒ AggregateRoots Ø¨Ù‡ Ø¹Ù†ÙˆØ§Ù† ConcurrencyToken Ø§Ø³ØªÙØ§Ø¯Ù‡ Ù…ÛŒâ€ŒØ´ÙˆØ¯
                 prop.IsConcurrencyToken = isAggregateRoot;
             }
         }
@@ -103,4 +96,37 @@ public sealed class InventoryDbContext : DbContext
 
         return false;
     }
+
+    public Task<long> NextReceiptDocNoAsync(CancellationToken ct)
+        => NextSequenceValueAsync("inv.ReceiptDocNoSeq", ct);
+
+    public Task<long> NextIssueDocNoAsync(CancellationToken ct)
+        => NextSequenceValueAsync("inv.IssueDocNoSeq", ct);
+
+    public Task<long> NextTransferDocNoAsync(CancellationToken ct)
+        => NextSequenceValueAsync("inv.TransferDocNoSeq", ct);
+
+    public Task<long> NextAdjustmentDocNoAsync(CancellationToken ct)
+        => NextSequenceValueAsync("inv.AdjustmentDocNoSeq", ct);
+
+    private async Task<long> NextSequenceValueAsync(string sequenceName, CancellationToken ct)
+    {
+        var connection = Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+
+        if (shouldClose) await Database.OpenConnectionAsync(ct);
+        try
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"SELECT NEXT VALUE FOR {sequenceName};";
+            var result = await cmd.ExecuteScalarAsync(ct);
+            return Convert.ToInt64(result);
+        }
+        finally
+        {
+            if (shouldClose) await Database.CloseConnectionAsync();
+        }
+    }
 }
+
+

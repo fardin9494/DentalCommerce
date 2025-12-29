@@ -1,4 +1,4 @@
-﻿using Inventory.Infrastructure.Persistence;
+﻿using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,8 +7,8 @@ namespace Inventory.Application.Features.Adjustments.Commands;
 
 public sealed class CancelAdjustmentHandler : IRequestHandler<CancelAdjustmentCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public CancelAdjustmentHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public CancelAdjustmentHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(CancelAdjustmentCommand req, CancellationToken ct)
     {

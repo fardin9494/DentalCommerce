@@ -1,4 +1,4 @@
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,8 +6,8 @@ namespace Inventory.Application.Features.Adjustments.Commands;
 
 public sealed class UpdateAdjustmentHeaderHandler : IRequestHandler<UpdateAdjustmentHeaderCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public UpdateAdjustmentHeaderHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    public UpdateAdjustmentHeaderHandler(IInventoryDbContext db) => _db = db;
 
     public async Task<Unit> Handle(UpdateAdjustmentHeaderCommand req, CancellationToken ct)
     {

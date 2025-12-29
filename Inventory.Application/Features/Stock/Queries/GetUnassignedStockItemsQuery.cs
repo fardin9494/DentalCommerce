@@ -1,5 +1,5 @@
 using Inventory.Application.Common.Interfaces;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -44,9 +44,9 @@ public sealed record UnassignedStockItemDto(
 
 public sealed class GetUnassignedStockItemsHandler : IRequestHandler<GetUnassignedStockItemsQuery, UnassignedStockItemsResult>
 {
-    private readonly InventoryDbContext _db;
+    private readonly IInventoryDbContext _db;
     private readonly ICatalogGateway _catalogGateway;
-    public GetUnassignedStockItemsHandler(InventoryDbContext db, ICatalogGateway catalogGateway)
+    public GetUnassignedStockItemsHandler(IInventoryDbContext db, ICatalogGateway catalogGateway)
     {
         _db = db;
         _catalogGateway = catalogGateway;

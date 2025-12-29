@@ -1,6 +1,6 @@
 ﻿using Inventory.Domain.Aggregates;
 using Inventory.Domain.Enums;
-using Inventory.Infrastructure.Persistence;
+using Inventory.Application.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,20 +8,24 @@ namespace Inventory.Application.Features.Stock.Commands;
 
 public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand, Unit>
 {
-    private readonly InventoryDbContext _db;
-    public MoveStockItemHandler(InventoryDbContext db) => _db = db;
+    private readonly IInventoryDbContext _db;
+    private readonly ITransactionRunner _tx;
+
+    public MoveStockItemHandler(IInventoryDbContext db, ITransactionRunner tx)
+    {
+        _db = db;
+        _tx = tx;
+    }
 
     public async Task<Unit> Handle(MoveStockItemCommand req, CancellationToken ct)
     {
-        var strategy = _db.Database.CreateExecutionStrategy();
         const int maxAttempts = 5;
 
-        await strategy.ExecuteAsync(async () =>
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            try
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                try
+                await _tx.ExecuteAsync(async ct =>
                 {
                     var source = await _db.StockItems.FirstOrDefaultAsync(x => x.Id == req.SourceStockItemId, ct)
                         ?? throw new InvalidOperationException("ردیف مبدا موجود نیست.");
@@ -235,23 +239,20 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
                     _db.StockLedger.Add(destEntry);
 
                     await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    break;
+                }, ct);
+                break;
                 }
                 catch (InvalidOperationException)
                 {
                     // خطاهای InvalidOperationException را دوباره throw می‌کنیم (بدون retry)
-                    await tx.RollbackAsync(ct);
                     throw;
                 }
                 catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
                 {
-                    await tx.RollbackAsync(ct);
                     _db.ChangeTracker.Clear();
                 }
                 catch (Exception ex)
                 {
-                    await tx.RollbackAsync(ct);
                     _db.ChangeTracker.Clear();
                     
                     // اگر آخرین attempt بود، خطا را throw می‌کنیم
@@ -264,7 +265,6 @@ public sealed class MoveStockItemHandler : IRequestHandler<MoveStockItemCommand,
                     // در غیر این صورت retry می‌کنیم
                 }
             }
-        });
 
         return Unit.Value;
     }
