@@ -27,26 +27,27 @@ public sealed class CancelOrderHandler : IRequestHandler<CancelOrderCommand>
         if (order is null)
             throw new InvalidOperationException($"Order {cmd.OrderId} not found.");
 
-        // Check if order can be cancelled (domain method will throw if not)
-        // But we need to release inventory first if order is Placed
-        var wasPlaced = order.Status == OrderStatus.Placed;
+        if (order.Status == OrderStatus.Cancelled)
+            return;
 
-        // Release inventory reservation if order was placed
-        if (wasPlaced)
+        // Release inventory reservations (if any) before cancelling
+        try
         {
-            try
-            {
-                await _inventory.ReleaseAsync(order.Id, ct);
-            }
-            catch (Exception ex)
-            {
-                // Log but don't fail - inventory might already be released or order might not have reservation
-                // In production, you might want to log this properly
-            }
+            await _inventory.ReleaseAsync(order.Id, ct);
+        }
+        catch
+        {
+            // ignore release errors in test flow
         }
 
-        // Cancel the order (domain method validates status)
-        order.Cancel(cmd.Request.Reason, cmd.Request.Note);
-        await _db.SaveChangesAsync(ct);
+        await OrderCommandHelpers.SaveWithRetryAsync(
+            _db,
+            order,
+            () =>
+            {
+                if (order.Status == OrderStatus.Cancelled) return;
+                order.Cancel(cmd.Request.Reason, cmd.Request.Note);
+            },
+            ct);
     }
 }

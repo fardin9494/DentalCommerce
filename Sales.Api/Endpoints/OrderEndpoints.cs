@@ -11,8 +11,13 @@ public static class OrderEndpoints
     {
         group.MapPost("/checkout", async (CheckoutOrderRequest request, IMediator mediator) =>
         {
-            var result = await mediator.Send(new CheckoutOrderCommand(request));
-            return Results.Ok(result);
+            try
+            {
+                var result = await mediator.Send(new CheckoutOrderCommand(request));
+                return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
         });
 
         group.MapPost("/orders", async (CreateOrderRequest request, IMediator mediator) =>

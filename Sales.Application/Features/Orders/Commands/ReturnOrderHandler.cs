@@ -2,6 +2,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sales.Application.Abstractions;
+using Sales.Domain.Orders;
 
 namespace Sales.Application.Features.Orders.Commands;
 
@@ -22,7 +23,14 @@ public sealed class ReturnOrderHandler : IRequestHandler<ReturnOrderCommand>
         var data = new { reason = cmd.Request.Reason };
         var dataJson = JsonSerializer.Serialize(data);
 
-        order.MarkReturned(cmd.Request.Note, dataJson);
-        await _db.SaveChangesAsync(ct);
+        await OrderCommandHelpers.SaveWithRetryAsync(
+            _db,
+            order,
+            () =>
+            {
+                if (order.Status == OrderStatus.Returned) return;
+                order.MarkReturned(cmd.Request.Note, dataJson);
+            },
+            ct);
     }
 }

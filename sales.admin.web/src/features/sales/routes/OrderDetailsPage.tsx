@@ -110,6 +110,7 @@ export function OrderDetailsPage() {
   const [returnReason, setReturnReason] = useState('')
   const [refundReason, setRefundReason] = useState('')
   const [refundAmount, setRefundAmount] = useState<string>('')
+  const [cancelReason, setCancelReason] = useState('')
   const [storeInfo, setStoreInfo] = useState<StoreInfo | null>(null)
   const [productInfoMap, setProductInfoMap] = useState<Map<string, ProductInfo>>(new Map())
   const [stockItemInfoMap, setStockItemInfoMap] = useState<Map<string, StockItemInfo>>(new Map())
@@ -294,8 +295,12 @@ export function OrderDetailsPage() {
   const canDeliver = order?.status === 'Shipped'
   const canReturn = order?.status === 'Delivered'
   const canRefund = order?.status === 'Returned' || order?.status === 'Delivered' || order?.status === 'Cancelled'
+  const canCancel = order?.status === 'Draft' || order?.status === 'Placed'
+  const canEditShipFields = order?.status === 'Placed'
+  const canEditReturnFields = order?.status === 'Delivered'
+  const canEditRefundFields = order?.status === 'Returned' || order?.status === 'Delivered' || order?.status === 'Cancelled'
 
-  const handleAction = async (action: 'ship' | 'deliver' | 'return' | 'refund') => {
+  const handleAction = async (action: 'ship' | 'deliver' | 'return' | 'refund' | 'cancel') => {
     if (!id) return
     try {
       if (action === 'ship') {
@@ -310,8 +315,12 @@ export function OrderDetailsPage() {
       } else if (action === 'refund') {
         await fetchJson(`/sales/orders/${id}/refund`, { json: { reason: refundReason || null, amount: refundAmount ? Number(refundAmount) : null, note: actionNote || null } })
         toast.success('سفارش Refund شد.')
+      } else if (action === 'cancel') {
+        await fetchJson(`/sales/orders/${id}/cancel`, { json: { reason: cancelReason || null, note: actionNote || null } })
+        toast.success('سفارش لغو شد.')
       }
       setActionNote('')
+      setCancelReason('')
       await Promise.all([loadTimeline(), refreshOrder(id)])
     } catch (err: any) {
       const msg = err?.message || 'خطا در انجام عملیات'
@@ -423,28 +432,87 @@ export function OrderDetailsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label className="label">Carrier</label>
-                <input className="input" value={carrier} onChange={e => setCarrier(e.target.value)} placeholder="پست، تیپاکس..." />
+                <input
+                  className="input"
+                  value={carrier}
+                  onChange={e => setCarrier(e.target.value)}
+                  placeholder="پست، تیپاکس..."
+                  disabled={!canEditShipFields}
+                  readOnly={!canEditShipFields}
+                />
               </div>
               <div>
                 <label className="label">Tracking Code</label>
-                <input className="input" value={trackingCode} onChange={e => setTrackingCode(e.target.value)} placeholder="کد رهگیری" />
+                <input
+                  className="input"
+                  value={trackingCode}
+                  onChange={e => setTrackingCode(e.target.value)}
+                  placeholder="کد رهگیری"
+                  disabled={!canEditShipFields}
+                  readOnly={!canEditShipFields}
+                />
               </div>
               <div>
                 <label className="label">یادداشت</label>
-                <input className="input" value={actionNote} onChange={e => setActionNote(e.target.value)} placeholder="یادداشت اختیاری" />
+                <input
+                  className="input"
+                  value={actionNote}
+                  onChange={e => setActionNote(e.target.value)}
+                  placeholder="یادداشت اختیاری"
+                  disabled={!canShip && !canDeliver && !canReturn && !canRefund && !canCancel}
+                  readOnly={!canShip && !canDeliver && !canReturn && !canRefund && !canCancel}
+                />
               </div>
-              <div>
-                <label className="label">علت مرجوعی</label>
-                <input className="input" value={returnReason} onChange={e => setReturnReason(e.target.value)} placeholder="دلیل مرجوعی" />
-              </div>
-              <div>
-                <label className="label">علت Refund</label>
-                <input className="input" value={refundReason} onChange={e => setRefundReason(e.target.value)} placeholder="دلیل Refund" />
-              </div>
-              <div>
-                <label className="label">مبلغ Refund (اختیاری)</label>
-                <input className="input" value={refundAmount} onChange={e => setRefundAmount(e.target.value)} placeholder="مبلغ" />
-              </div>
+              {canCancel && (
+                <div>
+                  <label className="label">علت لغو</label>
+                  <input
+                    className="input"
+                    value={cancelReason}
+                    onChange={e => setCancelReason(e.target.value)}
+                    placeholder="دلیل لغو"
+                  />
+                </div>
+              )}
+              {canReturn && (
+                <div>
+                  <label className="label">علت مرجوعی</label>
+                  <input
+                    className="input"
+                    value={returnReason}
+                    onChange={e => setReturnReason(e.target.value)}
+                    placeholder="دلیل مرجوعی"
+                    disabled={!canEditReturnFields}
+                    readOnly={!canEditReturnFields}
+                  />
+                </div>
+              )}
+              {canRefund && (
+                <div>
+                  <label className="label">علت Refund</label>
+                  <input
+                    className="input"
+                    value={refundReason}
+                    onChange={e => setRefundReason(e.target.value)}
+                    placeholder="دلیل Refund"
+                    disabled={!canEditRefundFields}
+                    readOnly={!canEditRefundFields}
+                  />
+                </div>
+              )}
+              {canRefund && (
+                <div>
+                  <label className="label">مبلغ Refund (اختیاری)</label>
+                  <input
+                    className="input"
+                    value={refundAmount}
+                    onChange={e => setRefundAmount(e.target.value)}
+                    placeholder="مبلغ"
+                    disabled={!canEditRefundFields}
+                    readOnly={!canEditRefundFields}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
@@ -488,7 +556,17 @@ export function OrderDetailsPage() {
                 </svg>
                 Refund
               </button>
-              {!canShip && !canDeliver && !canReturn && !canRefund && (
+              <button
+                className="btn-secondary flex items-center gap-2"
+                disabled={!canCancel}
+                onClick={() => handleAction('cancel')}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                لغو سفارش
+              </button>
+              {!canShip && !canDeliver && !canReturn && !canRefund && !canCancel && (
                 <span className="text-sm text-gray-500 flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />

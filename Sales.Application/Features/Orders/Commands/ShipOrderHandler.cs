@@ -2,6 +2,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sales.Application.Abstractions;
+using Sales.Domain.Orders;
 
 namespace Sales.Application.Features.Orders.Commands;
 
@@ -26,7 +27,14 @@ public sealed class ShipOrderHandler : IRequestHandler<ShipOrderCommand>
         };
         var dataJson = JsonSerializer.Serialize(data);
 
-        order.MarkShipped(cmd.Request.Note, dataJson);
-        await _db.SaveChangesAsync(ct);
+        await OrderCommandHelpers.SaveWithRetryAsync(
+            _db,
+            order,
+            () =>
+            {
+                if (order.Status == OrderStatus.Shipped) return;
+                order.MarkShipped(cmd.Request.Note, dataJson);
+            },
+            ct);
     }
 }

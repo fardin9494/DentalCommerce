@@ -34,5 +34,7 @@ public sealed class OrderConfig : IEntityTypeConfiguration<Order>
 
         b.Metadata.FindNavigation(nameof(Order.Lines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
         b.Metadata.FindNavigation(nameof(Order.Timeline))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+
+        // RowVersion توسط ConfigureRowVersion در SalesDbContext پیکربندی می‌شود
     }
 }

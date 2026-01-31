@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sales.Application.Abstractions;
+using Sales.Domain.Orders;
 
 namespace Sales.Application.Features.Orders.Commands;
 
@@ -18,7 +19,14 @@ public sealed class DeliverOrderHandler : IRequestHandler<DeliverOrderCommand>
 
         if (order is null) throw new InvalidOperationException("Order not found.");
 
-        order.MarkDelivered(cmd.Request.Note, null);
-        await _db.SaveChangesAsync(ct);
+        await OrderCommandHelpers.SaveWithRetryAsync(
+            _db,
+            order,
+            () =>
+            {
+                if (order.Status == OrderStatus.Delivered) return;
+                order.MarkDelivered(cmd.Request.Note, null);
+            },
+            ct);
     }
 }

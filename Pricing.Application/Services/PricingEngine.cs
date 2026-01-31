@@ -246,14 +246,18 @@ public sealed class PricingEngine
                 continue;
 
             var before = line.FinalUnitPrice;
-            line.FinalUnitPrice = selected.OverrideType switch
+            var proposed = selected.OverrideType switch
             {
                 OverrideType.PercentOff => RoundingRules.Round(before * (1m - selected.Value / 100m), priceList.Currency),
                 OverrideType.AmountOff => RoundingRules.Round(Math.Max(0m, before - selected.Value), priceList.Currency),
                 OverrideType.FixedPrice => RoundingRules.Round(selected.Value, priceList.Currency),
-                _ => line.FinalUnitPrice
+                _ => before
             };
 
+            if (proposed >= before)
+                continue;
+
+            line.FinalUnitPrice = proposed;
             var delta = line.FinalUnitPrice - before;
             if (delta != 0m)
             {
@@ -755,7 +759,7 @@ public sealed class PricingEngine
     {
         quote.Subtotal = quote.Lines.Where(l => !l.IsGift).Sum(l => l.BaseUnitPrice * l.Quantity);
         quote.FinalTotal = quote.Lines.Where(l => !l.IsGift).Sum(l => l.FinalUnitPrice * l.Quantity);
-        quote.DiscountTotal = quote.Subtotal - quote.FinalTotal;
+        quote.DiscountTotal = Math.Max(0m, quote.Subtotal - quote.FinalTotal);
     }
 
     private sealed record SkuBatchKey(string SkuId, Guid BatchId);
