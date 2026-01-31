@@ -1,6 +1,7 @@
 using MediatR;
 using Sales.Application.Features.Orders.Commands;
 using Sales.Application.Features.Orders.Queries;
+using AddOrderNoteRequest = Sales.Application.Features.Orders.Commands.AddOrderNoteRequest;
 
 namespace Sales.Api.Endpoints;
 
@@ -76,6 +77,28 @@ public static class OrderEndpoints
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
         });
 
+        group.MapPost("/orders/{id:guid}/retry-payment", async (Guid id, IMediator mediator) =>
+        {
+            try
+            {
+                var result = await mediator.Send(new RetryPaymentCommand(id));
+                return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
+        });
+
+        group.MapPost("/orders/{id:guid}/cancel", async (Guid id, CancelOrderRequest body, IMediator mediator) =>
+        {
+            try
+            {
+                await mediator.Send(new CancelOrderCommand(id, body));
+                return Results.NoContent();
+            }
+            catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
+        });
+
         group.MapGet("/orders", async (
             Guid? siteId,
             Guid? userId,
@@ -97,6 +120,29 @@ public static class OrderEndpoints
                 Page: page ?? 1,
                 PageSize: pageSize ?? 20));
             return Results.Ok(result);
+        });
+
+        group.MapGet("/orders/{id:guid}/notes", async (
+            Guid id,
+            bool? includeInternal,
+            IMediator mediator) =>
+        {
+            var result = await mediator.Send(new GetOrderNotesQuery(id, includeInternal ?? true));
+            return Results.Ok(result);
+        });
+
+        group.MapPost("/orders/{id:guid}/notes", async (
+            Guid id,
+            AddOrderNoteRequest body,
+            IMediator mediator) =>
+        {
+            try
+            {
+                var result = await mediator.Send(new AddOrderNoteCommand(id, body));
+                return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
         });
 
         return group;

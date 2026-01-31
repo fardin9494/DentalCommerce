@@ -1,5 +1,16 @@
 namespace Sales.Application.Features.Orders.Models;
 
+public sealed class OrderNoteDto
+{
+    public Guid Id { get; init; }
+    public Guid OrderId { get; init; }
+    public string Note { get; init; } = null!;
+    public string? CreatedBy { get; init; }
+    public bool IsInternal { get; init; }
+    public DateTime CreatedAt { get; init; }
+    public DateTime UpdatedAt { get; init; }
+}
+
 public sealed class OrderDto
 {
     public Guid Id { get; init; }

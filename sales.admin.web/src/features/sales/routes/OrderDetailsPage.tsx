@@ -77,6 +77,16 @@ type TimelineItem = {
   createdAt: string
 }
 
+type OrderNote = {
+  id: string
+  orderId: string
+  note: string
+  createdBy?: string | null
+  isInternal: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 export function OrderDetailsPage() {
   const { id } = useParams()
   const toast = useToast()
@@ -87,6 +97,13 @@ export function OrderDetailsPage() {
   const [reservationError, setReservationError] = useState<string | null>(null)
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
   const [timelineError, setTimelineError] = useState<string | null>(null)
+  const [notes, setNotes] = useState<OrderNote[]>([])
+  const [notesLoading, setNotesLoading] = useState(false)
+  const [notesError, setNotesError] = useState<string | null>(null)
+  const [newNote, setNewNote] = useState('')
+  const [newNoteCreatedBy, setNewNoteCreatedBy] = useState('')
+  const [newNoteIsInternal, setNewNoteIsInternal] = useState(false)
+  const [addingNote, setAddingNote] = useState(false)
   const [actionNote, setActionNote] = useState('')
   const [trackingCode, setTrackingCode] = useState('')
   const [carrier, setCarrier] = useState('')
@@ -148,6 +165,50 @@ export function OrderDetailsPage() {
     if (!id) return
     loadTimeline()
   }, [id])
+
+  const loadNotes = async () => {
+    if (!id) return
+    setNotesLoading(true)
+    setNotesError(null)
+    try {
+      const res = await fetchJson<OrderNote[]>(`/sales/orders/${id}/notes?includeInternal=true`)
+      setNotes(res || [])
+    } catch (err: any) {
+      const msg = err?.message || 'خطا در دریافت یادداشت‌ها'
+      setNotesError(msg)
+    } finally {
+      setNotesLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!id) return
+    loadNotes()
+  }, [id])
+
+  const handleAddNote = async () => {
+    if (!id || !newNote.trim()) return
+    setAddingNote(true)
+    try {
+      await fetchJson(`/sales/orders/${id}/notes`, {
+        json: {
+          note: newNote.trim(),
+          createdBy: newNoteCreatedBy.trim() || null,
+          isInternal: newNoteIsInternal,
+        },
+      })
+      toast.success('یادداشت با موفقیت اضافه شد')
+      setNewNote('')
+      setNewNoteCreatedBy('')
+      setNewNoteIsInternal(false)
+      await loadNotes()
+    } catch (err: any) {
+      const msg = err?.message || 'خطا در افزودن یادداشت'
+      toast.error(msg)
+    } finally {
+      setAddingNote(false)
+    }
+  }
 
   useEffect(() => {
     if (!id) return
@@ -623,6 +684,159 @@ export function OrderDetailsPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Notes */}
+          <div className="card p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              یادداشت‌ها
+            </h3>
+
+            {/* Add Note Form */}
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="space-y-3">
+                <div>
+                  <label className="label flex items-center gap-2">
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    یادداشت جدید
+                  </label>
+                  <textarea
+                    className="input min-h-[100px] resize-y"
+                    value={newNote}
+                    onChange={e => setNewNote(e.target.value)}
+                    placeholder="یادداشت خود را وارد کنید..."
+                    maxLength={2000}
+                  />
+                  <div className="text-xs text-gray-500 mt-1 text-left">
+                    {newNote.length} / 2000 کاراکتر
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="label flex items-center gap-2">
+                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      نویسنده (اختیاری)
+                    </label>
+                    <input
+                      className="input"
+                      type="text"
+                      value={newNoteCreatedBy}
+                      onChange={e => setNewNoteCreatedBy(e.target.value)}
+                      placeholder="نام کاربر یا ID"
+                      maxLength={256}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newNoteIsInternal}
+                        onChange={e => setNewNoteIsInternal(e.target.checked)}
+                        className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                      />
+                      <span className="text-sm text-gray-700 flex items-center gap-1">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        یادداشت داخلی (فقط برای ادمین)
+                      </span>
+                    </label>
+                  </div>
+                </div>
+                <button
+                  className="btn flex items-center gap-2 w-full md:w-auto"
+                  onClick={handleAddNote}
+                  disabled={!newNote.trim() || addingNote}
+                >
+                  {addingNote ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      در حال افزودن...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      افزودن یادداشت
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Notes List */}
+            {notesError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {notesError}
+              </div>
+            )}
+            {notesLoading ? (
+              <div className="text-center py-8">
+                <svg className="animate-spin h-8 w-8 mx-auto text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p className="mt-4 text-gray-600">در حال بارگذاری یادداشت‌ها...</p>
+              </div>
+            ) : notes.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <svg className="w-12 h-12 mx-auto text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <p>یادداشتی ثبت نشده است.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {notes.map((note) => (
+                  <div
+                    key={note.id}
+                    className={`p-4 rounded-lg border transition-colors ${
+                      note.isInternal
+                        ? 'bg-amber-50 border-amber-200'
+                        : 'bg-white border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          {note.isInternal && (
+                            <span className="badge badge-amber text-xs flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                              </svg>
+                              داخلی
+                            </span>
+                          )}
+                          {note.createdBy && (
+                            <span className="text-xs text-gray-600 flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                              {note.createdBy}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-900 whitespace-pre-wrap">{note.note}</p>
+                      </div>
+                      <div className="text-xs text-gray-500 flex-shrink-0 text-left">
+                        {formatDate(note.createdAt)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Timeline */}
