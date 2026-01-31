@@ -55,7 +55,8 @@ namespace Catalog.Application.Products
                 src = src.Where(p =>
                     EF.Functions.Like(p.Name, s) ||
                     EF.Functions.Like(p.Code, s) ||
-                    EF.Functions.Like(p.DefaultSlug, s));
+                    EF.Functions.Like(p.DefaultSlug, s) ||
+                    p.Variants.Any(v => v.Sku != null && EF.Functions.Like(v.Sku, s)));
             }
 
             // 3) brand filter
@@ -172,4 +173,3 @@ namespace Catalog.Application.Products
         }
     }
 }
-

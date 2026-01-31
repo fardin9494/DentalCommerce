@@ -1,0 +1,295 @@
+using BuildingBlocks.Domain;
+
+namespace Sales.Domain.Orders;
+
+public sealed class Order : AggregateRoot<Guid>
+{
+    public Guid SiteId { get; private set; }
+    public Guid? UserId { get; private set; }
+    public string OrderNumber { get; private set; } = null!;
+
+    public Guid PricingQuoteId { get; private set; }
+    public string Currency { get; private set; } = "IRR";
+
+    public OrderStatus Status { get; private set; } = OrderStatus.Draft;
+    public DateTime? PlacedAtUtc { get; private set; }
+    public DateTime? CancelledAtUtc { get; private set; }
+    public DateTime? PaymentFailedAtUtc { get; private set; }
+    public string? PaymentFailureReason { get; private set; }
+    public string? PaymentFailureDetails { get; private set; }
+
+    public decimal Subtotal { get; private set; }
+    public decimal DiscountTotal { get; private set; }
+    public decimal FinalTotal { get; private set; }
+    public decimal CashbackTotal { get; private set; }
+
+    private readonly List<OrderLine> _lines = new();
+    public IReadOnlyCollection<OrderLine> Lines => _lines;
+
+    private readonly List<OrderTimelineEntry> _timeline = new();
+    public IReadOnlyCollection<OrderTimelineEntry> Timeline => _timeline;
+
+    private Order() { }
+
+    public static Order CreateDraft(
+        Guid siteId,
+        Guid? userId,
+        Guid pricingQuoteId,
+        string currency,
+        IReadOnlyCollection<OrderLineDraft> lines,
+        decimal subtotal,
+        decimal discountTotal,
+        decimal finalTotal,
+        decimal cashbackTotal)
+    {
+        if (siteId == Guid.Empty) throw new ArgumentException("SiteId required.", nameof(siteId));
+        if (pricingQuoteId == Guid.Empty) throw new ArgumentException("PricingQuoteId required.", nameof(pricingQuoteId));
+        if (string.IsNullOrWhiteSpace(currency)) throw new ArgumentException("Currency required.", nameof(currency));
+        if (lines.Count == 0) throw new ArgumentException("Order requires at least one line.", nameof(lines));
+
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            SiteId = siteId,
+            UserId = userId,
+            OrderNumber = GenerateOrderNumber(),
+            PricingQuoteId = pricingQuoteId,
+            Currency = currency.Trim().ToUpperInvariant(),
+            Status = OrderStatus.Draft,
+            Subtotal = subtotal,
+            DiscountTotal = discountTotal,
+            FinalTotal = finalTotal,
+            CashbackTotal = cashbackTotal
+        };
+
+        foreach (var l in lines)
+            order._lines.Add(OrderLine.Create(order.Id, l));
+
+        order.AddTimeline("Created", null, OrderStatus.Draft, null, null);
+        return order;
+    }
+
+    public static Order Place(
+        Guid siteId,
+        Guid? userId,
+        Guid pricingQuoteId,
+        string currency,
+        DateTime placedAtUtc,
+        IReadOnlyCollection<OrderLineDraft> lines,
+        decimal subtotal,
+        decimal discountTotal,
+        decimal finalTotal,
+        decimal cashbackTotal)
+    {
+        var order = CreateDraft(
+            siteId,
+            userId,
+            pricingQuoteId,
+            currency,
+            lines,
+            subtotal,
+            discountTotal,
+            finalTotal,
+            cashbackTotal);
+        order.MarkPlaced(placedAtUtc);
+        return order;
+    }
+
+    public void MarkPlaced(DateTime? whenUtc = null)
+    {
+        if (Status != OrderStatus.Draft && Status != OrderStatus.PaymentFailed)
+            throw new InvalidOperationException("Order is not in a placeable state.");
+
+        var from = Status;
+        var ts = whenUtc ?? DateTime.UtcNow;
+        if (ts.Kind != DateTimeKind.Utc) ts = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
+        Status = OrderStatus.Placed;
+        PlacedAtUtc = ts;
+        PaymentFailedAtUtc = null;
+        PaymentFailureReason = null;
+        PaymentFailureDetails = null;
+        Touch();
+        AddTimeline("Placed", from, Status, null, null);
+    }
+
+    public void MarkPaymentFailed(string? reason = null, string? details = null, DateTime? whenUtc = null)
+    {
+        if (Status != OrderStatus.Draft)
+            throw new InvalidOperationException("Only draft orders can fail payment.");
+
+        var from = Status;
+        var ts = whenUtc ?? DateTime.UtcNow;
+        if (ts.Kind != DateTimeKind.Utc) ts = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
+        Status = OrderStatus.PaymentFailed;
+        PaymentFailedAtUtc = ts;
+        PaymentFailureReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        PaymentFailureDetails = string.IsNullOrWhiteSpace(details) ? null : details.Trim();
+        Touch();
+        AddTimeline("PaymentFailed", from, Status, PaymentFailureReason, PaymentFailureDetails);
+    }
+
+    public void Cancel(string? reason = null, string? details = null, DateTime? whenUtc = null)
+    {
+        if (Status != OrderStatus.Placed && Status != OrderStatus.Draft)
+            throw new InvalidOperationException("Only draft or placed orders can be cancelled.");
+
+        var from = Status;
+        Status = OrderStatus.Cancelled;
+        CancelledAtUtc = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
+        Touch();
+        AddTimeline("Cancelled", from, Status, reason, details);
+    }
+
+    public void MarkShipped(string? message = null, string? dataJson = null, DateTime? whenUtc = null)
+    {
+        if (Status != OrderStatus.Placed)
+            throw new InvalidOperationException("Only placed orders can be shipped.");
+
+        var from = Status;
+        Status = OrderStatus.Shipped;
+        Touch();
+        AddTimeline("Shipped", from, Status, message, dataJson, whenUtc);
+    }
+
+    public void MarkDelivered(string? message = null, string? dataJson = null, DateTime? whenUtc = null)
+    {
+        if (Status != OrderStatus.Shipped)
+            throw new InvalidOperationException("Only shipped orders can be delivered.");
+
+        var from = Status;
+        Status = OrderStatus.Delivered;
+        Touch();
+        AddTimeline("Delivered", from, Status, message, dataJson, whenUtc);
+    }
+
+    public void MarkReturned(string? message = null, string? dataJson = null, DateTime? whenUtc = null)
+    {
+        if (Status != OrderStatus.Delivered)
+            throw new InvalidOperationException("Only delivered orders can be returned.");
+
+        var from = Status;
+        Status = OrderStatus.Returned;
+        Touch();
+        AddTimeline("Returned", from, Status, message, dataJson, whenUtc);
+    }
+
+    public void MarkRefunded(string? message = null, string? dataJson = null, DateTime? whenUtc = null)
+    {
+        if (Status != OrderStatus.Returned && Status != OrderStatus.Delivered && Status != OrderStatus.Cancelled)
+            throw new InvalidOperationException("Order is not in a refundable state.");
+
+        var from = Status;
+        Status = OrderStatus.Refunded;
+        Touch();
+        AddTimeline("Refunded", from, Status, message, dataJson, whenUtc);
+    }
+
+    private void AddTimeline(
+        string eventType,
+        OrderStatus? fromStatus,
+        OrderStatus? toStatus,
+        string? message,
+        string? dataJson,
+        DateTime? whenUtc = null)
+    {
+        _timeline.Add(OrderTimelineEntry.Create(
+            Id,
+            eventType,
+            fromStatus,
+            toStatus,
+            message,
+            dataJson,
+            whenUtc));
+    }
+
+    private static string GenerateOrderNumber()
+    {
+        var ts = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
+        var tail = Guid.NewGuid().ToString("N")[^4..].ToUpperInvariant();
+        return $"SO-{ts}-{tail}";
+    }
+}
+
+public sealed record OrderLineDraft(
+    string SkuId,
+    Guid? BatchId,
+    int Quantity,
+    decimal BaseUnitPrice,
+    decimal FinalUnitPrice,
+    bool IsGift,
+    string? AdjustmentsJson);
+
+public sealed class OrderLine : BaseEntity<Guid>
+{
+    public Guid OrderId { get; private set; }
+    public string SkuId { get; private set; } = null!;
+    public Guid? BatchId { get; private set; }
+    public int Quantity { get; private set; }
+    public decimal BaseUnitPrice { get; private set; }
+    public decimal FinalUnitPrice { get; private set; }
+    public bool IsGift { get; private set; }
+    public string? AdjustmentsJson { get; private set; }
+
+    private OrderLine() { }
+
+    internal static OrderLine Create(Guid orderId, OrderLineDraft draft)
+    {
+        if (orderId == Guid.Empty) throw new ArgumentException("OrderId required.", nameof(orderId));
+        if (string.IsNullOrWhiteSpace(draft.SkuId)) throw new ArgumentException("SkuId required.", nameof(draft));
+        if (draft.Quantity <= 0) throw new ArgumentOutOfRangeException(nameof(draft.Quantity));
+
+        return new OrderLine
+        {
+            Id = Guid.NewGuid(),
+            OrderId = orderId,
+            SkuId = draft.SkuId.Trim(),
+            BatchId = draft.BatchId,
+            Quantity = draft.Quantity,
+            BaseUnitPrice = draft.BaseUnitPrice,
+            FinalUnitPrice = draft.FinalUnitPrice,
+            IsGift = draft.IsGift,
+            AdjustmentsJson = string.IsNullOrWhiteSpace(draft.AdjustmentsJson) ? null : draft.AdjustmentsJson.Trim()
+        };
+    }
+}
+
+public sealed class OrderTimelineEntry : BaseEntity<Guid>
+{
+    public Guid OrderId { get; private set; }
+    public string EventType { get; private set; } = null!;
+    public OrderStatus? FromStatus { get; private set; }
+    public OrderStatus? ToStatus { get; private set; }
+    public string? Message { get; private set; }
+    public string? DataJson { get; private set; }
+
+    private OrderTimelineEntry() { }
+
+    internal static OrderTimelineEntry Create(
+        Guid orderId,
+        string eventType,
+        OrderStatus? fromStatus,
+        OrderStatus? toStatus,
+        string? message,
+        string? dataJson,
+        DateTime? whenUtc = null)
+    {
+        if (orderId == Guid.Empty) throw new ArgumentException("OrderId required.", nameof(orderId));
+        if (string.IsNullOrWhiteSpace(eventType)) throw new ArgumentException("EventType required.", nameof(eventType));
+
+        var ts = whenUtc ?? DateTime.UtcNow;
+        if (ts.Kind != DateTimeKind.Utc) ts = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
+
+        return new OrderTimelineEntry
+        {
+            Id = Guid.NewGuid(),
+            OrderId = orderId,
+            EventType = eventType.Trim(),
+            FromStatus = fromStatus,
+            ToStatus = toStatus,
+            Message = string.IsNullOrWhiteSpace(message) ? null : message.Trim(),
+            DataJson = string.IsNullOrWhiteSpace(dataJson) ? null : dataJson.Trim(),
+            CreatedAt = ts,
+            UpdatedAt = ts
+        };
+    }
+}

@@ -8,6 +8,7 @@ public interface IInventoryDbContext
 {
     DbSet<Warehouse> Warehouses { get; }
     DbSet<StockItem> StockItems { get; }
+    DbSet<StockReservation> StockReservations { get; }
     DbSet<StockItemSerial> StockItemSerials { get; }
     DbSet<StockLedgerEntry> StockLedger { get; }
     DbSet<Receipt> Receipts { get; }

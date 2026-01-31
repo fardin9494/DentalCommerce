@@ -655,6 +655,43 @@ namespace Inventory.Infrastructure.Migrations
                     b.ToTable("StockLedger", "inv");
                 });
 
+            modelBuilder.Entity("Inventory.Domain.Aggregates.StockReservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Qty")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<Guid>("StockItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("StockItemId");
+
+                    b.HasIndex("OrderId", "Sku");
+
+                    b.ToTable("StockReservation", "inv");
+                });
+
             modelBuilder.Entity("Inventory.Domain.Aggregates.StockShelf", b =>
                 {
                     b.Property<Guid>("Id")

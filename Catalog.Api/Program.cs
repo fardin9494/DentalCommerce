@@ -359,6 +359,12 @@ app.MapGet("/api/catalog/products/{id:guid}", async (Guid id, IMediator mediator
     return dto is null ? Results.NotFound() : Results.Ok(dto);
 });
 
+catalog.MapGet("/products/by-sku", async (string sku, IMediator mediator) =>
+{
+    var dto = await mediator.Send(new ResolveProductBySkuQuery(sku));
+    return dto is null ? Results.NotFound() : Results.Ok(dto);
+});
+
 // Validation endpoint for Inventory service
 catalog.MapGet("/products/{id:guid}/validate", async (Guid id, Guid? variantId, IMediator mediator) =>
 {

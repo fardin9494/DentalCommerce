@@ -1,0 +1,49 @@
+declare module '@ckeditor5-local' {
+  export const ClassicEditor: any
+  export const AccessibilityHelp: any
+  export const Autoformat: any
+  export const Autosave: any
+  export const BlockQuote: any
+  export const Bold: any
+  export const Essentials: any
+  export const FontBackgroundColor: any
+  export const FontColor: any
+  export const FontFamily: any
+  export const FontSize: any
+  export const Heading: any
+  export const Alignment: any
+  export const AlignmentEditing: any
+  export const Indent: any
+  export const IndentBlock: any
+  export const Italic: any
+  export const Link: any
+  export const List: any
+  export const ListProperties: any
+  export const Mention: any
+  export const Paragraph: any
+  export const PasteFromMarkdown: any
+  export const PasteFromMarkdownExperimental: any
+  export const PasteFromOffice: any
+  export const RemoveFormat: any
+  export const SelectAll: any
+  export const SpecialCharacters: any
+  export const SpecialCharactersArrows: any
+  export const SpecialCharactersCurrency: any
+  export const SpecialCharactersEssentials: any
+  export const SpecialCharactersLatin: any
+  export const SpecialCharactersMathematical: any
+  export const SpecialCharactersText: any
+  export const Table: any
+  export const TableCaption: any
+  export const TableCellProperties: any
+  export const TableColumnResize: any
+  export const TableProperties: any
+  export const TableToolbar: any
+  export const TextTransformation: any
+  export const TodoList: any
+  export const Underline: any
+  export const Undo: any
+  export const WordCount: any
+}
+
+declare module '@ckeditor5-static/*'

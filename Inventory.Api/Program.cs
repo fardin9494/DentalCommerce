@@ -129,13 +129,14 @@ app.UseCors(AdminCorsPolicy);
 // until full auth/roles are implemented.
 var adminPassword = app.Configuration["Admin:Password"];
 var adminPasswordHashHex = app.Configuration["Admin:PasswordHash"];
+var serviceToken = app.Configuration["Service:Token"]; // Service-to-service token
 byte[]? adminPasswordHash = null;
 if (!string.IsNullOrWhiteSpace(adminPasswordHashHex))
 {
     adminPasswordHash = Convert.FromHexString(adminPasswordHashHex);
 }
 
-if (!string.IsNullOrWhiteSpace(adminPassword) || adminPasswordHash is not null)
+if (!string.IsNullOrWhiteSpace(adminPassword) || adminPasswordHash is not null || !string.IsNullOrWhiteSpace(serviceToken))
 {
     app.Use(async (ctx, next) =>
     {
@@ -171,8 +172,12 @@ if (!string.IsNullOrWhiteSpace(adminPassword) || adminPasswordHash is not null)
                 var token = auth[prefix.Length..].Trim();
                 var ok = false;
 
+                if (!string.IsNullOrWhiteSpace(serviceToken) && string.Equals(token, serviceToken, StringComparison.Ordinal))
+                {
+                    ok = true;
+                }
                 // Check admin password hash
-                if (adminPasswordHash is not null)
+                else if (adminPasswordHash is not null)
                 {
                     var bytes = Encoding.UTF8.GetBytes(token);
                     var hash = SHA256.HashData(bytes);
@@ -1468,6 +1473,59 @@ stockItems.MapGet("/unassigned", async (
     );
     var result = await m.Send(query);
     return Results.Ok(result);
+});
+
+// --- Reservations (رزرو موجودی برای سفارش) ---
+var reservations = app.MapGroup("/api/inventory/reservations").DisableAntiforgery();
+
+reservations.MapPost("/", async (Inventory.Api.Contracts.Reservations.ReserveStockForOrderBody body, IMediator m) =>
+{
+    try
+    {
+        var result = await m.Send(new Inventory.Application.Features.Reservations.Commands.ReserveStockForOrderCommand(
+            body.OrderId,
+            body.Lines.Select(l => new Inventory.Application.Features.Reservations.Commands.ReserveStockLine(l.SkuId, l.Qty)).ToList()));
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(ex.Message);
+    }
+});
+
+reservations.MapGet("/{orderId:guid}", async (Guid orderId, IMediator m) =>
+{
+    var result = await m.Send(new Inventory.Application.Features.Reservations.Queries.GetOrderReservationsQuery(orderId));
+    return Results.Ok(result);
+});
+
+reservations.MapPost("/{orderId:guid}/release", async (Guid orderId, IMediator m) =>
+{
+    try
+    {
+        var result = await m.Send(new Inventory.Application.Features.Reservations.Commands.ReleaseStockForOrderCommand(orderId));
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(ex.Message);
+    }
 });
 
 stockItems.MapGet("/products", async (
