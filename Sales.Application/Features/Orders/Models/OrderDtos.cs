@@ -41,6 +41,9 @@ public sealed class OrderLineDto
     public string SkuId { get; init; } = null!;
     public Guid? BatchId { get; init; }
     public int Quantity { get; init; }
+    public int CancelledQty { get; init; }
+    public int ReturnedQty { get; init; }
+    public int RefundedQty { get; init; }
     public decimal BaseUnitPrice { get; init; }
     public decimal FinalUnitPrice { get; init; }
     public bool IsGift { get; init; }

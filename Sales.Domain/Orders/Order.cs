@@ -202,12 +202,36 @@ public sealed class Order : AggregateRoot<Guid>
         AddTimeline("Refunded", from, Status, message, dataJson, ts);
     }
 
+    public void RecalculateTotalsFromLines()
+    {
+        decimal subtotal = 0;
+        decimal finalTotal = 0;
+
+        foreach (var line in _lines)
+        {
+            if (line.ActiveQty <= 0) continue;
+            subtotal += line.BaseUnitPrice * line.ActiveQty;
+            finalTotal += line.FinalUnitPrice * line.ActiveQty;
+        }
+
+        Subtotal = subtotal;
+        FinalTotal = finalTotal;
+        DiscountTotal = Math.Max(0, Subtotal - FinalTotal);
+        Touch();
+    }
+
     public void EnsureTimelineEvent(string eventType, string? message = null, string? dataJson = null, DateTime? whenUtc = null)
     {
         if (string.IsNullOrWhiteSpace(eventType)) throw new ArgumentException("EventType required.", nameof(eventType));
         if (_timeline.Any(t => string.Equals(t.EventType, eventType, StringComparison.OrdinalIgnoreCase)))
             return;
 
+        AddTimeline(eventType, Status, Status, message, dataJson, whenUtc);
+    }
+
+    public void LogEvent(string eventType, string? message = null, string? dataJson = null, DateTime? whenUtc = null)
+    {
+        if (string.IsNullOrWhiteSpace(eventType)) throw new ArgumentException("EventType required.", nameof(eventType));
         AddTimeline(eventType, Status, Status, message, dataJson, whenUtc);
     }
 
@@ -264,6 +288,9 @@ public sealed class OrderLine : BaseEntity<Guid>
     public string SkuId { get; private set; } = null!;
     public Guid? BatchId { get; private set; }
     public int Quantity { get; private set; }
+    public int CancelledQty { get; private set; }
+    public int ReturnedQty { get; private set; }
+    public int RefundedQty { get; private set; }
     public decimal BaseUnitPrice { get; private set; }
     public decimal FinalUnitPrice { get; private set; }
     public bool IsGift { get; private set; }
@@ -284,11 +311,50 @@ public sealed class OrderLine : BaseEntity<Guid>
             SkuId = draft.SkuId.Trim(),
             BatchId = draft.BatchId,
             Quantity = draft.Quantity,
+            CancelledQty = 0,
+            ReturnedQty = 0,
+            RefundedQty = 0,
             BaseUnitPrice = draft.BaseUnitPrice,
             FinalUnitPrice = draft.FinalUnitPrice,
             IsGift = draft.IsGift,
             AdjustmentsJson = string.IsNullOrWhiteSpace(draft.AdjustmentsJson) ? null : draft.AdjustmentsJson.Trim()
         };
+    }
+
+    public int ActiveQty => Math.Max(0, Quantity - CancelledQty - ReturnedQty);
+    public int RefundableQty => Math.Max(0, Quantity - RefundedQty);
+
+    public void Cancel(int qty)
+    {
+        if (qty <= 0) throw new ArgumentOutOfRangeException(nameof(qty));
+        if (qty > ActiveQty) throw new InvalidOperationException("Cancel quantity exceeds available items.");
+        CancelledQty += qty;
+        Touch();
+    }
+
+    public void Return(int qty)
+    {
+        if (qty <= 0) throw new ArgumentOutOfRangeException(nameof(qty));
+        if (qty > ActiveQty) throw new InvalidOperationException("Return quantity exceeds available items.");
+        ReturnedQty += qty;
+        Touch();
+    }
+
+    public void MarkRefunded(int qty)
+    {
+        if (qty <= 0) throw new ArgumentOutOfRangeException(nameof(qty));
+        if (qty > RefundableQty) throw new InvalidOperationException("Refund quantity exceeds refundable items.");
+        RefundedQty += qty;
+        Touch();
+    }
+
+    public void UpdateQuantity(int newQty)
+    {
+        if (newQty <= 0) throw new ArgumentOutOfRangeException(nameof(newQty));
+        if (newQty < CancelledQty + ReturnedQty)
+            throw new InvalidOperationException("New quantity cannot be less than cancelled/returned items.");
+        Quantity = newQty;
+        Touch();
     }
 }
 
@@ -331,4 +397,14 @@ public sealed class OrderTimelineEntry : BaseEntity<Guid>
             UpdatedAt = ts
         };
     }
+
+    public static OrderTimelineEntry CreateExternal(
+        Guid orderId,
+        string eventType,
+        OrderStatus? fromStatus,
+        OrderStatus? toStatus,
+        string? message,
+        string? dataJson,
+        DateTime? whenUtc = null) =>
+        Create(orderId, eventType, fromStatus, toStatus, message, dataJson, whenUtc);
 }

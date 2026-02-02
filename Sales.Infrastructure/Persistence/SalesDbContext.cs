@@ -16,6 +16,8 @@ public sealed class SalesDbContext : DbContext, ISalesDbContext
     public DbSet<OrderLine> OrderLines => Set<OrderLine>();
     public DbSet<OrderTimelineEntry> OrderTimeline => Set<OrderTimelineEntry>();
     public DbSet<OrderNote> OrderNotes => Set<OrderNote>();
+    public DbSet<OrderRefund> OrderRefunds => Set<OrderRefund>();
+    public DbSet<OrderRefundLine> OrderRefundLines => Set<OrderRefundLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

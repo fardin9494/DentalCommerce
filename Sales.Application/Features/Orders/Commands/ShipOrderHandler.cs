@@ -40,5 +40,16 @@ public sealed class ShipOrderHandler : IRequestHandler<ShipOrderCommand>
                 order.MarkShipped(cmd.Request.Note, dataJson);
             },
             ct);
+
+        await OrderCommandHelpers.EnsureTimelineEventPersistedAsync(
+            _db,
+            order.Id,
+            "Shipped",
+            OrderStatus.Placed,
+            OrderStatus.Shipped,
+            cmd.Request.Note,
+            dataJson,
+            order.ShippedAtUtc,
+            ct);
     }
 }

@@ -10,6 +10,8 @@ public interface ISalesDbContext
     DbSet<OrderLine> OrderLines { get; }
     DbSet<OrderTimelineEntry> OrderTimeline { get; }
     DbSet<OrderNote> OrderNotes { get; }
+    DbSet<OrderRefund> OrderRefunds { get; }
+    DbSet<OrderRefundLine> OrderRefundLines { get; }
 
     ChangeTracker ChangeTracker { get; }
     EntityEntry Entry(object entity);

@@ -9,6 +9,9 @@ type OrderLine = {
   skuId: string
   batchId?: string | null
   quantity: number
+  cancelledQty: number
+  returnedQty: number
+  refundedQty: number
   baseUnitPrice: number
   finalUnitPrice: number
   isGift: boolean
@@ -77,6 +80,35 @@ type TimelineItem = {
   createdAt: string
 }
 
+type RefundLine = {
+  id: string
+  orderLineId: string
+  skuId: string
+  batchId?: string | null
+  quantity: number
+  unitAmount: number
+  lineAmount: number
+}
+
+type RefundRequest = {
+  id: string
+  orderId: string
+  status: string
+  destination: string
+  currency: string
+  amount: number
+  reason?: string | null
+  note?: string | null
+  requestedBy?: string | null
+  requestedAtUtc: string
+  approvedAtUtc?: string | null
+  rejectedAtUtc?: string | null
+  completedAtUtc?: string | null
+  rejectionReason?: string | null
+  walletReference?: string | null
+  lines: RefundLine[]
+}
+
 type OrderNote = {
   id: string
   orderId: string
@@ -114,6 +146,19 @@ export function OrderDetailsPage() {
   const [storeInfo, setStoreInfo] = useState<StoreInfo | null>(null)
   const [productInfoMap, setProductInfoMap] = useState<Map<string, ProductInfo>>(new Map())
   const [stockItemInfoMap, setStockItemInfoMap] = useState<Map<string, StockItemInfo>>(new Map())
+  const [refunds, setRefunds] = useState<RefundRequest[]>([])
+  const [refundsLoading, setRefundsLoading] = useState(false)
+  const [refundsError, setRefundsError] = useState<string | null>(null)
+  const [partialLineKey, setPartialLineKey] = useState('')
+  const [partialQty, setPartialQty] = useState('')
+  const [partialReason, setPartialReason] = useState('')
+  const [partialNote, setPartialNote] = useState('')
+  const [partialRequestedBy, setPartialRequestedBy] = useState('')
+  const [partialSubmitting, setPartialSubmitting] = useState(false)
+  const [refundNotes, setRefundNotes] = useState<Record<string, string>>({})
+  const [refundRejectReasons, setRefundRejectReasons] = useState<Record<string, string>>({})
+  const [refundWalletRefs, setRefundWalletRefs] = useState<Record<string, string>>({})
+  const [refundActionLoading, setRefundActionLoading] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -185,6 +230,26 @@ export function OrderDetailsPage() {
   useEffect(() => {
     if (!id) return
     loadNotes()
+  }, [id])
+
+  const loadRefunds = async () => {
+    if (!id) return
+    setRefundsLoading(true)
+    setRefundsError(null)
+    try {
+      const res = await fetchJson<RefundRequest[]>(`/sales/orders/${id}/refunds`)
+      setRefunds(res || [])
+    } catch (err: any) {
+      const msg = err?.message || 'خطا در دریافت بازپرداخت‌ها'
+      setRefundsError(msg)
+    } finally {
+      setRefundsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!id) return
+    loadRefunds()
   }, [id])
 
   const handleAddNote = async () => {
@@ -299,6 +364,7 @@ export function OrderDetailsPage() {
   const canEditShipFields = order?.status === 'Placed'
   const canEditReturnFields = order?.status === 'Delivered'
   const canEditRefundFields = order?.status === 'Returned' || order?.status === 'Delivered' || order?.status === 'Cancelled'
+  const canEditLines = order?.status === 'Draft' || order?.status === 'Placed'
 
   const handleAction = async (action: 'ship' | 'deliver' | 'return' | 'refund' | 'cancel') => {
     if (!id) return
@@ -325,6 +391,106 @@ export function OrderDetailsPage() {
     } catch (err: any) {
       const msg = err?.message || 'خطا در انجام عملیات'
       toast.error(msg)
+    }
+  }
+
+  const handlePartialCancel = async () => {
+    if (!id || !order) return
+    if (!partialLineKey) {
+      toast.error('آیتم را انتخاب کنید.')
+      return
+    }
+    const qty = Number(partialQty)
+    if (!Number.isFinite(qty) || qty <= 0) {
+      toast.error('تعداد نامعتبر است.')
+      return
+    }
+
+    const { skuId, batchId } = parseLineKey(partialLineKey)
+    const line = order.lines.find(l => l.skuId === skuId && (l.batchId ?? null) === (batchId ?? null))
+    if (!line) {
+      toast.error('آیتم انتخاب‌شده یافت نشد.')
+      return
+    }
+
+    const activeQty = getActiveQty(line)
+    if (qty > activeQty) {
+      toast.error('تعداد لغو بیشتر از تعداد موجود است.')
+      return
+    }
+
+    setPartialSubmitting(true)
+    try {
+      await fetchJson(`/sales/orders/${id}/cancel-lines`, {
+        json: {
+          reason: partialReason || null,
+          note: partialNote || null,
+          requestedBy: partialRequestedBy || null,
+          lines: [{ skuId, batchId, qty }]
+        }
+      })
+      toast.success('لغو جزئی ثبت شد و درخواست بازپرداخت ایجاد شد.')
+      setPartialLineKey('')
+      setPartialQty('')
+      setPartialReason('')
+      setPartialNote('')
+      setPartialRequestedBy('')
+      await Promise.all([loadTimeline(), refreshOrder(id), loadRefunds()])
+    } catch (err: any) {
+      const msg = err?.message || 'خطا در ثبت لغو جزئی'
+      toast.error(msg)
+    } finally {
+      setPartialSubmitting(false)
+    }
+  }
+
+  const handleApproveRefund = async (refundId: string) => {
+    setRefundActionLoading(refundId)
+    try {
+      await fetchJson(`/sales/refunds/${refundId}/approve`, {
+        json: { note: refundNotes[refundId] || null }
+      })
+      toast.success('درخواست بازپرداخت تایید شد.')
+      await Promise.all([loadRefunds(), loadTimeline()])
+    } catch (err: any) {
+      toast.error(err?.message || 'خطا در تایید بازپرداخت')
+    } finally {
+      setRefundActionLoading(null)
+    }
+  }
+
+  const handleRejectRefund = async (refundId: string) => {
+    const reason = refundRejectReasons[refundId]
+    if (!reason || reason.trim().length === 0) {
+      toast.error('دلیل رد را وارد کنید.')
+      return
+    }
+    setRefundActionLoading(refundId)
+    try {
+      await fetchJson(`/sales/refunds/${refundId}/reject`, {
+        json: { reason }
+      })
+      toast.success('درخواست بازپرداخت رد شد.')
+      await Promise.all([loadRefunds(), loadTimeline()])
+    } catch (err: any) {
+      toast.error(err?.message || 'خطا در رد بازپرداخت')
+    } finally {
+      setRefundActionLoading(null)
+    }
+  }
+
+  const handleCompleteRefund = async (refundId: string) => {
+    setRefundActionLoading(refundId)
+    try {
+      await fetchJson(`/sales/refunds/${refundId}/complete`, {
+        json: { walletReference: refundWalletRefs[refundId] || null }
+      })
+      toast.success('بازپرداخت تکمیل شد.')
+      await Promise.all([loadRefunds(), loadTimeline(), refreshOrder(id)])
+    } catch (err: any) {
+      toast.error(err?.message || 'خطا در تکمیل بازپرداخت')
+    } finally {
+      setRefundActionLoading(null)
     }
   }
 
@@ -679,7 +845,21 @@ export function OrderDetailsPage() {
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-xs">{line.skuId}</td>
                         <td className="px-4 py-3 text-center text-xs">{line.batchId || '—'}</td>
-                        <td className="px-4 py-3 text-center font-medium">{line.quantity}</td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="font-medium">{line.quantity}</div>
+                          {line.cancelledQty > 0 && (
+                            <div className="text-xs text-red-600">لغو: {line.cancelledQty}</div>
+                          )}
+                          {line.returnedQty > 0 && (
+                            <div className="text-xs text-amber-600">مرجوعی: {line.returnedQty}</div>
+                          )}
+                          {line.refundedQty > 0 && (
+                            <div className="text-xs text-emerald-600">Refund: {line.refundedQty}</div>
+                          )}
+                          {getActiveQty(line) !== line.quantity && (
+                            <div className="text-[11px] text-gray-500">فعال: {getActiveQty(line)}</div>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-left">{formatNumber(line.baseUnitPrice)} {order.currency}</td>
                         <td className="px-4 py-3 text-left font-semibold text-emerald-600">{formatNumber(line.finalUnitPrice)} {order.currency}</td>
                         <td className="px-4 py-3 text-center">
@@ -696,6 +876,88 @@ export function OrderDetailsPage() {
               </table>
             </div>
           </div>
+
+          {/* Partial Cancel */}
+          {canEditLines && order.lines.length > 0 && (
+            <div className="card p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                کاهش تعداد / لغو جزئی (قبل از ارسال)
+              </h3>
+              <p className="text-xs text-gray-500 mb-4">
+                برای کاهش تعداد یا حذف بخشی از سفارش، آیتم را انتخاب کنید. با این کار، درخواست بازپرداخت به کیف پول ایجاد می‌شود.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="label">انتخاب آیتم</label>
+                  <select
+                    className="input"
+                    value={partialLineKey}
+                    onChange={(e) => setPartialLineKey(e.target.value)}
+                  >
+                    <option value="">انتخاب کنید</option>
+                    {order.lines
+                      .filter(l => getActiveQty(l) > 0)
+                      .map((line) => (
+                        <option key={lineKey(line)} value={lineKey(line)}>
+                          {line.skuId} {line.batchId ? `(${line.batchId})` : ''} - فعال: {getActiveQty(line)}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">تعداد کاهش/لغو</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min={1}
+                    value={partialQty}
+                    onChange={(e) => setPartialQty(e.target.value)}
+                    placeholder="مثلاً 1"
+                  />
+                </div>
+                <div>
+                  <label className="label">علت لغو (اختیاری)</label>
+                  <input
+                    className="input"
+                    value={partialReason}
+                    onChange={(e) => setPartialReason(e.target.value)}
+                    placeholder="دلیل لغو"
+                  />
+                </div>
+                <div>
+                  <label className="label">یادداشت (اختیاری)</label>
+                  <input
+                    className="input"
+                    value={partialNote}
+                    onChange={(e) => setPartialNote(e.target.value)}
+                    placeholder="یادداشت"
+                  />
+                </div>
+                <div>
+                  <label className="label">درخواست‌دهنده (اختیاری)</label>
+                  <input
+                    className="input"
+                    value={partialRequestedBy}
+                    onChange={(e) => setPartialRequestedBy(e.target.value)}
+                    placeholder="نام ادمین"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    className="btn w-full"
+                    onClick={handlePartialCancel}
+                    disabled={partialSubmitting}
+                  >
+                    {partialSubmitting ? 'در حال ثبت...' : 'لغو جزئی و ایجاد Refund'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Reservations */}
           <div className="card p-6">
@@ -917,6 +1179,134 @@ export function OrderDetailsPage() {
             )}
           </div>
 
+          {/* Refunds */}
+          <div className="card p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              بازپرداخت‌ها (Wallet)
+            </h3>
+
+            {refundsError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {refundsError}
+              </div>
+            )}
+
+            {refundsLoading ? (
+              <div className="text-center py-6 text-gray-500">در حال دریافت بازپرداخت‌ها...</div>
+            ) : refunds.length === 0 ? (
+              <div className="text-center py-6 text-gray-500">بازپرداختی ثبت نشده است.</div>
+            ) : (
+              <div className="space-y-4">
+                {refunds.map((refund) => (
+                  <div key={refund.id} className="border rounded-lg p-4 bg-gray-50">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900">#{refund.id.slice(0, 8)}</span>
+                        <span className={refundStatusBadge(refund.status)}>{refund.status}</span>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        {formatNumber(refund.amount)} {refund.currency}
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-600 mb-3">
+                      ثبت شده در {formatDate(refund.requestedAtUtc)} {refund.requestedBy ? ` توسط ${refund.requestedBy}` : ''}
+                    </div>
+                    {refund.reason && (
+                      <div className="text-xs text-gray-700 mb-2">علت: {refund.reason}</div>
+                    )}
+                    {refund.note && (
+                      <div className="text-xs text-gray-700 mb-2">یادداشت: {refund.note}</div>
+                    )}
+                    {refund.rejectionReason && (
+                      <div className="text-xs text-red-600 mb-2">علت رد: {refund.rejectionReason}</div>
+                    )}
+
+                    <div className="bg-white border rounded p-3 text-xs text-gray-700">
+                      <div className="font-semibold mb-2">آیتم‌های بازپرداخت</div>
+                      <div className="space-y-1">
+                        {refund.lines.map((line) => (
+                          <div key={line.id} className="flex flex-wrap gap-2">
+                            <span className="text-gray-500">SKU:</span>
+                            <span>{line.skuId}</span>
+                            <span className="text-gray-500">تعداد:</span>
+                            <span>{line.quantity}</span>
+                            <span className="text-gray-500">مبلغ:</span>
+                            <span>{formatNumber(line.lineAmount)} {refund.currency}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {refund.status === 'Requested' && (
+                      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="label">یادداشت تایید (اختیاری)</label>
+                          <input
+                            className="input"
+                            value={refundNotes[refund.id] || ''}
+                            onChange={(e) => setRefundNotes(prev => ({ ...prev, [refund.id]: e.target.value }))}
+                            placeholder="یادداشت"
+                          />
+                        </div>
+                        <div>
+                          <label className="label">دلیل رد (در صورت نیاز)</label>
+                          <input
+                            className="input"
+                            value={refundRejectReasons[refund.id] || ''}
+                            onChange={(e) => setRefundRejectReasons(prev => ({ ...prev, [refund.id]: e.target.value }))}
+                            placeholder="علت رد"
+                          />
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <button
+                            className="btn w-full"
+                            onClick={() => handleApproveRefund(refund.id)}
+                            disabled={refundActionLoading === refund.id}
+                          >
+                            تایید
+                          </button>
+                          <button
+                            className="btn-secondary w-full"
+                            onClick={() => handleRejectRefund(refund.id)}
+                            disabled={refundActionLoading === refund.id}
+                          >
+                            رد
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {refund.status === 'Approved' && (
+                      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="label">ارجاع کیف پول (اختیاری)</label>
+                          <input
+                            className="input"
+                            value={refundWalletRefs[refund.id] || ''}
+                            onChange={(e) => setRefundWalletRefs(prev => ({ ...prev, [refund.id]: e.target.value }))}
+                            placeholder="Wallet Reference"
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <button
+                            className="btn w-full"
+                            onClick={() => handleCompleteRefund(refund.id)}
+                            disabled={refundActionLoading === refund.id}
+                          >
+                            تکمیل بازپرداخت
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Timeline */}
           <div className="card p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
@@ -1024,6 +1414,15 @@ function statusBadge(status: string) {
   return 'badge badge-gray'
 }
 
+function refundStatusBadge(status: string) {
+  const s = status?.toLowerCase()
+  if (s === 'requested') return 'badge badge-amber'
+  if (s === 'approved') return 'badge badge-blue'
+  if (s === 'completed') return 'badge badge-green'
+  if (s === 'rejected') return 'badge badge-red'
+  return 'badge badge-gray'
+}
+
 function statusLabel(status?: string | null) {
   const s = status?.toLowerCase()
   if (s === 'draft') return 'پیش‌نویس'
@@ -1035,6 +1434,19 @@ function statusLabel(status?: string | null) {
   if (s === 'returned') return 'مرجوعی'
   if (s === 'refunded') return 'بازپرداخت'
   return status || 'نامشخص'
+}
+
+function lineKey(line: { skuId: string; batchId?: string | null }) {
+  return `${line.skuId}__${line.batchId ?? ''}`
+}
+
+function parseLineKey(key: string) {
+  const [skuId, batchId] = key.split('__')
+  return { skuId, batchId: batchId ? batchId : null }
+}
+
+function getActiveQty(line: OrderLine) {
+  return Math.max(0, line.quantity - line.cancelledQty - line.returnedQty)
 }
 
 function parseTimelineData(dataJson?: string | null) {
@@ -1092,6 +1504,36 @@ function getTimelineMeta(item: TimelineItem) {
         description: reason ? `مرجوعی ثبت شد. علت: ${reason}` : 'مرجوعی سفارش ثبت شد.'
       }
     }
+    case 'linecancelled':
+      return {
+        title: 'لغو آیتم از سفارش',
+        description: 'بخشی از سفارش لغو شد و درخواست بازپرداخت ثبت گردید.'
+      }
+    case 'refundrequested':
+      return {
+        title: 'درخواست بازپرداخت',
+        description: 'درخواست بازپرداخت برای بررسی ثبت شد.'
+      }
+    case 'refundapproved':
+      return {
+        title: 'تایید بازپرداخت',
+        description: 'درخواست بازپرداخت تایید شد و در انتظار واریز به کیف پول است.'
+      }
+    case 'refundrejected':
+      return {
+        title: 'رد بازپرداخت',
+        description: 'درخواست بازپرداخت رد شد.'
+      }
+    case 'refundcompleted':
+      return {
+        title: 'بازپرداخت تکمیل شد',
+        description: 'مبلغ بازپرداخت به کیف پول (یا سیستم مالی) اعمال شد.'
+      }
+    case 'reservationupdatefailed':
+      return {
+        title: 'خطا در بروزرسانی رزرو موجودی',
+        description: 'در بروزرسانی رزرو موجودی خطایی رخ داده است.'
+      }
     case 'refunded': {
       const reason = data?.reason
       const amount = data?.amount
@@ -1131,6 +1573,29 @@ function getTimelineDetails(item: TimelineItem) {
   if (type === 'refunded') {
     if (data?.reason) details.push({ label: 'علت Refund', value: data.reason })
     if (typeof data?.amount === 'number') details.push({ label: 'مبلغ Refund', value: `${formatNumber(data.amount)}` })
+  }
+
+  if (type === 'linecancelled' && data?.lines) {
+    try {
+      const lines = Array.isArray(data.lines) ? data.lines : []
+      if (lines.length > 0) {
+        details.push({
+          label: 'آیتم‌ها',
+          value: lines.map((l: any) => `${l.skuId} x${l.qty}`).join(' / ')
+        })
+      }
+    } catch {}
+  }
+
+  if (type === 'refundrequested' || type === 'refundapproved' || type === 'refundcompleted') {
+    if (data?.refundId) details.push({ label: 'کد درخواست', value: String(data.refundId) })
+    if (data?.amount) details.push({ label: 'مبلغ', value: `${formatNumber(Number(data.amount))}` })
+    if (data?.currency) details.push({ label: 'ارز', value: String(data.currency) })
+    if (data?.destination) details.push({ label: 'مقصد', value: String(data.destination) })
+  }
+
+  if (type === 'refundrejected' && data?.reason) {
+    details.push({ label: 'علت رد', value: String(data.reason) })
   }
 
   if (type === 'cancelled' && item.message) {

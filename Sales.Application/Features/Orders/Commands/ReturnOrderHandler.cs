@@ -36,5 +36,16 @@ public sealed class ReturnOrderHandler : IRequestHandler<ReturnOrderCommand>
                 order.MarkReturned(cmd.Request.Note, dataJson);
             },
             ct);
+
+        await OrderCommandHelpers.EnsureTimelineEventPersistedAsync(
+            _db,
+            order.Id,
+            "Returned",
+            OrderStatus.Delivered,
+            OrderStatus.Returned,
+            cmd.Request.Note,
+            dataJson,
+            order.ReturnedAtUtc,
+            ct);
     }
 }

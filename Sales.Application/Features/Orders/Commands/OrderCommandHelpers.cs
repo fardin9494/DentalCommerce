@@ -94,4 +94,36 @@ internal static class OrderCommandHelpers
             entry.State = EntityState.Detached;
         }
     }
+
+    public static async Task EnsureTimelineEventPersistedAsync(
+        ISalesDbContext db,
+        Guid orderId,
+        string eventType,
+        OrderStatus? fromStatus,
+        OrderStatus? toStatus,
+        string? message,
+        string? dataJson,
+        DateTime? whenUtc,
+        CancellationToken ct)
+    {
+        if (orderId == Guid.Empty) throw new ArgumentException("OrderId required.", nameof(orderId));
+        if (string.IsNullOrWhiteSpace(eventType)) throw new ArgumentException("EventType required.", nameof(eventType));
+
+        var exists = await db.OrderTimeline
+            .AsNoTracking()
+            .AnyAsync(t => t.OrderId == orderId && t.EventType == eventType, ct);
+
+        if (exists) return;
+
+        db.OrderTimeline.Add(OrderTimelineEntry.CreateExternal(
+            orderId,
+            eventType,
+            fromStatus,
+            toStatus,
+            message,
+            dataJson,
+            whenUtc));
+
+        await db.SaveChangesAsync(ct);
+    }
 }

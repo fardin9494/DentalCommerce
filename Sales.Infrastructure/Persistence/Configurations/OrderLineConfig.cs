@@ -15,6 +15,9 @@ public sealed class OrderLineConfig : IEntityTypeConfiguration<OrderLine>
         b.Property(x => x.SkuId).HasMaxLength(64).IsRequired();
         b.Property(x => x.BatchId).IsRequired(false);
         b.Property(x => x.Quantity).IsRequired();
+        b.Property(x => x.CancelledQty).IsRequired().HasDefaultValue(0);
+        b.Property(x => x.ReturnedQty).IsRequired().HasDefaultValue(0);
+        b.Property(x => x.RefundedQty).IsRequired().HasDefaultValue(0);
         b.Property(x => x.BaseUnitPrice).HasColumnType("decimal(18,2)");
         b.Property(x => x.FinalUnitPrice).HasColumnType("decimal(18,2)");
         b.Property(x => x.IsGift).IsRequired();
@@ -28,4 +31,3 @@ public sealed class OrderLineConfig : IEntityTypeConfiguration<OrderLine>
             .HasForeignKey(x => x.OrderId);
     }
 }
-

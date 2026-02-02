@@ -47,6 +47,9 @@ public sealed class GetOrderByIdHandler : IRequestHandler<GetOrderByIdQuery, Ord
                 SkuId = l.SkuId,
                 BatchId = l.BatchId,
                 Quantity = l.Quantity,
+                CancelledQty = l.CancelledQty,
+                ReturnedQty = l.ReturnedQty,
+                RefundedQty = l.RefundedQty,
                 BaseUnitPrice = l.BaseUnitPrice,
                 FinalUnitPrice = l.FinalUnitPrice,
                 IsGift = l.IsGift

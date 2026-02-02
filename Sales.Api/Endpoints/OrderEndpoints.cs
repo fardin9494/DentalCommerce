@@ -104,6 +104,28 @@ public static class OrderEndpoints
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
         });
 
+        group.MapPost("/orders/{id:guid}/cancel-lines", async (Guid id, CancelOrderLinesRequest body, IMediator mediator) =>
+        {
+            try
+            {
+                var result = await mediator.Send(new CancelOrderLinesCommand(id, body));
+                return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
+        });
+
+        group.MapPost("/orders/{id:guid}/refunds", async (Guid id, RequestRefundRequest body, IMediator mediator) =>
+        {
+            try
+            {
+                var result = await mediator.Send(new RequestRefundCommand(id, body));
+                return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
+        });
+
         group.MapGet("/orders", async (
             Guid? siteId,
             Guid? userId,
@@ -136,6 +158,12 @@ public static class OrderEndpoints
             return Results.Ok(result);
         });
 
+        group.MapGet("/orders/{id:guid}/refunds", async (Guid id, IMediator mediator) =>
+        {
+            var result = await mediator.Send(new GetOrderRefundsQuery(id));
+            return Results.Ok(result);
+        });
+
         group.MapPost("/orders/{id:guid}/notes", async (
             Guid id,
             AddOrderNoteRequest body,
@@ -145,6 +173,39 @@ public static class OrderEndpoints
             {
                 var result = await mediator.Send(new AddOrderNoteCommand(id, body));
                 return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
+        });
+
+        group.MapPost("/refunds/{id:guid}/approve", async (Guid id, ApproveRefundRequest body, IMediator mediator) =>
+        {
+            try
+            {
+                await mediator.Send(new ApproveRefundCommand(id, body));
+                return Results.NoContent();
+            }
+            catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
+        });
+
+        group.MapPost("/refunds/{id:guid}/reject", async (Guid id, RejectRefundRequest body, IMediator mediator) =>
+        {
+            try
+            {
+                await mediator.Send(new RejectRefundCommand(id, body));
+                return Results.NoContent();
+            }
+            catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
+        });
+
+        group.MapPost("/refunds/{id:guid}/complete", async (Guid id, CompleteRefundRequest body, IMediator mediator) =>
+        {
+            try
+            {
+                await mediator.Send(new CompleteRefundCommand(id, body));
+                return Results.NoContent();
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }

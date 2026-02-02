@@ -32,5 +32,16 @@ public sealed class DeliverOrderHandler : IRequestHandler<DeliverOrderCommand>
                 order.MarkDelivered(cmd.Request.Note, null);
             },
             ct);
+
+        await OrderCommandHelpers.EnsureTimelineEventPersistedAsync(
+            _db,
+            order.Id,
+            "Delivered",
+            OrderStatus.Shipped,
+            OrderStatus.Delivered,
+            cmd.Request.Note,
+            null,
+            order.DeliveredAtUtc,
+            ct);
     }
 }
