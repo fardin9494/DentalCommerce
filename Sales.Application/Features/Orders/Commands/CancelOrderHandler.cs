@@ -28,7 +28,12 @@ public sealed class CancelOrderHandler : IRequestHandler<CancelOrderCommand>
             throw new InvalidOperationException($"Order {cmd.OrderId} not found.");
 
         if (order.Status == OrderStatus.Cancelled)
+        {
+            order.EnsureTimelineEvent("Cancelled", cmd.Request.Reason, cmd.Request.Note);
+            OrderCommandHelpers.EnsureLatestTimelineTracked(_db, order);
+            await _db.SaveChangesAsync(ct);
             return;
+        }
 
         // Release inventory reservations (if any) before cancelling
         try

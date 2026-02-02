@@ -15,6 +15,7 @@ internal static class OrderCommandHelpers
         for (var attempt = 0; attempt < 2; attempt++)
         {
             apply();
+            EnsureLatestTimelineTracked(db, order);
             try
             {
                 await db.SaveChangesAsync(ct);
@@ -28,9 +29,15 @@ internal static class OrderCommandHelpers
         }
 
         apply();
+        EnsureLatestTimelineTracked(db, order);
 
         var updatedAt = order.UpdatedAt;
         var status = order.Status;
+        var cancelledAt = order.CancelledAtUtc;
+        var shippedAt = order.ShippedAtUtc;
+        var deliveredAt = order.DeliveredAtUtc;
+        var returnedAt = order.ReturnedAtUtc;
+        var refundedAt = order.RefundedAtUtc;
         var timelineEntries = db.ChangeTracker.Entries<OrderTimelineEntry>()
             .Where(e => e.State == EntityState.Added)
             .Select(e => e.Entity)
@@ -40,7 +47,12 @@ internal static class OrderCommandHelpers
             .Where(o => o.Id == order.Id)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(o => o.Status, status)
-                .SetProperty(o => o.UpdatedAt, updatedAt),
+                .SetProperty(o => o.UpdatedAt, updatedAt)
+                .SetProperty(o => o.CancelledAtUtc, cancelledAt)
+                .SetProperty(o => o.ShippedAtUtc, shippedAt)
+                .SetProperty(o => o.DeliveredAtUtc, deliveredAt)
+                .SetProperty(o => o.ReturnedAtUtc, returnedAt)
+                .SetProperty(o => o.RefundedAtUtc, refundedAt),
                 ct);
 
         if (affected == 0)
@@ -52,6 +64,25 @@ internal static class OrderCommandHelpers
             db.OrderTimeline.AddRange(timelineEntries);
             await db.SaveChangesAsync(ct);
         }
+    }
+
+    public static void EnsureLatestTimelineTracked(ISalesDbContext db, Order order)
+    {
+        if (db.ChangeTracker.Entries<OrderTimelineEntry>().Any(e => e.State == EntityState.Added))
+            return;
+
+        var latest = order.Timeline
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault();
+
+        if (latest is null)
+            return;
+
+        var alreadyTracked = db.ChangeTracker.Entries<OrderTimelineEntry>()
+            .Any(e => e.Entity.Id == latest.Id);
+
+        if (!alreadyTracked)
+            db.OrderTimeline.Add(latest);
     }
 
     private static void DetachAddedTimeline(ISalesDbContext db)

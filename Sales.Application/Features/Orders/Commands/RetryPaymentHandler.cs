@@ -31,6 +31,7 @@ public sealed class RetryPaymentHandler : IRequestHandler<RetryPaymentCommand, R
             {
                 var order = await _db.Orders
                     .Include(o => o.Lines)
+                    .Include(o => o.Timeline)
                     .FirstOrDefaultAsync(o => o.Id == cmd.OrderId, ct);
 
                 if (order is null)
@@ -53,6 +54,7 @@ public sealed class RetryPaymentHandler : IRequestHandler<RetryPaymentCommand, R
                 if (!paymentResult.Success)
                 {
                     order.MarkPaymentFailed(paymentResult.FailureReason, paymentResult.FailureReason);
+                    OrderCommandHelpers.EnsureLatestTimelineTracked(_db, order);
                     await _db.SaveChangesAsync(ct);
                     
                     try
@@ -86,6 +88,7 @@ public sealed class RetryPaymentHandler : IRequestHandler<RetryPaymentCommand, R
                 {
                     // If inventory reservation fails, mark payment as failed
                     order.MarkPaymentFailed(ex.Message, ex.ToString());
+                    OrderCommandHelpers.EnsureLatestTimelineTracked(_db, order);
                     await _db.SaveChangesAsync(ct);
                     
                     try
@@ -105,6 +108,7 @@ public sealed class RetryPaymentHandler : IRequestHandler<RetryPaymentCommand, R
 
                 // Mark order as placed
                 order.MarkPlaced();
+                OrderCommandHelpers.EnsureLatestTimelineTracked(_db, order);
                 await _db.SaveChangesAsync(ct);
 
                 return new RetryPaymentResult(

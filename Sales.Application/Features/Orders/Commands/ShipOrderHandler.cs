@@ -32,7 +32,11 @@ public sealed class ShipOrderHandler : IRequestHandler<ShipOrderCommand>
             order,
             () =>
             {
-                if (order.Status == OrderStatus.Shipped) return;
+                if (order.Status == OrderStatus.Shipped)
+                {
+                    order.EnsureTimelineEvent("Shipped", cmd.Request.Note, dataJson);
+                    return;
+                }
                 order.MarkShipped(cmd.Request.Note, dataJson);
             },
             ct);

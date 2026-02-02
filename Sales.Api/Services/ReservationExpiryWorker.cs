@@ -55,6 +55,7 @@ public sealed class ReservationExpiryWorker : BackgroundService
 
         var cutoff = DateTime.UtcNow - _ttl;
         var expired = await db.Orders
+            .Include(o => o.Timeline)
             .Where(o => o.Status == OrderStatus.Draft && o.CreatedAt <= cutoff)
             .ToListAsync(ct);
 

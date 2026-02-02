@@ -919,12 +919,15 @@ export function OrderDetailsPage() {
 
           {/* Timeline */}
           <div className="card p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
               <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              Order Timeline
+              خط زمانی سفارش
             </h3>
+            <p className="text-xs text-gray-500 mb-4">
+              در این بخش تمام اتفاقات مهم سفارش، تغییر وضعیت‌ها و توضیحات مرتبط ثبت می‌شود تا روند سفارش به‌صورت کامل قابل پیگیری باشد.
+            </p>
             {timelineError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
                 {timelineError}
@@ -939,18 +942,26 @@ export function OrderDetailsPage() {
                   <p>لاگی ثبت نشده است.</p>
                 </div>
               )}
-              {timeline.map((item, idx) => (
+              {timeline.map((item, idx) => {
+                const meta = getTimelineMeta(item)
+                const details = getTimelineDetails(item)
+                return (
                 <div key={item.id} className="relative pl-8 border-r-2 border-gray-200 last:border-0 pb-4 last:pb-0">
                   <div className="absolute -right-2 top-0 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white"></div>
                   <div className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                      <span className="font-semibold text-gray-900">{item.eventType}</span>
+                      <span className="font-semibold text-gray-900">{meta.title}</span>
                       <span className="text-xs text-gray-500">{formatDate(item.createdAt)}</span>
                     </div>
+                    {meta.description && (
+                      <div className="text-xs text-gray-600 mb-3">
+                        {meta.description}
+                      </div>
+                    )}
                     {(item.fromStatus || item.toStatus) && (
                       <div className="text-xs text-gray-600 mb-2 flex items-center gap-2">
                         {item.fromStatus && (
-                          <span className="badge badge-gray">{item.fromStatus}</span>
+                          <span className="badge badge-gray">{statusLabel(item.fromStatus)}</span>
                         )}
                         {item.fromStatus && item.toStatus && (
                           <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -958,23 +969,23 @@ export function OrderDetailsPage() {
                           </svg>
                         )}
                         {item.toStatus && (
-                          <span className="badge badge-green">{item.toStatus}</span>
+                          <span className="badge badge-green">{statusLabel(item.toStatus)}</span>
                         )}
                       </div>
                     )}
-                    {item.message && (
-                      <div className="mt-2 text-sm text-gray-700 bg-white p-2 rounded border">
-                        {item.message}
+                    {details.length > 0 && (
+                      <div className="mt-2 bg-white border rounded p-3 text-xs text-gray-700 space-y-2">
+                        {details.map((d, index) => (
+                          <div key={`${item.id}-detail-${index}`} className="flex flex-wrap gap-2">
+                            <span className="text-gray-500">{d.label}:</span>
+                            <span className="text-gray-900">{d.value}</span>
+                          </div>
+                        ))}
                       </div>
-                    )}
-                    {item.dataJson && (
-                      <pre className="mt-2 text-xs whitespace-pre-wrap bg-white p-3 rounded border font-mono max-h-48 overflow-auto">
-                        {item.dataJson}
-                      </pre>
                     )}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         </>
@@ -1011,4 +1022,132 @@ function statusBadge(status: string) {
   if (s === 'paymentfailed') return 'badge badge-red'
   if (s === 'cancelled') return 'badge badge-gray'
   return 'badge badge-gray'
+}
+
+function statusLabel(status?: string | null) {
+  const s = status?.toLowerCase()
+  if (s === 'draft') return 'پیش‌نویس'
+  if (s === 'placed') return 'ثبت نهایی'
+  if (s === 'paymentfailed') return 'پرداخت ناموفق'
+  if (s === 'cancelled') return 'لغو شده'
+  if (s === 'shipped') return 'ارسال شده'
+  if (s === 'delivered') return 'تحویل شده'
+  if (s === 'returned') return 'مرجوعی'
+  if (s === 'refunded') return 'بازپرداخت'
+  return status || 'نامشخص'
+}
+
+function parseTimelineData(dataJson?: string | null) {
+  if (!dataJson) return null
+  try {
+    return JSON.parse(dataJson) as Record<string, any>
+  } catch {
+    return null
+  }
+}
+
+function getTimelineMeta(item: TimelineItem) {
+  const type = item.eventType?.toLowerCase()
+  const data = parseTimelineData(item.dataJson)
+
+  switch (type) {
+    case 'created':
+      return {
+        title: 'ایجاد سفارش',
+        description: 'سفارش به‌صورت پیش‌نویس ایجاد شد و هنوز ثبت نهایی نشده است.'
+      }
+    case 'placed':
+      return {
+        title: 'ثبت نهایی سفارش',
+        description: 'سفارش ثبت نهایی شد و آماده پردازش است.'
+      }
+    case 'paymentfailed':
+      return {
+        title: 'پرداخت ناموفق',
+        description: item.message ? `علت ناموفق بودن پرداخت: ${item.message}` : 'پرداخت با مشکل مواجه شد.'
+      }
+    case 'cancelled':
+      return {
+        title: 'لغو سفارش',
+        description: item.message ? `علت لغو سفارش: ${item.message}` : 'سفارش لغو شد.'
+      }
+    case 'shipped': {
+      const carrier = data?.carrier
+      const tracking = data?.trackingCode
+      const extra = carrier || tracking ? ` (حمل با ${carrier || 'نامشخص'}، کد رهگیری: ${tracking || '—'})` : ''
+      return {
+        title: 'ارسال سفارش',
+        description: `سفارش از انبار ارسال شد${extra}.`
+      }
+    }
+    case 'delivered':
+      return {
+        title: 'تحویل سفارش',
+        description: 'سفارش به مشتری تحویل داده شد.'
+      }
+    case 'returned': {
+      const reason = data?.reason
+      return {
+        title: 'مرجوعی سفارش',
+        description: reason ? `مرجوعی ثبت شد. علت: ${reason}` : 'مرجوعی سفارش ثبت شد.'
+      }
+    }
+    case 'refunded': {
+      const reason = data?.reason
+      const amount = data?.amount
+      const amountText = typeof amount === 'number' ? `مبلغ بازپرداخت: ${formatNumber(amount)}` : null
+      return {
+        title: 'بازپرداخت (Refund)',
+        description: reason || amountText ? `بازپرداخت ثبت شد${reason ? `، علت: ${reason}` : ''}${amountText ? `، ${amountText}` : ''}.` : 'بازپرداخت ثبت شد.'
+      }
+    }
+    case 'noteadded':
+      return {
+        title: 'یادداشت جدید',
+        description: 'یادداشت جدید برای این سفارش ثبت شد.'
+      }
+    default:
+      return {
+        title: item.eventType || 'رویداد',
+        description: 'یک رویداد جدید برای این سفارش ثبت شد.'
+      }
+  }
+}
+
+function getTimelineDetails(item: TimelineItem) {
+  const details: { label: string; value: string }[] = []
+  const data = parseTimelineData(item.dataJson)
+  const type = item.eventType?.toLowerCase()
+
+  if (type === 'shipped') {
+    if (data?.carrier) details.push({ label: 'حامل (Carrier)', value: data.carrier })
+    if (data?.trackingCode) details.push({ label: 'کد رهگیری', value: data.trackingCode })
+  }
+
+  if (type === 'returned' && data?.reason) {
+    details.push({ label: 'علت مرجوعی', value: data.reason })
+  }
+
+  if (type === 'refunded') {
+    if (data?.reason) details.push({ label: 'علت Refund', value: data.reason })
+    if (typeof data?.amount === 'number') details.push({ label: 'مبلغ Refund', value: `${formatNumber(data.amount)}` })
+  }
+
+  if (type === 'cancelled' && item.message) {
+    details.push({ label: 'علت لغو', value: item.message })
+  }
+
+  if (type === 'paymentfailed' && item.message) {
+    details.push({ label: 'علت خطا', value: item.message })
+  }
+
+  if (item.message && details.every(d => d.value !== item.message)) {
+    details.push({ label: 'توضیحات', value: item.message })
+  }
+
+  if (item.dataJson && details.length === 0) {
+    details.push({ label: 'جزئیات فنی', value: item.dataJson })
+  }
+
+  return details
 }

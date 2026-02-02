@@ -83,6 +83,7 @@ public sealed class CheckoutOrderHandler : IRequestHandler<CheckoutOrderCommand,
                 order.Id,
                 o => o.MarkPaymentFailed(paymentResult.FailureReason, paymentResult.FailureReason),
                 o => o.Status == OrderStatus.PaymentFailed,
+                o => o.EnsureTimelineEvent("PaymentFailed", paymentResult.FailureReason, paymentResult.FailureReason),
                 ct);
             try
             {
@@ -121,6 +122,7 @@ public sealed class CheckoutOrderHandler : IRequestHandler<CheckoutOrderCommand,
                 order.Id,
                 o => o.MarkPaymentFailed(ex.Message, ex.ToString()),
                 o => o.Status == OrderStatus.PaymentFailed,
+                o => o.EnsureTimelineEvent("PaymentFailed", ex.Message, ex.ToString()),
                 ct);
             try
             {
@@ -146,6 +148,7 @@ public sealed class CheckoutOrderHandler : IRequestHandler<CheckoutOrderCommand,
             order.Id,
             o => o.MarkPlaced(),
             o => o.Status == OrderStatus.Placed,
+            o => o.EnsureTimelineEvent("Placed"),
             ct);
 
         return new CheckoutOrderResult(
@@ -162,6 +165,7 @@ public sealed class CheckoutOrderHandler : IRequestHandler<CheckoutOrderCommand,
         Guid orderId,
         Action<Order> apply,
         Func<Order, bool> isSatisfied,
+        Action<Order>? ensureSatisfied,
         CancellationToken ct)
     {
         const int maxAttempts = 3;
@@ -170,14 +174,26 @@ public sealed class CheckoutOrderHandler : IRequestHandler<CheckoutOrderCommand,
 
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            var current = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId, ct);
+            var current = await _db.Orders
+                .Include(o => o.Timeline)
+                .FirstOrDefaultAsync(o => o.Id == orderId, ct);
             if (current is null) throw new InvalidOperationException("Order not found.");
 
             if (isSatisfied(current))
+            {
+                if (ensureSatisfied is null)
+                    return current;
+
+                ensureSatisfied(current);
+                OrderCommandHelpers.EnsureLatestTimelineTracked(_db, current);
+                if (_db.ChangeTracker.Entries<OrderTimelineEntry>().Any(e => e.State == EntityState.Added))
+                    await _db.SaveChangesAsync(ct);
                 return current;
+            }
 
             apply(current);
             lastApplied = current;
+            OrderCommandHelpers.EnsureLatestTimelineTracked(_db, current);
 
             try
             {

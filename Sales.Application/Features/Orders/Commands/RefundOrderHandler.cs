@@ -32,7 +32,11 @@ public sealed class RefundOrderHandler : IRequestHandler<RefundOrderCommand>
             order,
             () =>
             {
-                if (order.Status == OrderStatus.Refunded) return;
+                if (order.Status == OrderStatus.Refunded)
+                {
+                    order.EnsureTimelineEvent("Refunded", cmd.Request.Note, dataJson);
+                    return;
+                }
                 order.MarkRefunded(cmd.Request.Note, dataJson);
             },
             ct);

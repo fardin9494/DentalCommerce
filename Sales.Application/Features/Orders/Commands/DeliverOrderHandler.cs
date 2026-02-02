@@ -24,7 +24,11 @@ public sealed class DeliverOrderHandler : IRequestHandler<DeliverOrderCommand>
             order,
             () =>
             {
-                if (order.Status == OrderStatus.Delivered) return;
+                if (order.Status == OrderStatus.Delivered)
+                {
+                    order.EnsureTimelineEvent("Delivered", cmd.Request.Note, null);
+                    return;
+                }
                 order.MarkDelivered(cmd.Request.Note, null);
             },
             ct);

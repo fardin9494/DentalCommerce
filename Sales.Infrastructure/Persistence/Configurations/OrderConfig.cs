@@ -20,6 +20,10 @@ public sealed class OrderConfig : IEntityTypeConfiguration<Order>
         b.Property(x => x.PlacedAtUtc).HasColumnType("datetime2").IsRequired(false);
         b.Property(x => x.CancelledAtUtc).HasColumnType("datetime2").IsRequired(false);
         b.Property(x => x.PaymentFailedAtUtc).HasColumnType("datetime2").IsRequired(false);
+        b.Property(x => x.ShippedAtUtc).HasColumnType("datetime2").IsRequired(false);
+        b.Property(x => x.DeliveredAtUtc).HasColumnType("datetime2").IsRequired(false);
+        b.Property(x => x.ReturnedAtUtc).HasColumnType("datetime2").IsRequired(false);
+        b.Property(x => x.RefundedAtUtc).HasColumnType("datetime2").IsRequired(false);
         b.Property(x => x.PaymentFailureReason).HasMaxLength(512).IsRequired(false);
         b.Property(x => x.PaymentFailureDetails).HasColumnType("nvarchar(max)").IsRequired(false);
 

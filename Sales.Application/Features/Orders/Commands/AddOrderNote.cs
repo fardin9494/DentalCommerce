@@ -33,11 +33,11 @@ public sealed class AddOrderNoteHandler : IRequestHandler<AddOrderNoteCommand, A
 
     public async Task<AddOrderNoteResult> Handle(AddOrderNoteCommand cmd, CancellationToken ct)
     {
-        // Verify order exists
-        var orderExists = await _db.Orders
-            .AnyAsync(o => o.Id == cmd.OrderId, ct);
+        var order = await _db.Orders
+            .Include(o => o.Timeline)
+            .FirstOrDefaultAsync(o => o.Id == cmd.OrderId, ct);
 
-        if (!orderExists)
+        if (order is null)
             throw new InvalidOperationException($"Order {cmd.OrderId} not found.");
 
         var note = OrderNote.Create(
@@ -47,6 +47,8 @@ public sealed class AddOrderNoteHandler : IRequestHandler<AddOrderNoteCommand, A
             cmd.Request.IsInternal);
 
         _db.OrderNotes.Add(note);
+        order.LogNoteAdded(note.Id, note.CreatedBy, note.IsInternal, note.CreatedAt);
+        OrderCommandHelpers.EnsureLatestTimelineTracked(_db, order);
         await _db.SaveChangesAsync(ct);
 
         return new AddOrderNoteResult(note.Id, note.CreatedAt);

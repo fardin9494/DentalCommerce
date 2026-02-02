@@ -15,6 +15,10 @@ public sealed class Order : AggregateRoot<Guid>
     public DateTime? PlacedAtUtc { get; private set; }
     public DateTime? CancelledAtUtc { get; private set; }
     public DateTime? PaymentFailedAtUtc { get; private set; }
+    public DateTime? ShippedAtUtc { get; private set; }
+    public DateTime? DeliveredAtUtc { get; private set; }
+    public DateTime? ReturnedAtUtc { get; private set; }
+    public DateTime? RefundedAtUtc { get; private set; }
     public string? PaymentFailureReason { get; private set; }
     public string? PaymentFailureDetails { get; private set; }
 
@@ -109,7 +113,7 @@ public sealed class Order : AggregateRoot<Guid>
         PaymentFailureReason = null;
         PaymentFailureDetails = null;
         Touch();
-        AddTimeline("Placed", from, Status, null, null);
+        AddTimeline("Placed", from, Status, null, null, ts);
     }
 
     public void MarkPaymentFailed(string? reason = null, string? details = null, DateTime? whenUtc = null)
@@ -125,7 +129,7 @@ public sealed class Order : AggregateRoot<Guid>
         PaymentFailureReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
         PaymentFailureDetails = string.IsNullOrWhiteSpace(details) ? null : details.Trim();
         Touch();
-        AddTimeline("PaymentFailed", from, Status, PaymentFailureReason, PaymentFailureDetails);
+        AddTimeline("PaymentFailed", from, Status, PaymentFailureReason, PaymentFailureDetails, ts);
     }
 
     public void Cancel(string? reason = null, string? details = null, DateTime? whenUtc = null)
@@ -134,10 +138,12 @@ public sealed class Order : AggregateRoot<Guid>
             throw new InvalidOperationException("Only draft or placed orders can be cancelled.");
 
         var from = Status;
+        var ts = whenUtc ?? DateTime.UtcNow;
+        if (ts.Kind != DateTimeKind.Utc) ts = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
         Status = OrderStatus.Cancelled;
-        CancelledAtUtc = DateTime.SpecifyKind(whenUtc ?? DateTime.UtcNow, DateTimeKind.Utc);
+        CancelledAtUtc = ts;
         Touch();
-        AddTimeline("Cancelled", from, Status, reason, details);
+        AddTimeline("Cancelled", from, Status, reason, details, ts);
     }
 
     public void MarkShipped(string? message = null, string? dataJson = null, DateTime? whenUtc = null)
@@ -146,9 +152,12 @@ public sealed class Order : AggregateRoot<Guid>
             throw new InvalidOperationException("Only placed orders can be shipped.");
 
         var from = Status;
+        var ts = whenUtc ?? DateTime.UtcNow;
+        if (ts.Kind != DateTimeKind.Utc) ts = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
         Status = OrderStatus.Shipped;
+        ShippedAtUtc = ts;
         Touch();
-        AddTimeline("Shipped", from, Status, message, dataJson, whenUtc);
+        AddTimeline("Shipped", from, Status, message, dataJson, ts);
     }
 
     public void MarkDelivered(string? message = null, string? dataJson = null, DateTime? whenUtc = null)
@@ -157,9 +166,12 @@ public sealed class Order : AggregateRoot<Guid>
             throw new InvalidOperationException("Only shipped orders can be delivered.");
 
         var from = Status;
+        var ts = whenUtc ?? DateTime.UtcNow;
+        if (ts.Kind != DateTimeKind.Utc) ts = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
         Status = OrderStatus.Delivered;
+        DeliveredAtUtc = ts;
         Touch();
-        AddTimeline("Delivered", from, Status, message, dataJson, whenUtc);
+        AddTimeline("Delivered", from, Status, message, dataJson, ts);
     }
 
     public void MarkReturned(string? message = null, string? dataJson = null, DateTime? whenUtc = null)
@@ -168,9 +180,12 @@ public sealed class Order : AggregateRoot<Guid>
             throw new InvalidOperationException("Only delivered orders can be returned.");
 
         var from = Status;
+        var ts = whenUtc ?? DateTime.UtcNow;
+        if (ts.Kind != DateTimeKind.Utc) ts = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
         Status = OrderStatus.Returned;
+        ReturnedAtUtc = ts;
         Touch();
-        AddTimeline("Returned", from, Status, message, dataJson, whenUtc);
+        AddTimeline("Returned", from, Status, message, dataJson, ts);
     }
 
     public void MarkRefunded(string? message = null, string? dataJson = null, DateTime? whenUtc = null)
@@ -179,9 +194,33 @@ public sealed class Order : AggregateRoot<Guid>
             throw new InvalidOperationException("Order is not in a refundable state.");
 
         var from = Status;
+        var ts = whenUtc ?? DateTime.UtcNow;
+        if (ts.Kind != DateTimeKind.Utc) ts = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
         Status = OrderStatus.Refunded;
+        RefundedAtUtc = ts;
         Touch();
-        AddTimeline("Refunded", from, Status, message, dataJson, whenUtc);
+        AddTimeline("Refunded", from, Status, message, dataJson, ts);
+    }
+
+    public void EnsureTimelineEvent(string eventType, string? message = null, string? dataJson = null, DateTime? whenUtc = null)
+    {
+        if (string.IsNullOrWhiteSpace(eventType)) throw new ArgumentException("EventType required.", nameof(eventType));
+        if (_timeline.Any(t => string.Equals(t.EventType, eventType, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        AddTimeline(eventType, Status, Status, message, dataJson, whenUtc);
+    }
+
+    public void LogNoteAdded(Guid noteId, string? createdBy, bool isInternal, DateTime? whenUtc = null)
+    {
+        if (noteId == Guid.Empty) throw new ArgumentException("NoteId required.", nameof(noteId));
+
+        var who = string.IsNullOrWhiteSpace(createdBy) ? null : createdBy.Trim();
+        var label = isInternal ? "Internal note added" : "Note added";
+        var message = who is null ? label : $"{label} by {who}";
+        var data = $"{{\"noteId\":\"{noteId}\",\"isInternal\":{isInternal.ToString().ToLowerInvariant()}}}";
+
+        AddTimeline("NoteAdded", Status, Status, message, data, whenUtc);
     }
 
     private void AddTimeline(

@@ -28,7 +28,11 @@ public sealed class ReturnOrderHandler : IRequestHandler<ReturnOrderCommand>
             order,
             () =>
             {
-                if (order.Status == OrderStatus.Returned) return;
+                if (order.Status == OrderStatus.Returned)
+                {
+                    order.EnsureTimelineEvent("Returned", cmd.Request.Note, dataJson);
+                    return;
+                }
                 order.MarkReturned(cmd.Request.Note, dataJson);
             },
             ct);
