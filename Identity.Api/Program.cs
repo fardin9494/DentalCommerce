@@ -43,6 +43,7 @@ var otpOptions = builder.Configuration.GetSection("Otp").Get<OtpOptions>() ?? ne
 var sessionOptions = builder.Configuration.GetSection("Session").Get<AppSessionOptions>() ?? new AppSessionOptions();
 var passwordOptions = builder.Configuration.GetSection("Password").Get<PasswordOptions>() ?? new PasswordOptions();
 var securityOptions = builder.Configuration.GetSection("Security").Get<SecurityOptions>() ?? new SecurityOptions();
+var adminOptions = builder.Configuration.GetSection("Admin").Get<AdminOptions>() ?? new AdminOptions();
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? new JwtOptions();
 var smsOptions = builder.Configuration.GetSection("SmsIr").Get<SmsIrOptions>() ?? new SmsIrOptions();
 
@@ -50,6 +51,7 @@ builder.Services.AddSingleton(otpOptions);
 builder.Services.AddSingleton(sessionOptions);
 builder.Services.AddSingleton(passwordOptions);
 builder.Services.AddSingleton(securityOptions);
+builder.Services.AddSingleton(adminOptions);
 builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddSingleton(smsOptions);
 
@@ -116,7 +118,14 @@ builder.Services.AddCors(opt =>
     {
         if (builder.Environment.IsDevelopment())
         {
-            p.WithOrigins("http://localhost:5173", "https://localhost:5173")
+            p.WithOrigins(
+                "http://localhost:5173",
+                "https://localhost:5173",
+                "http://localhost:5174",
+                "https://localhost:5174",
+                "http://localhost:5175",
+                "https://localhost:5175"
+            )
              .AllowAnyHeader()
              .AllowAnyMethod();
         }
@@ -133,6 +142,8 @@ var app = builder.Build();
 
 app.UseSwagger();
 app.UseSwaggerUI();
+
+await EnsureSuperAdminAsync(app.Services);
 
 app.UseCors(DefaultCorsPolicy);
 
@@ -188,3 +199,30 @@ identity.MapUserEndpoints();
 identity.MapAdminEndpoints();
 
 app.Run();
+
+static async Task EnsureSuperAdminAsync(IServiceProvider services)
+{
+    using var scope = services.CreateScope();
+    var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    var phone = config.GetSection("Admin")["SuperAdminPhone"];
+    if (string.IsNullOrWhiteSpace(phone)) return;
+
+    var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+    var normalized = Identity.Domain.Users.PhoneNumber.Normalize(phone);
+    var user = await db.Users.FirstOrDefaultAsync(x => x.PhoneNumber == normalized);
+    if (user is null) return;
+
+    var admin = await db.AdminAccounts.FirstOrDefaultAsync(x => x.UserId == user.Id);
+    var now = DateTime.UtcNow;
+    if (admin is null)
+    {
+        admin = Identity.Domain.Admin.AdminAccount.Create(user.Id, true, Identity.Domain.Admin.PermissionUiPolicy.Disable, now);
+        db.AdminAccounts.Add(admin);
+    }
+    else if (!admin.IsSuperAdmin)
+    {
+        admin.PromoteToSuper(now);
+    }
+
+    await db.SaveChangesAsync();
+}

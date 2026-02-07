@@ -13,6 +13,8 @@ import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
 import { useSortableTable } from '@/shared/hooks/useSortableTable'
 import { SortableHeader } from '@/shared/components/SortableHeader'
 import { issueDisplayRef } from '@/shared/utils/inventoryDocumentReference'
+import { PermissionGate } from '@/app/permissions'
+import { InventoryPermissionKeys } from '@/app/inventoryPermissionKeys'
 
 // Type for issue list item
 interface IssueListItem {
@@ -191,7 +193,8 @@ export function IssuesListPage() {
         title="خروجی‌ها"
         actions={
           <div className="flex items-center gap-2">
-            {selectedPostedIssues.length > 0 && (
+            <PermissionGate permission={InventoryPermissionKeys.IssuesAllocate}>
+              {selectedPostedIssues.length > 0 && (
               <button
                 onClick={handleGoToPickingPlan}
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
@@ -202,7 +205,9 @@ export function IssuesListPage() {
                 برنامه جمع‌آوری ({selectedPostedIssues.length})
               </button>
             )}
-            <button
+            </PermissionGate>
+            <PermissionGate permission={InventoryPermissionKeys.IssuesCreate}>
+              <button
               onClick={() => setShowCreateModal(true)}
               className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
             >
@@ -211,6 +216,7 @@ export function IssuesListPage() {
               </svg>
               خروجی جدید
             </button>
+            </PermissionGate>
           </div>
         }
       >
@@ -575,3 +581,4 @@ export function IssuesListPage() {
     </div>
   )
 }
+

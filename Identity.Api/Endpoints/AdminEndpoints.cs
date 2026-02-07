@@ -1,6 +1,8 @@
+using Identity.Application.Features.Admin.Permissions;
 using Identity.Application.Features.Admin.Reports;
 using Identity.Application.Features.Admin.Users.Commands;
 using Identity.Application.Features.Admin.Users.Queries;
+using Identity.Application.Models;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 
@@ -34,6 +36,18 @@ public static class AdminEndpoints
             var pageSize = int.TryParse(req.Query["pageSize"], out var ps) ? ps : 50;
             var result = await mediator.Send(new GetUserAuditQuery(id, page, pageSize));
             return Results.Ok(result);
+        });
+
+        admin.MapGet("/users/{id:guid}/permissions/inventory", async (Guid id, IMediator mediator) =>
+        {
+            var result = await mediator.Send(new GetInventoryPermissionsQuery(id));
+            return Results.Ok(result);
+        });
+
+        admin.MapPost("/users/{id:guid}/permissions/inventory", async (Guid id, UpdateInventoryPermissionsRequest body, IMediator mediator) =>
+        {
+            await mediator.Send(new UpdateInventoryPermissionsCommand(id, body));
+            return Results.NoContent();
         });
 
         admin.MapPost("/users/{id:guid}/ban", async (Guid id, BanUserRequest body, IMediator mediator) =>

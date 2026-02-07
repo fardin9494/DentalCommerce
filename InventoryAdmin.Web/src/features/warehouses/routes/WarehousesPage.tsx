@@ -12,6 +12,8 @@ import { useConfirm } from '@/shared/components/confirm/ConfirmProvider'
 import { CreateWarehouseModal } from '../components/CreateWarehouseModal'
 import { EditWarehouseModal } from '../components/EditWarehouseModal'
 import type { Warehouse } from '@/shared/api/warehouses'
+import { PermissionGate } from '@/app/permissions'
+import { InventoryPermissionKeys } from '@/app/inventoryPermissionKeys'
 
 export function WarehousesPage() {
   const { data: warehouses, isLoading, error } = useAllWarehouses()
@@ -57,7 +59,8 @@ export function WarehousesPage() {
       <PageHeader
         title="انبارها"
         actions={
-          <button
+          <PermissionGate permission={InventoryPermissionKeys.WarehouseCreate}>
+            <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
           >
@@ -66,6 +69,7 @@ export function WarehousesPage() {
             </svg>
             انبار جدید
           </button>
+          </PermissionGate>
         }
       >
         مدیریت انبارها و مکان‌های نگهداری کالا
@@ -249,3 +253,4 @@ export function WarehousesPage() {
     </div>
   )
 }
+

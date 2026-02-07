@@ -18,6 +18,8 @@ import { EditShelfModal } from '../components/EditShelfModal'
 import { ShelfProductsModal } from '../components/ShelfProductsModal'
 import { VisualShelvesView } from '../components/VisualShelvesView'
 import type { Shelf } from '../api'
+import { PermissionGate } from '@/app/permissions'
+import { InventoryPermissionKeys } from '@/app/inventoryPermissionKeys'
 
 export function ShelvesPage() {
   const { data: shelves, isLoading, error } = useAllShelves()
@@ -103,7 +105,8 @@ export function ShelvesPage() {
         title="قفسه‌ها"
         actions={
           <div className="flex items-center gap-2">
-            <button
+            <PermissionGate permission={InventoryPermissionKeys.ShelvesView}>
+              <button
               onClick={() => setShowVisualView(true)}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
@@ -117,7 +120,9 @@ export function ShelvesPage() {
               </svg>
               نمای بصری
             </button>
-            <button
+            </PermissionGate>
+            <PermissionGate permission={InventoryPermissionKeys.ShelvesManage}>
+              <button
               onClick={() => setShowBatchModal(true)}
               className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
             >
@@ -126,6 +131,7 @@ export function ShelvesPage() {
               </svg>
               ایجاد گروهی قفسه
             </button>
+            </PermissionGate>
           </div>
         }
       >
@@ -385,3 +391,4 @@ export function ShelvesPage() {
     </div>
   )
 }
+

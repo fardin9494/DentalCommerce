@@ -8,6 +8,8 @@ import { useActiveWarehouses } from '@/shared/hooks/useWarehouses'
 import { useSortableTable } from '@/shared/hooks/useSortableTable'
 import { SortableHeader } from '@/shared/components/SortableHeader'
 import { transferDisplayRef } from '@/shared/utils/inventoryDocumentReference'
+import { PermissionGate } from '@/app/permissions'
+import { InventoryPermissionKeys } from '@/app/inventoryPermissionKeys'
 import {
   TransferStatusLabels,
   TransferStatusColors,
@@ -177,7 +179,8 @@ export function TransfersListPage() {
       <PageHeader
         title="انتقالات"
         actions={
-          <button
+          <PermissionGate permission={InventoryPermissionKeys.TransfersCreate}>
+            <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
           >
@@ -186,6 +189,7 @@ export function TransfersListPage() {
             </svg>
             انتقال جدید
           </button>
+          </PermissionGate>
         }
       >
         مدیریت انتقالات بین انبارها
@@ -515,3 +519,4 @@ export function TransfersListPage() {
     </div>
   )
 }
+

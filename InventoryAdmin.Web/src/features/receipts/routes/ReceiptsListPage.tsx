@@ -16,6 +16,8 @@ import { useWarehouseNames } from '@/shared/hooks/useWarehouses'
 import { useSortableTable } from '@/shared/hooks/useSortableTable'
 import { SortableHeader } from '@/shared/components/SortableHeader'
 import { receiptDisplayRef } from '@/shared/utils/inventoryDocumentReference'
+import { PermissionGate } from '@/app/permissions'
+import { InventoryPermissionKeys } from '@/app/inventoryPermissionKeys'
 
 // Type for receipt list item
 interface ReceiptListItem {
@@ -160,7 +162,8 @@ export function ReceiptsListPage() {
       <PageHeader
         title="رسیدها"
         actions={
-          <button
+          <PermissionGate permission={InventoryPermissionKeys.ReceiptsCreate}>
+            <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
           >
@@ -169,6 +172,7 @@ export function ReceiptsListPage() {
             </svg>
             رسید جدید
           </button>
+          </PermissionGate>
         }
       >
         مدیریت رسیدهای ورود به انبار
@@ -481,3 +485,4 @@ export function ReceiptsListPage() {
     </div>
   )
 }
+

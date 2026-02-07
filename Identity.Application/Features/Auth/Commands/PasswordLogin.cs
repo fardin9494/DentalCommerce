@@ -2,6 +2,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Identity.Application.Abstractions;
+using Identity.Application.Common.Admin;
 using Identity.Application.Common.Audit;
 using Identity.Application.Common.Security;
 using Identity.Application.Models;
@@ -39,19 +40,22 @@ public sealed class PasswordLoginHandler : IRequestHandler<PasswordLoginCommand,
     private readonly IClock _clock;
     private readonly SessionOptions _sessionOptions;
     private readonly SecurityOptions _securityOptions;
+    private readonly AdminOptions _adminOptions;
 
     public PasswordLoginHandler(
         IIdentityDbContext db,
         IJwtTokenService jwt,
         IClock clock,
         SessionOptions sessionOptions,
-        SecurityOptions securityOptions)
+        SecurityOptions securityOptions,
+        AdminOptions adminOptions)
     {
         _db = db;
         _jwt = jwt;
         _clock = clock;
         _sessionOptions = sessionOptions;
         _securityOptions = securityOptions;
+        _adminOptions = adminOptions;
     }
 
     public async Task<AuthTokensDto> Handle(PasswordLoginCommand cmd, CancellationToken ct)
@@ -86,6 +90,8 @@ public sealed class PasswordLoginHandler : IRequestHandler<PasswordLoginCommand,
         user.EnsureMembership(cmd.Request.SiteId);
         user.MarkPhoneVerified(now);
         user.MarkLogin(now);
+
+        await SuperAdminHelper.EnsureSuperAdminAsync(_db, _adminOptions, user, now, ct);
 
         _db.UserAuditEvents.Add(UserAuditEvent.Create(
             user.Id,

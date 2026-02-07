@@ -1,4 +1,5 @@
 using Identity.Api.Services;
+using Identity.Application.Features.Admin.Permissions;
 using Identity.Application.Features.Users.Commands;
 using Identity.Application.Features.Users.Queries;
 using MediatR;
@@ -40,7 +41,13 @@ public static class UserEndpoints
             return Results.NoContent();
         });
 
+        me.MapGet("/permissions/inventory", async (HttpContext ctx, IMediator mediator) =>
+        {
+            var userId = ClaimsHelper.GetUserId(ctx.User);
+            var dto = await mediator.Send(new GetInventoryPermissionsQuery(userId));
+            return Results.Ok(dto);
+        });
+
         return group;
     }
 }
-

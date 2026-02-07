@@ -18,10 +18,12 @@ using Inventory.Application.Features.StockLedger.Queries;
 using Inventory.Domain.Enums;
 using Inventory.Infrastructure.Persistence;
 using MediatR;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Inventory.Api;
-using System.Security.Cryptography;
+using Inventory.Api.Permissions;
+using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http;
@@ -77,6 +79,47 @@ builder.Services.AddScoped<Inventory.Application.Common.Interfaces.ICatalogGatew
 });
 builder.Services.AddScoped<Inventory.Infrastructure.Gateways.CatalogApiGateway>();
 
+// Identity API + permissions
+var identityApiUrl = builder.Configuration["IdentityApiUrl"]
+    ?? throw new InvalidOperationException("IdentityApiUrl is not configured in appsettings.json");
+
+builder.Services.AddHttpClient("IdentityApi", client =>
+{
+    client.BaseAddress = new Uri(identityApiUrl);
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IInventoryPermissionChecker, InventoryPermissionChecker>();
+
+// JWT auth (issued by Identity)
+var jwtIssuer = builder.Configuration["Jwt:Issuer"]
+    ?? throw new InvalidOperationException("Jwt:Issuer is not configured in appsettings.json");
+var jwtAudience = builder.Configuration["Jwt:Audience"]
+    ?? throw new InvalidOperationException("Jwt:Audience is not configured in appsettings.json");
+var jwtSigningKey = builder.Configuration["Jwt:SigningKey"]
+    ?? throw new InvalidOperationException("Jwt:SigningKey is not configured in appsettings.json");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(opt =>
+    {
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSigningKey));
+        opt.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = key,
+            ClockSkew = TimeSpan.FromSeconds(15)
+        };
+    });
+
+builder.Services.AddAuthorization();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -95,7 +138,12 @@ builder.Services.AddCors(opt =>
     {
         if (builder.Environment.IsDevelopment())
         {
-            p.WithOrigins("http://localhost:5173", "https://localhost:5173")
+            p.WithOrigins(
+                "http://localhost:5173",
+                "https://localhost:5173",
+                "http://localhost:5174",
+                "https://localhost:5174"
+            )
              .AllowAnyHeader()
              .AllowAnyMethod()
              .AllowCredentials();
@@ -119,108 +167,25 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Run CORS before the admin gate so even 401 responses carry the headers
+// Run CORS before auth so even 401 responses carry the headers
 app.UseCors(AdminCorsPolicy);
 
-// Simple shared-password gate for admin APIs (/api/inventory/*).
-// If Admin:PasswordHash is configured, the incoming bearer token
-// is hashed with SHA-256 and compared to that hash. Otherwise we
-// fall back to plain Admin:Password comparison. This is temporary
-// until full auth/roles are implemented.
-var adminPassword = app.Configuration["Admin:Password"];
-var adminPasswordHashHex = app.Configuration["Admin:PasswordHash"];
-var serviceToken = app.Configuration["Service:Token"]; // Service-to-service token
-byte[]? adminPasswordHash = null;
-if (!string.IsNullOrWhiteSpace(adminPasswordHashHex))
-{
-    adminPasswordHash = Convert.FromHexString(adminPasswordHashHex);
-}
-
-if (!string.IsNullOrWhiteSpace(adminPassword) || adminPasswordHash is not null || !string.IsNullOrWhiteSpace(serviceToken))
-{
-    app.Use(async (ctx, next) =>
-    {
-        try
-        {
-            // Allow CORS preflight without auth
-            if (HttpMethods.IsOptions(ctx.Request.Method))
-            {
-                await next();
-                return;
-            }
-
-            if (ctx.Request.Path.StartsWithSegments("/api/inventory"))
-            {
-                if (!ctx.Request.Headers.TryGetValue("Authorization", out var authHeader))
-                {
-                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    ctx.Response.ContentType = "text/plain";
-                    await ctx.Response.WriteAsync("Unauthorized");
-                    return;
-                }
-
-                const string prefix = "Bearer ";
-                var auth = authHeader.ToString();
-                if (!auth.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    ctx.Response.ContentType = "text/plain";
-                    await ctx.Response.WriteAsync("Unauthorized");
-                    return;
-                }
-
-                var token = auth[prefix.Length..].Trim();
-                var ok = false;
-
-                if (!string.IsNullOrWhiteSpace(serviceToken) && string.Equals(token, serviceToken, StringComparison.Ordinal))
-                {
-                    ok = true;
-                }
-                // Check admin password hash
-                else if (adminPasswordHash is not null)
-                {
-                    var bytes = Encoding.UTF8.GetBytes(token);
-                    var hash = SHA256.HashData(bytes);
-                    ok = CryptographicOperations.FixedTimeEquals(hash, adminPasswordHash);
-                }
-                // Fall back to plain admin password
-                else if (!string.IsNullOrWhiteSpace(adminPassword))
-                {
-                    ok = string.Equals(token, adminPassword, StringComparison.Ordinal);
-                }
-
-                if (!ok)
-                {
-                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    ctx.Response.ContentType = "text/plain";
-                    await ctx.Response.WriteAsync("Unauthorized");
-                    return;
-                }
-            }
-
-            await next();
-        }
-        catch (Exception ex)
-        {
-            var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
-            logger.LogError(ex, "Error in authentication middleware for {Path}", ctx.Request.Path);
-            ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
-            ctx.Response.ContentType = "text/plain";
-            await ctx.Response.WriteAsync("Internal Server Error");
-        }
-    });
-}
+app.UseAuthentication();
+app.UseAuthorization();
 
 // ==========================================
 // INVENTORY ENDPOINTS
 // ==========================================
 
 // Authentication check endpoint
-var auth = app.MapGroup("/api/inventory").DisableAntiforgery();
+var auth = app.MapGroup("/api/inventory").RequireAuthorization().DisableAntiforgery();
 auth.MapGet("/auth/check", () => Results.NoContent());
 
 // --- Receipts (┘ê╪▒┘ê╪» ╪¿┘ç ╪º┘å╪¿╪º╪▒) ---
-var receipts = app.MapGroup("/api/inventory/receipts").DisableAntiforgery();
+var receipts = app.MapGroup("/api/inventory/receipts")
+    .RequireAuthorization()
+    .RequireInventoryPermission(InventoryPermissionKeys.ReceiptsView)
+    .DisableAntiforgery();
 
 // List receipts with filters and pagination
 receipts.MapGet("/", async (
@@ -258,7 +223,7 @@ receipts.MapPost("/", async (CreateReceiptDraftCommand cmd, IMediator m) =>
 {
     var id = await m.Send(cmd);
     return Results.Created($"/api/inventory/receipts/{id}", new { id });
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReceiptsCreate);
 
 receipts.MapPost("/{id:guid}/lines", async (Guid id, AddReceiptLineCommand body, IMediator m, ILogger<Program> logger) =>
 {
@@ -277,25 +242,25 @@ receipts.MapPost("/{id:guid}/lines", async (Guid id, AddReceiptLineCommand body,
         logger.LogError(ex, "Error adding receipt line for {ReceiptId}", id);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪º┘ü╪▓┘ê╪»┘å ╪«╪╖ ╪▒╪│█î╪»");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReceiptsEdit);
 
 receipts.MapDelete("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMediator m) =>
 {
     await m.Send(new RemoveReceiptLineCommand(id, lineId));
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReceiptsEdit);
 
 receipts.MapPut("/{id:guid}", async (Guid id, UpdateReceiptHeaderCommand body, IMediator m) =>
 {
     await m.Send(body with { ReceiptId = id });
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReceiptsEdit);
 
 receipts.MapPut("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, UpdateReceiptLineCommand body, IMediator m) =>
 {
     await m.Send(body with { ReceiptId = id, LineId = lineId });
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReceiptsEdit);
 
 receipts.MapGet("/{id:guid}/lines/{lineId:guid}/serials", async (Guid id, Guid lineId, IMediator m, ILogger<Program> logger) =>
 {
@@ -333,7 +298,7 @@ receipts.MapPut("/{id:guid}/lines/{lineId:guid}/serials", async (Guid id, Guid l
         logger.LogError(ex, "Error updating receipt line serials {ReceiptId}/{LineId}", id, lineId);
         return Results.Problem(detail: ex.Message, title: "خطا در به‌روزرسانی سریال‌های خط رسید");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReceiptsEdit);
 
 // ????? ????: ??? Receive ??????? Post ??
 receipts.MapPost("/{id:guid}/receive", async (Guid id, [FromBody] DateTime? when, IMediator m, ILogger<Program> logger) =>
@@ -353,14 +318,14 @@ receipts.MapPost("/{id:guid}/receive", async (Guid id, [FromBody] DateTime? when
         logger.LogError(ex, "Error receiving receipt {ReceiptId}", id);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪»╪▒█î╪º┘ü╪¬ ╪▒╪│█î╪»");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReceiptsReceive);
 
 // ??? ????: ????? ????? (??? ????? ???? ?????)
 receipts.MapPost("/{id:guid}/approve", async (Guid id, IMediator m) =>
 {
     await m.Send(new ApproveReceiptCommand { ReceiptId = id });
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReceiptsApprove);
 
 // ╪¬╪º█î█î╪» ╪¼╪▓╪ª█î █î┌⌐ ╪«╪╖ ╪º╪▓ ╪▒╪│█î╪»
 receipts.MapPost("/{id:guid}/lines/{lineId:guid}/approve-partial", async (Guid id, Guid lineId, [FromBody] ApproveReceiptLinePartialBody body, IMediator m, ILogger<Program> logger) =>
@@ -380,7 +345,7 @@ receipts.MapPost("/{id:guid}/lines/{lineId:guid}/approve-partial", async (Guid i
         logger.LogError(ex, "Error approving receipt line {ReceiptId}/{LineId}", id, lineId);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪º█î█î╪» ╪«╪╖ ╪▒╪│█î╪»");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReceiptsApprove);
 
 // ╪▒╪» ┌⌐╪▒╪»┘å █î┌⌐ ╪«╪╖ ╪º╪▓ ╪▒╪│█î╪»
 receipts.MapPost("/{id:guid}/lines/{lineId:guid}/reject", async (Guid id, Guid lineId, [FromBody] RejectReceiptLineBody body, IMediator m, ILogger<Program> logger) =>
@@ -400,16 +365,19 @@ receipts.MapPost("/{id:guid}/lines/{lineId:guid}/reject", async (Guid id, Guid l
         logger.LogError(ex, "Error rejecting receipt line {ReceiptId}/{LineId}", id, lineId);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪▒╪» ╪«╪╖ ╪▒╪│█î╪»");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReceiptsReject);
 
 receipts.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
 {
     await m.Send(new CancelReceiptCommand(id));
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReceiptsCancel);
 
 // --- Receipt Rejections (اقلام رد شده رسید) ---
-var receiptRejections = app.MapGroup("/api/inventory/receipt-rejections").DisableAntiforgery();
+var receiptRejections = app.MapGroup("/api/inventory/receipt-rejections")
+    .RequireAuthorization()
+    .RequireInventoryPermission(InventoryPermissionKeys.ReceiptRejectionsView)
+    .DisableAntiforgery();
 
 receiptRejections.MapGet("/", async (
     Guid? warehouseId,
@@ -460,10 +428,13 @@ receiptRejections.MapPost("/{lineId:guid}/resolve", async (
         logger.LogError(ex, "Error resolving receipt rejection {LineId}", lineId);
         return Results.Problem(detail: ex.Message, title: "خطا در تعیین تکلیف اقلام رد شده");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReceiptRejectionsResolve);
 
 // --- Issues (╪«╪▒┘ê╪¼ ╪º╪▓ ╪º┘å╪¿╪º╪▒) ---
-var issues = app.MapGroup("/api/inventory/issues").DisableAntiforgery();
+var issues = app.MapGroup("/api/inventory/issues")
+    .RequireAuthorization()
+    .RequireInventoryPermission(InventoryPermissionKeys.IssuesView)
+    .DisableAntiforgery();
 
 // List issues with filters and pagination
 issues.MapGet("/", async (
@@ -508,31 +479,31 @@ issues.MapPost("/", async (CreateIssueDraftCommand cmd, IMediator m) =>
 {
     var id = await m.Send(cmd);
     return Results.Created($"/api/inventory/issues/{id}", new { id });
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.IssuesCreate);
 
 issues.MapPost("/{id:guid}/lines", async (Guid id, AddIssueLineCommand body, IMediator m) =>
 {
     var lineId = await m.Send(body with { IssueId = id });
     return Results.Created($"/api/inventory/issues/{id}/lines/{lineId}", new { id = lineId });
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.IssuesEdit);
 
 issues.MapDelete("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMediator m) =>
 {
     await m.Send(new RemoveIssueLineCommand(id, lineId));
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.IssuesEdit);
 
 issues.MapPut("/{id:guid}", async (Guid id, UpdateIssueHeaderCommand body, IMediator m) =>
 {
     await m.Send(body with { IssueId = id });
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.IssuesEdit);
 
 issues.MapPut("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, UpdateIssueLineCommand body, IMediator m) =>
 {
     await m.Send(body with { IssueId = id, LineId = lineId });
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.IssuesEdit);
 
 issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fefo", async (Guid id, Guid lineId, [FromBody] Guid? preferredWarehouseId, IMediator m, ILogger<Program> logger) =>
 {
@@ -551,7 +522,7 @@ issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fefo", async (Guid id, G
         logger.LogError(ex, "Error allocating issue line {LineId} with FEFO", lineId);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ FEFO");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.IssuesAllocate);
 
 issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fifo", async (Guid id, Guid lineId, [FromBody] Guid? preferredWarehouseId, IMediator m, ILogger<Program> logger) =>
 {
@@ -570,7 +541,7 @@ issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fifo", async (Guid id, G
         logger.LogError(ex, "Error allocating issue line {LineId} with FIFO", lineId);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ FIFO");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.IssuesAllocate);
 
 issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-lifo", async (Guid id, Guid lineId, [FromBody] Guid? preferredWarehouseId, IMediator m, ILogger<Program> logger) =>
 {
@@ -589,7 +560,7 @@ issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-lifo", async (Guid id, G
         logger.LogError(ex, "Error allocating issue line {LineId} with LIFO", lineId);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ LIFO");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.IssuesAllocate);
 
 issues.MapGet("/{id:guid}/lines/{lineId:guid}/available-serials", async (
     Guid id,
@@ -614,7 +585,7 @@ issues.MapGet("/{id:guid}/lines/{lineId:guid}/available-serials", async (
         logger.LogError(ex, "Error loading available serials for issue line {LineId}", lineId);
         return Results.Problem(detail: ex.Message, title: "خطا در دریافت سریال‌های موجود");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.IssuesAllocate);
 
 issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-serials", async (
     Guid id,
@@ -638,7 +609,7 @@ issues.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-serials", async (
         logger.LogError(ex, "Error allocating serials for issue line {LineId}", lineId);
         return Results.Problem(detail: ex.Message, title: "خطا در تخصیص سریال‌های خروج");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.IssuesAllocate);
 
 issues.MapPost("/{id:guid}/post", async (Guid id, [FromBody] DateTime? when, IMediator m, ILogger<Program> logger) =>
 {
@@ -657,17 +628,20 @@ issues.MapPost("/{id:guid}/post", async (Guid id, [FromBody] DateTime? when, IMe
         logger.LogError(ex, "Error posting issue {IssueId}", id);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪½╪¿╪¬ ╪«╪▒┘ê╪¼█î");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.IssuesPost);
 
 issues.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
 {
     await m.Send(new CancelIssueCommand(id));
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.IssuesCancel);
 
 
 // --- Transfers (╪º┘å╪¬┘é╪º┘ä ╪¿█î┘å ╪º┘å╪¿╪º╪▒┘ç╪º) ---
-var transfers = app.MapGroup("/api/inventory/transfers").DisableAntiforgery();
+var transfers = app.MapGroup("/api/inventory/transfers")
+    .RequireAuthorization()
+    .RequireInventoryPermission(InventoryPermissionKeys.TransfersView)
+    .DisableAntiforgery();
 
 // List transfers with filters and pagination
 transfers.MapGet("/", async (
@@ -714,31 +688,31 @@ transfers.MapPost("/", async (CreateTransferDraftCommand cmd, IMediator m) =>
 {
     var id = await m.Send(cmd);
     return Results.Created($"/api/inventory/transfers/{id}", new { id });
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersCreate);
 
 transfers.MapPost("/{id:guid}/lines", async (Guid id, AddTransferLineCommand body, IMediator m) =>
 {
     var lineId = await m.Send(body with { TransferId = id });
     return Results.Created($"/api/inventory/transfers/{id}/lines/{lineId}", new { id = lineId });
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersEdit);
 
 transfers.MapDelete("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMediator m) =>
 {
     await m.Send(new RemoveTransferLineCommand(id, lineId));
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersEdit);
 
 transfers.MapPut("/{id:guid}", async (Guid id, UpdateTransferHeaderCommand body, IMediator m) =>
 {
     await m.Send(body with { TransferId = id });
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersEdit);
 
 transfers.MapPut("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, UpdateTransferLineCommand body, IMediator m) =>
 {
     await m.Send(body with { TransferId = id, LineId = lineId });
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersEdit);
 
 transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fefo", async (Guid id, Guid lineId, IMediator m, ILogger<Program> logger) =>
 {
@@ -757,7 +731,7 @@ transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fefo", async (Guid id
         logger.LogError(ex, "Error allocating transfer line {LineId} for transfer {TransferId} (FEFO)", lineId, id);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ ┘à┘ê╪¼┘ê╪»█î (FEFO)");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersAllocate);
 
 transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fifo", async (Guid id, Guid lineId, IMediator m, ILogger<Program> logger) =>
 {
@@ -776,7 +750,7 @@ transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-fifo", async (Guid id
         logger.LogError(ex, "Error allocating transfer line {LineId} for transfer {TransferId} (FIFO)", lineId, id);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ ┘à┘ê╪¼┘ê╪»█î (FIFO)");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersAllocate);
 
 transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-lifo", async (Guid id, Guid lineId, IMediator m, ILogger<Program> logger) =>
 {
@@ -795,7 +769,7 @@ transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-lifo", async (Guid id
         logger.LogError(ex, "Error allocating transfer line {LineId} for transfer {TransferId} (LIFO)", lineId, id);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¬╪«╪╡█î╪╡ ┘à┘ê╪¼┘ê╪»█î (LIFO)");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersAllocate);
 
 transfers.MapGet("/{id:guid}/lines/{lineId:guid}/available-serials", async (
     Guid id,
@@ -819,7 +793,7 @@ transfers.MapGet("/{id:guid}/lines/{lineId:guid}/available-serials", async (
         logger.LogError(ex, "Error loading available serials for transfer line {LineId}", lineId);
         return Results.Problem(detail: ex.Message, title: "خطا در دریافت سریال‌های قابل تخصیص");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersAllocate);
 
 transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-serials", async (
     Guid id,
@@ -843,7 +817,7 @@ transfers.MapPost("/{id:guid}/lines/{lineId:guid}/allocate-serials", async (
         logger.LogError(ex, "Error allocating serials for transfer line {LineId}", lineId);
         return Results.Problem(detail: ex.Message, title: "خطا در تخصیص سریال‌ها");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersAllocate);
 
 transfers.MapPost("/{id:guid}/ship", async (Guid id, IMediator m, ILogger<Program> logger) =>
 {
@@ -867,7 +841,7 @@ transfers.MapPost("/{id:guid}/ship", async (Guid id, IMediator m, ILogger<Progra
         logger.LogError(ex, "Error shipping transfer {TransferId}", id);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪º╪▒╪│╪º┘ä ╪│┘å╪» ╪º┘å╪¬┘é╪º┘ä");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersShip);
 
 transfers.MapPost("/{id:guid}/receive", async (Guid id, ReceiveTransferCommand body, IMediator m, ILogger<Program> logger) =>
 {
@@ -891,7 +865,7 @@ transfers.MapPost("/{id:guid}/receive", async (Guid id, ReceiveTransferCommand b
         logger.LogError(ex, "Error receiving transfer {TransferId} segment {SegmentId}", id, body.SegmentId);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪½╪¿╪¬ ╪»╪▒█î╪º┘ü╪¬ ╪º┘å╪¬┘é╪º┘ä");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersReceive);
 
 transfers.MapPost("/{id:guid}/complete", async (Guid id, IMediator m, ILogger<Program> logger) =>
 {
@@ -931,17 +905,20 @@ transfers.MapPost("/{id:guid}/complete", async (Guid id, IMediator m, ILogger<Pr
             title: "╪«╪╖╪º ╪»╪▒ ╪¬╪º█î█î╪» ┘å┘ç╪º█î█î ╪º┘å╪¬┘é╪º┘ä"
         );
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersComplete);
 
 transfers.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m) =>
 {
     await m.Send(new CancelTransferCommand(id));
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.TransfersCancel);
 
 
 // --- Adjustments (╪º╪╡┘ä╪º╪¡ ┘à┘ê╪¼┘ê╪»█î / ╪º┘å╪¿╪º╪▒┌»╪▒╪»╪º┘å█î) ---
-var adj = app.MapGroup("/api/inventory/adjustments").DisableAntiforgery();
+var adj = app.MapGroup("/api/inventory/adjustments")
+    .RequireAuthorization()
+    .RequireInventoryPermission(InventoryPermissionKeys.AdjustmentsView)
+    .DisableAntiforgery();
 
 adj.MapGet("/", async (
     Guid? warehouseId,
@@ -1035,7 +1012,7 @@ adj.MapPost("/", async (CreateAdjustmentDraftCommand cmd, IMediator m, ILogger<P
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.AdjustmentsCreate);
 
 adj.MapPost("/{id:guid}/lines", async (Guid id, AddAdjustmentLineCommand body, IMediator m, ILogger<Program> logger) =>
 {
@@ -1063,7 +1040,7 @@ adj.MapPost("/{id:guid}/lines", async (Guid id, AddAdjustmentLineCommand body, I
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.AdjustmentsEdit);
 
 adj.MapDelete("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMediator m, ILogger<Program> logger) =>
 {
@@ -1086,7 +1063,7 @@ adj.MapDelete("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, IMe
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.AdjustmentsEdit);
 
 adj.MapPut("/{id:guid}", async (Guid id, UpdateAdjustmentHeaderCommand body, IMediator m, ILogger<Program> logger) =>
 {
@@ -1114,7 +1091,7 @@ adj.MapPut("/{id:guid}", async (Guid id, UpdateAdjustmentHeaderCommand body, IMe
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.AdjustmentsEdit);
 
 adj.MapPut("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, UpdateAdjustmentLineCommand body, IMediator m, ILogger<Program> logger) =>
 {
@@ -1142,7 +1119,7 @@ adj.MapPut("/{id:guid}/lines/{lineId:guid}", async (Guid id, Guid lineId, Update
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.AdjustmentsEdit);
 
 adj.MapPost("/{id:guid}/post", async (Guid id, IMediator m, ILogger<Program> logger) =>
 {
@@ -1165,7 +1142,7 @@ adj.MapPost("/{id:guid}/post", async (Guid id, IMediator m, ILogger<Program> log
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.AdjustmentsPost);
 
 adj.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m, ILogger<Program> logger) =>
 {
@@ -1188,18 +1165,21 @@ adj.MapPost("/{id:guid}/cancel", async (Guid id, IMediator m, ILogger<Program> l
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.AdjustmentsCancel);
 
 
 // --- Costs & Pricing (??? ????) ---
-var costs = app.MapGroup("/api/inventory/costs").DisableAntiforgery();
+var costs = app.MapGroup("/api/inventory/costs")
+    .RequireAuthorization()
+    .RequireInventoryPermission(InventoryPermissionKeys.CostsView)
+    .DisableAntiforgery();
 
 // ??? ????? ???? ???? ?? ?? (??????? SetStockItemPrice)
 costs.MapPost("/", async (SetInventoryCostCommand cmd, IMediator m) =>
 {
     var id = await m.Send(cmd);
     return Results.Ok(new { id });
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.CostsEdit);
 
 // ?????? ????? ???? ?? ???? ???
 costs.MapGet("/stock-items/{id:guid}", async (Guid id, IMediator m) =>
@@ -1217,10 +1197,15 @@ costs.MapGet("/products/{pid:guid}", async (Guid pid, Guid? variantId, Guid? war
 
 
 // --- Shelves & Operations (??? ????: ?????? ?????) ---
-var ops = app.MapGroup("/api/inventory/operations").DisableAntiforgery();
+var ops = app.MapGroup("/api/inventory/operations")
+    .RequireAuthorization()
+    .DisableAntiforgery();
 
 // Shelves endpoints
-var shelves = app.MapGroup("/api/inventory/shelves").DisableAntiforgery();
+var shelves = app.MapGroup("/api/inventory/shelves")
+    .RequireAuthorization()
+    .RequireInventoryPermission(InventoryPermissionKeys.ShelvesView)
+    .DisableAntiforgery();
 
 shelves.MapGet("/", async (Guid? warehouseId, bool? isActive, IMediator m) =>
 {
@@ -1232,7 +1217,7 @@ shelves.MapPost("/", async (CreateStockShelfCommand cmd, IMediator m) =>
 {
     var id = await m.Send(cmd);
     return Results.Created($"/api/inventory/shelves/{id}", new { id });
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ShelvesManage);
 
 shelves.MapPost("/batch", async (Inventory.Application.Features.Shelves.Commands.CreateStockShelvesBatchCommand cmd, IMediator m, ILogger<Program> logger) =>
 {
@@ -1251,13 +1236,13 @@ shelves.MapPost("/batch", async (Inventory.Application.Features.Shelves.Commands
         logger.LogError(ex, "Error batch creating shelves for warehouse {WarehouseId}", cmd.WarehouseId);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪º█î╪¼╪º╪» ┌»╪▒┘ê┘ç█î ┘é┘ü╪│┘çΓÇî┘ç╪º");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ShelvesManage);
 
 shelves.MapPut("/{id:guid}", async (Guid id, Inventory.Application.Features.Shelves.Commands.UpdateStockShelfCommand body, IMediator m) =>
 {
     await m.Send(body with { Id = id });
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ShelvesManage);
 
 shelves.MapDelete("/{id:guid}", async (Guid id, IMediator m, ILogger<Program> logger) =>
 {
@@ -1276,26 +1261,26 @@ shelves.MapDelete("/{id:guid}", async (Guid id, IMediator m, ILogger<Program> lo
         logger.LogError(ex, "Error deleting shelf {ShelfId}", id);
         return Results.Problem(detail: ex.Message, title: "╪«╪╖╪º ╪»╪▒ ╪¡╪░┘ü ┘é┘ü╪│┘ç");
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ShelvesManage);
 
 shelves.MapPost("/{id:guid}/activate", async (Guid id, IMediator m) =>
 {
     await m.Send(new Inventory.Application.Features.Shelves.Commands.ActivateStockShelfCommand(id));
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ShelvesManage);
 
 shelves.MapPost("/{id:guid}/deactivate", async (Guid id, IMediator m) =>
 {
     await m.Send(new Inventory.Application.Features.Shelves.Commands.DeactivateStockShelfCommand(id));
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ShelvesManage);
 
 // ????? ??? ????
 ops.MapPost("/shelves", async (CreateStockShelfCommand cmd, IMediator m) =>
 {
     var id = await m.Send(cmd);
     return Results.Created($"/api/inventory/operations/shelves/{id}", new { id });
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ShelvesManage);
 
 // ??????? ???? (Put-away / Internal Move)
 ops.MapPost("/move-stock", async (MoveStockItemCommand cmd, IMediator m, ILogger<Program> logger) =>
@@ -1321,11 +1306,14 @@ ops.MapPost("/move-stock", async (MoveStockItemCommand cmd, IMediator m, ILogger
             detail: ex.Message,
             statusCode: StatusCodes.Status500InternalServerError);
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.OperationsMoveStock);
 
 
 // --- Warehouses (╪º┘å╪¿╪º╪▒┘ç╪º) ---
-var warehouses = app.MapGroup("/api/inventory/warehouses").DisableAntiforgery();
+var warehouses = app.MapGroup("/api/inventory/warehouses")
+    .RequireAuthorization()
+    .RequireInventoryPermission(InventoryPermissionKeys.WarehouseView)
+    .DisableAntiforgery();
 
 warehouses.MapGet("/", async (bool? isActive, IMediator m) =>
 {
@@ -1337,29 +1325,32 @@ warehouses.MapPost("/", async (Inventory.Application.Features.Warehouses.Command
 {
     var id = await m.Send(cmd);
     return Results.Created($"/api/inventory/warehouses/{id}", new { id });
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.WarehouseCreate);
 
 warehouses.MapPut("/{id:guid}", async (Guid id, Inventory.Application.Features.Warehouses.Commands.UpdateWarehouseCommand body, IMediator m) =>
 {
     await m.Send(body with { Id = id });
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.WarehouseEdit);
 
 warehouses.MapPost("/{id:guid}/activate", async (Guid id, IMediator m) =>
 {
     await m.Send(new Inventory.Application.Features.Warehouses.Commands.ActivateWarehouseCommand(id));
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.WarehouseActivate);
 
 warehouses.MapPost("/{id:guid}/deactivate", async (Guid id, IMediator m) =>
 {
     await m.Send(new Inventory.Application.Features.Warehouses.Commands.DeactivateWarehouseCommand(id));
     return Results.NoContent();
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.WarehouseActivate);
 
 
 // --- Stock Ledger (┌⌐╪º╪▒╪»┌⌐╪│ ╪º┘å╪¿╪º╪▒) ---
-var stockLedger = app.MapGroup("/api/inventory/stock-ledger").DisableAntiforgery();
+var stockLedger = app.MapGroup("/api/inventory/stock-ledger")
+    .RequireAuthorization()
+    .RequireInventoryPermission(InventoryPermissionKeys.StockLedgerView)
+    .DisableAntiforgery();
 
 stockLedger.MapGet("/{id:guid}", async (Guid id, IMediator m) =>
 {
@@ -1410,7 +1401,10 @@ stockLedger.MapGet("/", async (
 });
 
 // --- Stock Items (┘à┘ê╪¼┘ê╪»█îΓÇî┘ç╪º█î ╪º┘å╪¿╪º╪▒) ---
-var stockItems = app.MapGroup("/api/inventory/stock-items").DisableAntiforgery();
+var stockItems = app.MapGroup("/api/inventory/stock-items")
+    .RequireAuthorization()
+    .RequireInventoryPermission(InventoryPermissionKeys.StockItemsView)
+    .DisableAntiforgery();
 
 stockItems.MapGet("/", async (
     Guid? warehouseId,
@@ -1454,7 +1448,7 @@ stockItems.MapGet("/{id:guid}/serials", async (
     var query = new Inventory.Application.Features.Stock.Queries.GetStockItemSerialsQuery(id, parsedStatus);
     var result = await m.Send(query);
     return Results.Ok(result);
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.StockItemsSerialsView);
 
 stockItems.MapGet("/unassigned", async (
     Guid? warehouseId,
@@ -1473,10 +1467,13 @@ stockItems.MapGet("/unassigned", async (
     );
     var result = await m.Send(query);
     return Results.Ok(result);
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.StockItemsUnassignedView);
 
 // --- Reservations (رزرو موجودی برای سفارش) ---
-var reservations = app.MapGroup("/api/inventory/reservations").DisableAntiforgery();
+var reservations = app.MapGroup("/api/inventory/reservations")
+    .RequireAuthorization()
+    .RequireInventoryPermission(InventoryPermissionKeys.ReservationsView)
+    .DisableAntiforgery();
 
 reservations.MapPost("/", async (Inventory.Api.Contracts.Reservations.ReserveStockForOrderBody body, IMediator m) =>
 {
@@ -1499,7 +1496,7 @@ reservations.MapPost("/", async (Inventory.Api.Contracts.Reservations.ReserveSto
     {
         return Results.Problem(ex.Message);
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReservationsManage);
 
 reservations.MapGet("/{orderId:guid}", async (Guid orderId, IMediator m) =>
 {
@@ -1526,7 +1523,7 @@ reservations.MapPost("/{orderId:guid}/release", async (Guid orderId, IMediator m
     {
         return Results.Problem(ex.Message);
     }
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.ReservationsManage);
 
 stockItems.MapGet("/products", async (
     Guid warehouseId,
@@ -1543,11 +1540,25 @@ stockItems.MapGet("/products", async (
     );
     var result = await m.Send(query);
     return Results.Ok(result);
-});
+}).RequireInventoryPermission(InventoryPermissionKeys.StockItemsProductsView);
 
 
 // --- Catalog Proxy (╪¿╪▒╪º█î ╪¼╪│╪¬╪¼┘ê█î ┘à╪¡╪╡┘ê┘ä╪º╪¬ ╪º╪▓ ┌⌐╪º╪¬╪º┘ä┘ê┌») ---
-var catalogProxy = app.MapGroup("/api/inventory/catalog").DisableAntiforgery();
+var catalogProxy = app.MapGroup("/api/inventory/catalog")
+    .RequireAuthorization()
+    .RequireInventoryAnyPermission(
+        InventoryPermissionKeys.CatalogProxy,
+        InventoryPermissionKeys.ReceiptsCreate,
+        InventoryPermissionKeys.ReceiptsEdit,
+        InventoryPermissionKeys.IssuesCreate,
+        InventoryPermissionKeys.IssuesEdit,
+        InventoryPermissionKeys.TransfersCreate,
+        InventoryPermissionKeys.TransfersEdit,
+        InventoryPermissionKeys.AdjustmentsCreate,
+        InventoryPermissionKeys.AdjustmentsEdit,
+        InventoryPermissionKeys.StockItemsProductsView
+    )
+    .DisableAntiforgery();
 
 // Search products from Catalog API
 catalogProxy.MapGet("/products", async (

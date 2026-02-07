@@ -1,4 +1,4 @@
-import { API_BASE } from '@/app/env'
+import { IDENTITY_API_BASE } from '@/app/env'
 import type { ApiError } from './types'
 
 type Options = RequestInit & {
@@ -6,7 +6,7 @@ type Options = RequestInit & {
   json?: unknown
 }
 
-export async function fetchJson<T>(path: string, opts: Options = {}): Promise<T> {
+export async function fetchIdentityJson<T>(path: string, opts: Options = {}): Promise<T> {
   const headers = new Headers(opts.headers)
   if (opts.json !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (!headers.has('Accept')) headers.set('Accept', 'application/json')
@@ -21,41 +21,34 @@ export async function fetchJson<T>(path: string, opts: Options = {}): Promise<T>
   }
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const res = await fetch(`${API_BASE}${path}`.replace(/\/$/, ''), {
+  const method = opts.method ?? (opts.json !== undefined ? 'POST' : undefined)
+  const shouldSendBody = method !== 'GET' && method !== 'HEAD'
+
+  const res = await fetch(`${IDENTITY_API_BASE}${path}`.replace(/\/$/, ''), {
     ...opts,
+    method,
     headers,
-    body: opts.json !== undefined ? JSON.stringify(opts.json) : opts.body,
+    body: shouldSendBody ? (opts.json !== undefined ? JSON.stringify(opts.json) : opts.body) : undefined,
   })
 
   const isJson = res.headers.get('content-type')?.includes('application/json')
   if (!res.ok) {
-    if (res.status === 401) {
-      const err: ApiError = { status: res.status, message: 'نیاز به ورود مجدد دارید.', details: null }
-      throw err
-    }
-    if (res.status === 403) {
-      const err: ApiError = { status: res.status, message: 'دسترسی ندارید.', details: null }
-      throw err
-    }
-
     let message = res.statusText
     let details: unknown
     try {
       if (isJson) {
         const data = await res.json()
-        // Try to get error message from various possible fields
         message = data.detail || data.message || data.error || data.title || message
         details = data
       } else {
         message = await res.text()
       }
     } catch {}
-    
-    // Create a more descriptive error message
+
     const errorMessage = details && typeof details === 'object' && 'error' in details
       ? String(details.error)
       : message
-    
+
     const err: ApiError = { status: res.status, message: errorMessage, details }
     throw err
   }
@@ -63,15 +56,3 @@ export async function fetchJson<T>(path: string, opts: Options = {}): Promise<T>
   if (res.status === 204) return undefined as unknown as T
   return (isJson ? res.json() : (res.text() as unknown)) as T
 }
-
-export function toQuery(params: Record<string, unknown | undefined>) {
-  const sp = new URLSearchParams()
-  Object.entries(params).forEach(([k, v]) => {
-    if (v === undefined || v === null || v === '') return
-    sp.set(k, String(v))
-  })
-  const q = sp.toString()
-  return q ? `?${q}` : ''
-}
-
-

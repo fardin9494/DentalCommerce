@@ -18,6 +18,8 @@ import { useActiveWarehouses, useWarehouseNames } from '@/shared/hooks/useWareho
 import { useSortableTable } from '@/shared/hooks/useSortableTable'
 import { SortableHeader } from '@/shared/components/SortableHeader'
 import { adjustmentDisplayNote } from '@/shared/utils/inventoryDocumentReference'
+import { PermissionGate } from '@/app/permissions'
+import { InventoryPermissionKeys } from '@/app/inventoryPermissionKeys'
 
 // Type for adjustment list item
 interface AdjustmentListItem {
@@ -173,7 +175,8 @@ export function AdjustmentsListPage() {
       <PageHeader
         title="انبارگردانی / اصلاحات"
         actions={
-          <button
+          <PermissionGate permission={InventoryPermissionKeys.AdjustmentsCreate}>
+            <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
           >
@@ -182,6 +185,7 @@ export function AdjustmentsListPage() {
             </svg>
             اصلاح جدید
           </button>
+          </PermissionGate>
         }
       >
         مدیریت اصلاحات موجودی و انبارگردانی
@@ -517,3 +521,4 @@ export function AdjustmentsListPage() {
     </div>
   )
 }
+

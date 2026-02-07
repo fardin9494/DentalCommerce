@@ -1,6 +1,8 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { LoginPage } from '../../app/LoginPage'
 import { useAdminAuth } from '../../app/auth'
+import { PermissionGate } from '@/app/permissions'
+import { InventoryPermissionKeys } from '@/app/inventoryPermissionKeys'
 
 export function Layout() {
   const loc = useLocation()
@@ -16,17 +18,39 @@ export function Layout() {
         <div className="container-std flex items-center justify-between h-14">
             <Link to="/" className="font-semibold">Inventory Admin</Link>
           <nav className="flex items-center gap-4 text-sm">
-            <Link to="/receipts" className={navCls(loc.pathname.startsWith('/receipts'))}>رسیدها</Link>
-            <Link to="/receipt-rejections" className={navCls(loc.pathname.startsWith('/receipt-rejections'))}>اقلام رد شده</Link>
-            <Link to="/issues" className={navCls(loc.pathname.startsWith('/issues'))}>خروجی‌ها</Link>
-            <Link to="/transfers" className={navCls(loc.pathname.startsWith('/transfers'))}>انتقالات</Link>
-            <Link to="/adjustments" className={navCls(loc.pathname.startsWith('/adjustments'))}>اصلاحات</Link>
-            <Link to="/warehouses" className={navCls(loc.pathname.startsWith('/warehouses'))}>انبارها</Link>
-            <Link to="/shelves" className={navCls(loc.pathname.startsWith('/shelves'))}>قفسه‌ها</Link>
-            <Link to="/put-away" className={navCls(loc.pathname.startsWith('/put-away'))}>چیدن کالا</Link>
-            <Link to="/shelf-transfer" className={navCls(loc.pathname.startsWith('/shelf-transfer'))}>انتقال کالا</Link>
-            <Link to="/stock-items" className={navCls(loc.pathname.startsWith('/stock-items'))}>موجودی‌ها</Link>
-            <Link to="/stock-ledger" className={navCls(loc.pathname.startsWith('/stock-ledger'))}>کاردکس</Link>
+            <PermissionGate permission={InventoryPermissionKeys.ReceiptsView}>
+              <Link to="/receipts" className={navCls(loc.pathname.startsWith('/receipts'))}>رسیدها</Link>
+            </PermissionGate>
+            <PermissionGate permission={InventoryPermissionKeys.ReceiptRejectionsView}>
+              <Link to="/receipt-rejections" className={navCls(loc.pathname.startsWith('/receipt-rejections'))}>اقلام رد شده</Link>
+            </PermissionGate>
+            <PermissionGate permission={InventoryPermissionKeys.IssuesView}>
+              <Link to="/issues" className={navCls(loc.pathname.startsWith('/issues'))}>خروجی‌ها</Link>
+            </PermissionGate>
+            <PermissionGate permission={InventoryPermissionKeys.TransfersView}>
+              <Link to="/transfers" className={navCls(loc.pathname.startsWith('/transfers'))}>انتقالات</Link>
+            </PermissionGate>
+            <PermissionGate permission={InventoryPermissionKeys.AdjustmentsView}>
+              <Link to="/adjustments" className={navCls(loc.pathname.startsWith('/adjustments'))}>اصلاحات</Link>
+            </PermissionGate>
+            <PermissionGate permission={InventoryPermissionKeys.WarehouseView}>
+              <Link to="/warehouses" className={navCls(loc.pathname.startsWith('/warehouses'))}>انبارها</Link>
+            </PermissionGate>
+            <PermissionGate permission={InventoryPermissionKeys.ShelvesView}>
+              <Link to="/shelves" className={navCls(loc.pathname.startsWith('/shelves'))}>قفسه‌ها</Link>
+            </PermissionGate>
+            <PermissionGate permission={InventoryPermissionKeys.StockItemsUnassignedView}>
+              <Link to="/put-away" className={navCls(loc.pathname.startsWith('/put-away'))}>چیدن کالا</Link>
+            </PermissionGate>
+            <PermissionGate permission={InventoryPermissionKeys.OperationsMoveStock}>
+              <Link to="/shelf-transfer" className={navCls(loc.pathname.startsWith('/shelf-transfer'))}>انتقال کالا</Link>
+            </PermissionGate>
+            <PermissionGate permission={InventoryPermissionKeys.StockItemsView}>
+              <Link to="/stock-items" className={navCls(loc.pathname.startsWith('/stock-items'))}>موجودی‌ها</Link>
+            </PermissionGate>
+            <PermissionGate permission={InventoryPermissionKeys.StockLedgerView}>
+              <Link to="/stock-ledger" className={navCls(loc.pathname.startsWith('/stock-ledger'))}>کاردکس</Link>
+            </PermissionGate>
             <button onClick={logout} className="px-3 py-1.5 rounded-md hover:bg-gray-100 text-sm">
               خروج
             </button>
@@ -46,5 +70,6 @@ export function Layout() {
 function navCls(active: boolean) {
   return `px-3 py-1.5 rounded-md hover:bg-gray-100 ${active ? 'bg-gray-900 text-white hover:bg-gray-800' : ''}`
 }
+
 
 

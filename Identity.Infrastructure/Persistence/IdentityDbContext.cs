@@ -1,6 +1,7 @@
 using System.Reflection;
 using BuildingBlocks.Domain;
 using Identity.Application.Abstractions;
+using Identity.Domain.Admin;
 using Identity.Domain.Auth;
 using Identity.Domain.Audit;
 using Identity.Domain.Users;
@@ -20,6 +21,8 @@ public sealed class IdentityDbContext : DbContext, IIdentityDbContext
     public DbSet<OtpChallenge> OtpChallenges => Set<OtpChallenge>();
     public DbSet<LoginGuard> LoginGuards => Set<LoginGuard>();
     public DbSet<UserAuditEvent> UserAuditEvents => Set<UserAuditEvent>();
+    public DbSet<AdminAccount> AdminAccounts => Set<AdminAccount>();
+    public DbSet<AdminUserPermission> AdminUserPermissions => Set<AdminUserPermission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

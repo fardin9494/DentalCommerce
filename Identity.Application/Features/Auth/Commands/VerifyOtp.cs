@@ -2,6 +2,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Identity.Application.Abstractions;
+using Identity.Application.Common.Admin;
 using Identity.Application.Common.Audit;
 using Identity.Application.Common.Security;
 using Identity.Application.Models;
@@ -41,6 +42,7 @@ public sealed class VerifyOtpHandler : IRequestHandler<VerifyOtpCommand, AuthTok
     private readonly OtpOptions _otpOptions;
     private readonly SessionOptions _sessionOptions;
     private readonly SecurityOptions _securityOptions;
+    private readonly AdminOptions _adminOptions;
 
     public VerifyOtpHandler(
         IIdentityDbContext db,
@@ -48,7 +50,8 @@ public sealed class VerifyOtpHandler : IRequestHandler<VerifyOtpCommand, AuthTok
         IClock clock,
         OtpOptions otpOptions,
         SessionOptions sessionOptions,
-        SecurityOptions securityOptions)
+        SecurityOptions securityOptions,
+        AdminOptions adminOptions)
     {
         _db = db;
         _jwt = jwt;
@@ -56,6 +59,7 @@ public sealed class VerifyOtpHandler : IRequestHandler<VerifyOtpCommand, AuthTok
         _otpOptions = otpOptions;
         _sessionOptions = sessionOptions;
         _securityOptions = securityOptions;
+        _adminOptions = adminOptions;
     }
 
     public async Task<AuthTokensDto> Handle(VerifyOtpCommand cmd, CancellationToken ct)
@@ -120,6 +124,8 @@ public sealed class VerifyOtpHandler : IRequestHandler<VerifyOtpCommand, AuthTok
         }
 
         user.MarkLogin(now);
+
+        await SuperAdminHelper.EnsureSuperAdminAsync(_db, _adminOptions, user, now, ct);
 
         _db.UserAuditEvents.Add(UserAuditEvent.Create(
             user.Id,

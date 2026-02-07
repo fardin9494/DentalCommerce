@@ -1,3 +1,4 @@
+using Identity.Domain.Admin;
 using Identity.Domain.Auth;
 using Identity.Domain.Audit;
 using Identity.Domain.Users;
@@ -14,6 +15,8 @@ public interface IIdentityDbContext
     DbSet<OtpChallenge> OtpChallenges { get; }
     DbSet<LoginGuard> LoginGuards { get; }
     DbSet<UserAuditEvent> UserAuditEvents { get; }
+    DbSet<AdminAccount> AdminAccounts { get; }
+    DbSet<AdminUserPermission> AdminUserPermissions { get; }
 
     ChangeTracker ChangeTracker { get; }
     EntityEntry Entry(object entity);

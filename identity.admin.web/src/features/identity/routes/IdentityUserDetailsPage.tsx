@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { fetchJson } from '@/lib/api/client'
 import { useToast } from '@/shared/components/toast/ToastProvider'
+import { PermissionToggleList } from '../components/PermissionToggleList'
 
 type SiteDto = { siteId: string; joinedAtUtc: string }
 type SessionDto = {
@@ -31,6 +32,20 @@ type AuditList = {
   items: AuditItem[]
 }
 
+type PermissionItem = {
+  key: string
+  title: string
+  description: string
+  granted: boolean
+}
+
+type InventoryPermissionDto = {
+  userId: string
+  isSuperAdmin: boolean
+  uiPolicy: 'Hide' | 'Disable'
+  items: PermissionItem[]
+}
+
 type UserSummary = {
   userId: string
   phoneNumber: string
@@ -57,6 +72,7 @@ export function IdentityUserDetailsPage() {
   const navigate = useNavigate()
   const [data, setData] = useState<DetailsDto | null>(null)
   const [audit, setAudit] = useState<AuditList | null>(null)
+  const [inventoryPermissions, setInventoryPermissions] = useState<InventoryPermissionDto | null>(null)
   const [busy, setBusy] = useState(false)
   const [banReason, setBanReason] = useState('')
   const [banUntil, setBanUntil] = useState('')
@@ -68,8 +84,10 @@ export function IdentityUserDetailsPage() {
     try {
       const res = await fetchJson<DetailsDto>(`/admin/users/${id}`)
       const auditRes = await fetchJson<AuditList>(`/admin/users/${id}/audit`)
+      const permRes = await fetchJson<InventoryPermissionDto>(`/admin/users/${id}/permissions/inventory`)
       setData(res)
       setAudit(auditRes)
+      setInventoryPermissions(permRes)
       setBanReason(res.user.banReason || '')
       setBanUntil(res.user.banUntilUtc ? toLocalInput(res.user.banUntilUtc) : '')
     } catch (err: any) {
@@ -154,6 +172,31 @@ export function IdentityUserDetailsPage() {
       await load()
     } catch (err: any) {
       toast.error(err?.message || 'خطا در تغییر رمز')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function updatePermission(key: string, granted: boolean) {
+    if (!inventoryPermissions) return
+    const items = inventoryPermissions.items.map(p => (p.key === key ? { ...p, granted } : p))
+    setInventoryPermissions({ ...inventoryPermissions, items })
+  }
+
+  async function saveInventoryPermissions() {
+    if (!id || !inventoryPermissions) return
+    setBusy(true)
+    try {
+      await fetchJson<void>(`/admin/users/${id}/permissions/inventory`, {
+        method: 'POST',
+        json: {
+          uiPolicy: inventoryPermissions.uiPolicy,
+          permissions: inventoryPermissions.items.map(p => ({ key: p.key, granted: p.granted })),
+        },
+      })
+      toast.success('دسترسی‌ها ذخیره شد')
+    } catch (err: any) {
+      toast.error(err?.message || 'خطا در ذخیره دسترسی‌ها')
     } finally {
       setBusy(false)
     }
@@ -258,6 +301,52 @@ export function IdentityUserDetailsPage() {
           </div>
         ) : (
           <div className="text-xs text-gray-500">نشستی ثبت نشده است</div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold">دسترسی‌های اینونتوری</h2>
+          <button className="btn-ghost" onClick={saveInventoryPermissions} disabled={busy || inventoryPermissions?.isSuperAdmin}>ذخیره</button>
+        </div>
+        {inventoryPermissions ? (
+          <div className="space-y-3 text-sm">
+            {inventoryPermissions.isSuperAdmin && (
+              <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
+                این کاربر ادمین مادر است و همه دسترسی‌ها را دارد.
+              </div>
+            )}
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-gray-500">سیاست UI:</span>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="uiPolicy"
+                  checked={inventoryPermissions.uiPolicy === 'Hide'}
+                  onChange={() => setInventoryPermissions({ ...inventoryPermissions, uiPolicy: 'Hide' })}
+                  disabled={inventoryPermissions.isSuperAdmin}
+                />
+                مخفی‌سازی دکمه‌ها
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="uiPolicy"
+                  checked={inventoryPermissions.uiPolicy === 'Disable'}
+                  onChange={() => setInventoryPermissions({ ...inventoryPermissions, uiPolicy: 'Disable' })}
+                  disabled={inventoryPermissions.isSuperAdmin}
+                />
+                قفل‌کردن دکمه‌ها
+              </label>
+            </div>
+            <PermissionToggleList
+              items={inventoryPermissions.items}
+              disabled={inventoryPermissions.isSuperAdmin}
+              onChange={updatePermission}
+            />
+          </div>
+        ) : (
+          <div className="text-xs text-gray-500">در حال دریافت دسترسی‌ها…</div>
         )}
       </div>
 
