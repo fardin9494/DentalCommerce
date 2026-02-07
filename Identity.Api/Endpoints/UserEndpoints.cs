@@ -48,6 +48,13 @@ public static class UserEndpoints
             return Results.Ok(dto);
         });
 
+        me.MapGet("/permissions/catalog", async (HttpContext ctx, IMediator mediator) =>
+        {
+            var userId = ClaimsHelper.GetUserId(ctx.User);
+            var dto = await mediator.Send(new GetCatalogPermissionsQuery(userId));
+            return Results.Ok(dto);
+        });
+
         return group;
     }
 }

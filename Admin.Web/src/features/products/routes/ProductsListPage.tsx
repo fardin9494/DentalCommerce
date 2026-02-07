@@ -3,6 +3,8 @@ import { PageHeader } from '../../../shared/components/PageHeader'
 import { Spinner } from '../../../shared/components/Spinner'
 import { ProductListTable } from '../components/ProductListTable'
 import { useBrands, useCategories, useProducts } from '../queries'
+import { PermissionGate } from '@/app/permissions'
+import { CatalogPermissionKeys } from '@/app/catalogPermissionKeys'
 
 export function ProductsListPage() {
   const [page, setPage] = useState(1)
@@ -27,7 +29,6 @@ export function ProductsListPage() {
   const { data: brands } = useBrands()
   const { data: categories } = useCategories()
 
-  // مرتب‌سازی سلسله‌مراتبی (پره‌اُردر): والد ← سپس فرزندان
   const orderedCategories = useMemo(() => {
     const list = categories ?? []
     type Cat = typeof list[number]
@@ -37,7 +38,6 @@ export function ProductsListPage() {
       if (!children.has(key)) children.set(key, [])
       children.get(key)!.push(n)
     }
-    // مرتب‌سازی هر سطح بر اساس نام
     for (const arr of children.values()) {
       arr.sort((a, b) => a.name.localeCompare(b.name))
     }
@@ -56,7 +56,14 @@ export function ProductsListPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="محصولات" actions={<a href="/products/new" className="btn">ایجاد محصول</a>}>
+      <PageHeader
+        title="محصولات"
+        actions={(
+          <PermissionGate permission={CatalogPermissionKeys.ProductsCreate}>
+            <a href="/products/new" className="btn">ایجاد محصول</a>
+          </PermissionGate>
+        )}
+      >
         مدیریت محصولات و فیلتر براساس جستجو، برند، دسته و مرتب‌سازی
       </PageHeader>
 
@@ -175,4 +182,3 @@ export function ProductsListPage() {
     </div>
   )
 }
-

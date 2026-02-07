@@ -3,6 +3,8 @@ import { PageHeader } from '../../../shared/components/PageHeader'
 import { Spinner } from '../../../shared/components/Spinner'
 import { useCountries, useCreateCountry, useDeleteCountry, useUpdateCountry } from '../../products/queries'
 import { swalPrompt, swalToastSuccess, swalToastError } from '../../../shared/utils/swal'
+import { PermissionGate } from '@/app/permissions'
+import { CatalogPermissionKeys } from '@/app/catalogPermissionKeys'
 
 export function CountriesPage() {
   const { data: countries, isLoading, isError, error } = useCountries()
@@ -45,21 +47,25 @@ export function CountriesPage() {
                       <td className="p-2">{c.region || '-'}</td>
                       <td className="p-2">{c.flagEmoji || '-'}</td>
                       <td className="p-2 country-actions">
-                        <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
-                          const nameFa = await swalPrompt({ title: 'نام فارسی', defaultValue: c.nameFa, required: true, confirmText: 'ذخیره', cancelText: 'لغو' })
-                          if (!nameFa) return
-                          const nameEn = await swalPrompt({ title: 'نام (EN)', defaultValue: c.nameEn, required: true, confirmText: 'بعدی', cancelText: 'لغو' })
-                          if (!nameEn) return
-                          const region = await swalPrompt({ title: 'قاره (اختیاری)', defaultValue: c.region || '', confirmText: 'بعدی', cancelText: 'رد' })
-                          const flagEmoji = await swalPrompt({ title: 'پرچم (اختیاری)', defaultValue: c.flagEmoji || '', confirmText: 'ذخیره', cancelText: 'لغو' })
-                          try {
-                            await update.mutateAsync({ code2: c.code2, input: { nameFa: nameFa.trim(), nameEn: nameEn.trim(), region: region?.trim() || null, flagEmoji: flagEmoji?.trim() || null } })
-                            swalToastSuccess('کشور بروزرسانی شد')
-                          } catch (e:any) { swalToastError(e?.message || 'بروزرسانی ناموفق') }
-                        }}>ویرایش</button>
-                        <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
-                          try { await del.mutateAsync(c.code2); swalToastSuccess('کشور حذف شد') } catch (e:any) { swalToastError(e?.message || 'حذف ناموفق') }
-                        }}>حذف</button>
+                        <PermissionGate permission={CatalogPermissionKeys.CountriesEdit}>
+                          <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
+                            const nameFa = await swalPrompt({ title: 'نام فارسی', defaultValue: c.nameFa, required: true, confirmText: 'ذخیره', cancelText: 'لغو' })
+                            if (!nameFa) return
+                            const nameEn = await swalPrompt({ title: 'نام (EN)', defaultValue: c.nameEn, required: true, confirmText: 'بعدی', cancelText: 'لغو' })
+                            if (!nameEn) return
+                            const region = await swalPrompt({ title: 'قاره (اختیاری)', defaultValue: c.region || '', confirmText: 'بعدی', cancelText: 'رد' })
+                            const flagEmoji = await swalPrompt({ title: 'پرچم (اختیاری)', defaultValue: c.flagEmoji || '', confirmText: 'ذخیره', cancelText: 'لغو' })
+                            try {
+                              await update.mutateAsync({ code2: c.code2, input: { nameFa: nameFa.trim(), nameEn: nameEn.trim(), region: region?.trim() || null, flagEmoji: flagEmoji?.trim() || null } })
+                              swalToastSuccess('کشور بروزرسانی شد')
+                            } catch (e:any) { swalToastError(e?.message || 'بروزرسانی ناموفق') }
+                          }}>ویرایش</button>
+                        </PermissionGate>
+                        <PermissionGate permission={CatalogPermissionKeys.CountriesDelete}>
+                          <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
+                            try { await del.mutateAsync(c.code2); swalToastSuccess('کشور حذف شد') } catch (e:any) { swalToastError(e?.message || 'حذف ناموفق') }
+                          }}>حذف</button>
+                        </PermissionGate>
                       </td>
                     </tr>
                   ))}
@@ -70,23 +76,24 @@ export function CountriesPage() {
         </div>
         <div className="card p-4">
           <h3 className="font-semibold mb-3">ایجاد کشور</h3>
-          <form className="space-y-3" onSubmit={async (e) => {
-            e.preventDefault();
-            try {
-              await create.mutateAsync({
-                code2: form.code2.trim().toUpperCase(),
-                code3: form.code3.trim().toUpperCase(),
-                nameFa: form.nameFa.trim(),
-                nameEn: form.nameEn.trim(),
-                region: form.region?.trim() || null,
-                flagEmoji: form.flagEmoji?.trim() || null,
-              })
-              setForm({ code2: 'IR', code3: 'IRN', nameFa: '', nameEn: '', region: '', flagEmoji: '' })
-              swalToastSuccess('کشور ایجاد شد')
-            } catch (err:any) {
-              swalToastError(err?.message || 'ایجاد ناموفق')
-            }
-          }}>
+          <PermissionGate permission={CatalogPermissionKeys.CountriesCreate}>
+            <form className="space-y-3" onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                await create.mutateAsync({
+                  code2: form.code2.trim().toUpperCase(),
+                  code3: form.code3.trim().toUpperCase(),
+                  nameFa: form.nameFa.trim(),
+                  nameEn: form.nameEn.trim(),
+                  region: form.region?.trim() || null,
+                  flagEmoji: form.flagEmoji?.trim() || null,
+                })
+                setForm({ code2: 'IR', code3: 'IRN', nameFa: '', nameEn: '', region: '', flagEmoji: '' })
+                swalToastSuccess('کشور ایجاد شد')
+              } catch (err:any) {
+                swalToastError(err?.message || 'ایجاد ناموفق')
+              }
+            }}>
             <div>
               <label className="label">نام (FA)</label>
               <input className="input" value={form.nameFa} onChange={e=>setForm(f=>({ ...f, nameFa: e.target.value }))} />
@@ -116,7 +123,8 @@ export function CountriesPage() {
               </div>
             </div>
             <button type="submit" className="btn">ایجاد</button>
-          </form>
+            </form>
+          </PermissionGate>
         </div>
       </div>
     </div>

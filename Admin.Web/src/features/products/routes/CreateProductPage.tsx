@@ -12,6 +12,8 @@ import { DescriptionEditor } from '../components/DescriptionEditor'
 import { swalToastError, swalToastSuccess } from '../../../shared/utils/swal'
 import { useCountries } from '../queries'
 import * as api from '../api'
+import { PermissionGate } from '@/app/permissions'
+import { CatalogPermissionKeys } from '@/app/catalogPermissionKeys'
 
 export function CreateProductPage() {
   const navigate = useNavigate()
@@ -176,7 +178,9 @@ export function CreateProductPage() {
           <DescriptionEditor value={descHtml} onChange={setDescHtml} />
 
           <div className="pt-2 flex items-center gap-2">
-            <button disabled={isSubmitting} className="btn" type="submit">{isSubmitting ? 'در حال ایجاد...' : 'ایجاد محصول'}</button>
+            <PermissionGate permission={CatalogPermissionKeys.ProductsCreate}>
+              <button disabled={isSubmitting} className="btn" type="submit">{isSubmitting ? 'در حال ایجاد...' : 'ایجاد محصول'}</button>
+            </PermissionGate>
             <span className="text-xs text-gray-500">پس از ایجاد، به صفحه محصول هدایت می‌شوید.</span>
           </div>
         </div>

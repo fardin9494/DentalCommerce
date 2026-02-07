@@ -7,9 +7,11 @@ import { swalToastError, swalToastSuccess } from '../../../shared/utils/swal'
 import type { BrandStatusValue } from '../../products/api'
 import { toPublicMediaUrl } from '../../../lib/api/client'
 import { DescriptionEditor } from '../../products/components/DescriptionEditor'
+import { PermissionGate } from '@/app/permissions'
+import { CatalogPermissionKeys } from '@/app/catalogPermissionKeys'
 
 const brandStatusOptions = [
-  { value: '1', label: 'فعال ' },
+  { value: '1', label: 'فعال' },
   { value: '2', label: 'غیرفعال' },
   { value: '3', label: 'منسوخ شده' },
 ] as const
@@ -103,7 +105,7 @@ export function BrandDetailPage() {
       await uploadLogo.mutateAsync(file)
       swalToastSuccess('لوگو بروزرسانی شد')
     } catch (err: any) {
-      swalToastError(err?.message || 'اپلود لوگو با خطا مواجه شد')
+      swalToastError(err?.message || 'آپلود لوگو با خطا مواجه شد')
     } finally {
       e.target.value = ''
     }
@@ -158,9 +160,11 @@ export function BrandDetailPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button type="submit" className="btn px-4 py-2" disabled={update.isPending}>
-                  {update.isPending ? 'در حال ذخیره کردن' : 'ذخیره تغییرات'}
-                </button>
+                <PermissionGate permission={CatalogPermissionKeys.BrandsEdit}>
+                  <button type="submit" className="btn px-4 py-2" disabled={update.isPending}>
+                    {update.isPending ? 'در حال ذخیره کردن' : 'ذخیره تغییرات'}
+                  </button>
+                </PermissionGate>
                 <button type="button" className="btn-secondary px-4 py-2 rounded" onClick={() => navigate('/brands')}>
                   لغو
                 </button>
@@ -178,7 +182,9 @@ export function BrandDetailPage() {
             )}
             <div>
               <label className="label">آپلود لوگو</label>
-              <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadLogo.isPending} />
+              <PermissionGate permission={CatalogPermissionKeys.BrandsLogoUpload}>
+                <input type="file" accept="image/*" onChange={handleLogoChange} disabled={uploadLogo.isPending} />
+              </PermissionGate>
             </div>
             {uploadLogo.isPending && (
               <div className="text-xs text-gray-500 flex items-center gap-2">

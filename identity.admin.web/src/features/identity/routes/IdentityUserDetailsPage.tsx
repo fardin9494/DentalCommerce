@@ -46,6 +46,13 @@ type InventoryPermissionDto = {
   items: PermissionItem[]
 }
 
+type CatalogPermissionDto = {
+  userId: string
+  isSuperAdmin: boolean
+  uiPolicy: 'Hide' | 'Disable'
+  items: PermissionItem[]
+}
+
 type UserSummary = {
   userId: string
   phoneNumber: string
@@ -73,6 +80,7 @@ export function IdentityUserDetailsPage() {
   const [data, setData] = useState<DetailsDto | null>(null)
   const [audit, setAudit] = useState<AuditList | null>(null)
   const [inventoryPermissions, setInventoryPermissions] = useState<InventoryPermissionDto | null>(null)
+  const [catalogPermissions, setCatalogPermissions] = useState<CatalogPermissionDto | null>(null)
   const [busy, setBusy] = useState(false)
   const [banReason, setBanReason] = useState('')
   const [banUntil, setBanUntil] = useState('')
@@ -84,10 +92,12 @@ export function IdentityUserDetailsPage() {
     try {
       const res = await fetchJson<DetailsDto>(`/admin/users/${id}`)
       const auditRes = await fetchJson<AuditList>(`/admin/users/${id}/audit`)
-      const permRes = await fetchJson<InventoryPermissionDto>(`/admin/users/${id}/permissions/inventory`)
+      const inventoryPermRes = await fetchJson<InventoryPermissionDto>(`/admin/users/${id}/permissions/inventory`)
+      const catalogPermRes = await fetchJson<CatalogPermissionDto>(`/admin/users/${id}/permissions/catalog`)
       setData(res)
       setAudit(auditRes)
-      setInventoryPermissions(permRes)
+      setInventoryPermissions(inventoryPermRes)
+      setCatalogPermissions(catalogPermRes)
       setBanReason(res.user.banReason || '')
       setBanUntil(res.user.banUntilUtc ? toLocalInput(res.user.banUntilUtc) : '')
     } catch (err: any) {
@@ -177,10 +187,16 @@ export function IdentityUserDetailsPage() {
     }
   }
 
-  function updatePermission(key: string, granted: boolean) {
+  function updateInventoryPermission(key: string, granted: boolean) {
     if (!inventoryPermissions) return
     const items = inventoryPermissions.items.map(p => (p.key === key ? { ...p, granted } : p))
     setInventoryPermissions({ ...inventoryPermissions, items })
+  }
+
+  function updateCatalogPermission(key: string, granted: boolean) {
+    if (!catalogPermissions) return
+    const items = catalogPermissions.items.map(p => (p.key === key ? { ...p, granted } : p))
+    setCatalogPermissions({ ...catalogPermissions, items })
   }
 
   async function saveInventoryPermissions() {
@@ -197,6 +213,25 @@ export function IdentityUserDetailsPage() {
       toast.success('دسترسی‌ها ذخیره شد')
     } catch (err: any) {
       toast.error(err?.message || 'خطا در ذخیره دسترسی‌ها')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveCatalogPermissions() {
+    if (!id || !catalogPermissions) return
+    setBusy(true)
+    try {
+      await fetchJson<void>(`/admin/users/${id}/permissions/catalog`, {
+        method: 'POST',
+        json: {
+          uiPolicy: catalogPermissions.uiPolicy,
+          permissions: catalogPermissions.items.map(p => ({ key: p.key, granted: p.granted })),
+        },
+      })
+      toast.success('Catalog permissions saved')
+    } catch (err: any) {
+      toast.error(err?.message || 'Error while saving catalog permissions')
     } finally {
       setBusy(false)
     }
@@ -321,7 +356,7 @@ export function IdentityUserDetailsPage() {
               <label className="flex items-center gap-2">
                 <input
                   type="radio"
-                  name="uiPolicy"
+                  name="uiPolicyInventory"
                   checked={inventoryPermissions.uiPolicy === 'Hide'}
                   onChange={() => setInventoryPermissions({ ...inventoryPermissions, uiPolicy: 'Hide' })}
                   disabled={inventoryPermissions.isSuperAdmin}
@@ -331,7 +366,7 @@ export function IdentityUserDetailsPage() {
               <label className="flex items-center gap-2">
                 <input
                   type="radio"
-                  name="uiPolicy"
+                  name="uiPolicyInventory"
                   checked={inventoryPermissions.uiPolicy === 'Disable'}
                   onChange={() => setInventoryPermissions({ ...inventoryPermissions, uiPolicy: 'Disable' })}
                   disabled={inventoryPermissions.isSuperAdmin}
@@ -342,11 +377,57 @@ export function IdentityUserDetailsPage() {
             <PermissionToggleList
               items={inventoryPermissions.items}
               disabled={inventoryPermissions.isSuperAdmin}
-              onChange={updatePermission}
+              onChange={updateInventoryPermission}
             />
           </div>
         ) : (
           <div className="text-xs text-gray-500">در حال دریافت دسترسی‌ها…</div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold">Catalog permissions</h2>
+          <button className="btn-ghost" onClick={saveCatalogPermissions} disabled={busy || catalogPermissions?.isSuperAdmin}>Save</button>
+        </div>
+        {catalogPermissions ? (
+          <div className="space-y-3 text-sm">
+            {catalogPermissions.isSuperAdmin && (
+              <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
+                This user is SuperAdmin and has all catalog permissions.
+              </div>
+            )}
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-gray-500">UI Policy:</span>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="uiPolicyCatalog"
+                  checked={catalogPermissions.uiPolicy === 'Hide'}
+                  onChange={() => setCatalogPermissions({ ...catalogPermissions, uiPolicy: 'Hide' })}
+                  disabled={catalogPermissions.isSuperAdmin}
+                />
+                Hide actions
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="uiPolicyCatalog"
+                  checked={catalogPermissions.uiPolicy === 'Disable'}
+                  onChange={() => setCatalogPermissions({ ...catalogPermissions, uiPolicy: 'Disable' })}
+                  disabled={catalogPermissions.isSuperAdmin}
+                />
+                Disable actions
+              </label>
+            </div>
+            <PermissionToggleList
+              items={catalogPermissions.items}
+              disabled={catalogPermissions.isSuperAdmin}
+              onChange={updateCatalogPermission}
+            />
+          </div>
+        ) : (
+          <div className="text-xs text-gray-500">Loading catalog permissions...</div>
         )}
       </div>
 

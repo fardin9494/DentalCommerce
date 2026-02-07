@@ -14,6 +14,8 @@ import { useBrands, useCategories, useLeafCategories, useCountries } from '../qu
 import { useProduct } from '../queries'
 import { useQueryClient } from '@tanstack/react-query'
 import * as api from '../api'
+import { PermissionGate } from '@/app/permissions'
+import { CatalogPermissionKeys } from '@/app/catalogPermissionKeys'
 
 export function ProductDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -84,7 +86,7 @@ export function ProductDetailPage() {
               <input className="input" value={warehouseCode || product.warehouseCode || ''} onChange={e=>setWarehouseCode(e.target.value)} />
             </div>
             <div className="md:col-span-2">
-              <BrandSelect value={brandId || product.brandId} onChange={(id)=> setBrandId(id)} />
+              <BrandSelect value={brandId || product.brandId} onChange={(id)=> setBrandId(id ?? '')} />
             </div>
             <div className="md:col-span-2">
               <label className="label">کشور سازنده</label>
@@ -107,33 +109,46 @@ export function ProductDetailPage() {
             </div>
           </div>
           <div className="pt-2">
-            <button className="btn" onClick={async ()=>{
-              try {
-                await updateBasics.mutateAsync({
-                  name: name || product.name,
-                  slug: slug || product.defaultSlug,
-                  code: code || product.code,
-                  warehouseCode: (warehouseCode !== '' ? warehouseCode : (product.warehouseCode ?? null)),
-                  brandId: (brandId || product.brandId)!,
-                  countryCode: (countryCode !== '' ? countryCode : (product.countryCode ?? null)),
-                })
-                alert('ذخیره شد')
-              } catch (e:any) { alert(e?.message || 'خطا در ذخیره مشخصات') }
-            }}>ذخیره مشخصات</button>
+            <PermissionGate permission={CatalogPermissionKeys.ProductsBasicsEdit}>
+              <button className="btn" onClick={async ()=>{
+                try {
+                  await updateBasics.mutateAsync({
+                    name: name || product.name,
+                    slug: slug || product.defaultSlug,
+                    code: code || product.code,
+                    warehouseCode: (warehouseCode !== '' ? warehouseCode : (product.warehouseCode ?? null)),
+                    brandId: (brandId || product.brandId)!,
+                    countryCode: (countryCode !== '' ? countryCode : (product.countryCode ?? null)),
+                  })
+                  alert('ذخیره شد')
+                } catch (e:any) { alert(e?.message || 'خطا در ذخیره مشخصات') }
+              }}>ذخیره مشخصات</button>
+            </PermissionGate>
           </div>
           <div className="pt-3 flex gap-2">
             {product.status === 'Active' ? (
-              <button className="btn-red" onClick={async () => {
-                try { await api.hideProduct(product.id); await qc.invalidateQueries({ queryKey: ['products','detail', product.id] }); alert('مخفی شد') } catch (e:any) { alert(e?.message || 'خطا در مخفی‌سازی') }
-              }}>مخفی کردن</button>
+              <PermissionGate permission={CatalogPermissionKeys.ProductsHide}>
+                <button className="btn-red" onClick={async () => {
+                  try { await api.hideProduct(product.id); await qc.invalidateQueries({ queryKey: ['products','detail', product.id] }); alert('مخفی شد') } catch (e:any) { alert(e?.message || 'خطا در مخفی‌سازی') }
+                }}>مخفی کردن</button>
+              </PermissionGate>
             ) : (
-              <button className="btn-green" onClick={async () => {
-                try { await api.activateProduct(product.id); await qc.invalidateQueries({ queryKey: ['products','detail', product.id] }); alert('فعال شد') } catch (e:any) { alert(e?.message || 'خطا در فعال‌سازی') }
-              }}>فعال‌سازی</button>
+              <PermissionGate permission={CatalogPermissionKeys.ProductsActivate}>
+                <button className="btn-green" onClick={async () => {
+                  try { await api.activateProduct(product.id); await qc.invalidateQueries({ queryKey: ['products','detail', product.id] }); alert('فعال شد') } catch (e:any) { alert(e?.message || 'خطا در فعال‌سازی') }
+                }}>فعال‌سازی</button>
+              </PermissionGate>
             )}
           </div>
         </div>
-        <ProductImages product={product} />
+        <PermissionGate anyPermissions={[
+          CatalogPermissionKeys.ProductsImagesUpload,
+          CatalogPermissionKeys.ProductsImagesSetMain,
+          CatalogPermissionKeys.ProductsImagesReorder,
+          CatalogPermissionKeys.ProductsImagesDelete,
+        ]}>
+          <ProductImages product={product} />
+        </PermissionGate>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -141,9 +156,11 @@ export function ProductDetailPage() {
           <div className="space-y-3">
             <h3 className="font-semibold">ویرایش توضیحات</h3>
             <DescriptionEditor value={desc} onChange={setDesc} />
-            <button className="btn" onClick={async () => {
-              try { await api.setProductDescription(product.id, desc); await qc.invalidateQueries({ queryKey: ['products','detail', product.id] }); alert('ذخیره شد'); } catch (e:any) { alert(e?.message || 'خطا در ذخیره توضیحات') }
-            }}>ذخیره توضیحات</button>
+            <PermissionGate permission={CatalogPermissionKeys.ProductsDescriptionEdit}>
+              <button className="btn" onClick={async () => {
+                try { await api.setProductDescription(product.id, desc); await qc.invalidateQueries({ queryKey: ['products','detail', product.id] }); alert('ذخیره شد'); } catch (e:any) { alert(e?.message || 'خطا در ذخیره توضیحات') }
+              }}>ذخیره توضیحات</button>
+            </PermissionGate>
           </div>
 
           <div className="pt-4 space-y-2">
@@ -151,10 +168,12 @@ export function ProductDetailPage() {
             <div className="text-xs text-gray-600">کلید تنوع فعلی: {product.variationKey ?? '—'}</div>
             <div className="flex items-center gap-2">
               <input id="vk" className="input" placeholder="Variation Key (مثلاً رنگ)" />
-              <button className="btn" onClick={async ()=>{
-                const vk = (document.getElementById('vk') as HTMLInputElement)?.value || ''
-                try { await api.setVariation(product.id, vk || null); await qc.invalidateQueries({ queryKey: ['products','detail', product.id] }); alert('ذخیره شد') } catch(e:any){ alert(e?.message || 'خطا در ذخیره Variation Key') }
-              }}>ذخیره</button>
+              <PermissionGate permission={CatalogPermissionKeys.ProductsVariationEdit}>
+                <button className="btn" onClick={async ()=>{
+                  const vk = (document.getElementById('vk') as HTMLInputElement)?.value || ''
+                  try { await api.setVariation(product.id, vk || null); await qc.invalidateQueries({ queryKey: ['products','detail', product.id] }); alert('ذخیره شد') } catch(e:any){ alert(e?.message || 'خطا در ذخیره Variation Key') }
+                }}>ذخیره</button>
+              </PermissionGate>
             </div>
 
             <div className="border rounded">
@@ -168,12 +187,16 @@ export function ProductDetailPage() {
                   <div className="col-span-2"><span className="cursor-pointer underline" onClick={()=>{ setEditingVariantId(v.id); setTmpVariantValue(v.value); setTmpVariantSku(v.sku); setTmpVariantActive(v.isActive); }}>{v.value}</span></div>
                   <div className="col-span-2 font-mono">{v.sku}</div>
                   <div className="flex items-center justify-end gap-2 text-xs whitespace-nowrap">
-                    <button className="btn px-2 py-1 text-xs flex-shrink-0" onClick={async ()=>{
-                      try { await addVariant.mutateAsync({ value: v.value, sku: v.sku, isActive: !v.isActive }) }
-                      catch(e:any){ alert(e?.message || 'Update failed') }
-                    }}>{v.isActive ? 'Deactivate' : 'Activate'}</button>
+                    <PermissionGate permission={CatalogPermissionKeys.ProductsVariantsEdit}>
+                      <button className="btn px-2 py-1 text-xs flex-shrink-0" onClick={async ()=>{
+                        try { await addVariant.mutateAsync({ value: v.value, sku: v.sku, isActive: !v.isActive }) }
+                        catch(e:any){ alert(e?.message || 'Update failed') }
+                      }}>{v.isActive ? 'Deactivate' : 'Activate'}</button>
+                    </PermissionGate>
                     <span className="text-xs flex-shrink-0">{v.isActive ? 'فعال' : 'غیرفعال'}</span>
-                    <button className="btn-red px-2 py-1 text-xs flex-shrink-0" onClick={async ()=>{ if(!confirm('حذف شود؟')) return; try { await deleteVariant.mutateAsync(v.id) } catch(e:any){ alert(e?.message || 'خطا در حذف') } }}>حذف</button>
+                    <PermissionGate permission={CatalogPermissionKeys.ProductsVariantsDelete}>
+                      <button className="btn-red px-2 py-1 text-xs flex-shrink-0" onClick={async ()=>{ if(!confirm('حذف شود؟')) return; try { await deleteVariant.mutateAsync(v.id) } catch(e:any){ alert(e?.message || 'خطا در حذف') } }}>حذف</button>
+                    </PermissionGate>
                   </div>
                 </div>
               ))}
@@ -186,12 +209,14 @@ export function ProductDetailPage() {
                     <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={tmpVariantActive} onChange={e=>setTmpVariantActive(e.target.checked)} /> Active</label>
                   </div>
                   <div className="flex gap-2">
-                    <button className="btn" onClick={async ()=>{
-                      try {
-                        await updateVariant.mutateAsync({ variantId: editingVariantId!, value: tmpVariantValue, sku: tmpVariantSku, isActive: tmpVariantActive })
-                        setEditingVariantId(null)
-                      } catch(e:any){ alert((e && e.message) || (e && e.toString()) || 'Update failed') }
-                    }}>Save</button>
+                    <PermissionGate permission={CatalogPermissionKeys.ProductsVariantsEdit}>
+                      <button className="btn" onClick={async ()=>{
+                        try {
+                          await updateVariant.mutateAsync({ variantId: editingVariantId!, value: tmpVariantValue, sku: tmpVariantSku, isActive: tmpVariantActive })
+                          setEditingVariantId(null)
+                        } catch(e:any){ alert((e && e.message) || (e && e.toString()) || 'Update failed') }
+                      }}>Save</button>
+                    </PermissionGate>
                     <button className="btn-secondary" onClick={()=> setEditingVariantId(null)}>Cancel</button>
                   </div>
                 </div>
@@ -201,12 +226,14 @@ export function ProductDetailPage() {
                 <input id="ns" className="input sm:col-span-2" placeholder="SKU" />
                 <label className="flex items-center gap-2 text-sm"><input id="na" type="checkbox" defaultChecked /> فعال</label>
                 <div className="col-span-5">
-                  <button className="btn" onClick={async ()=>{
-                    const value = (document.getElementById('nv') as HTMLInputElement)?.value || ''
-                    const sku = (document.getElementById('ns') as HTMLInputElement)?.value || ''
-                    const isActive = (document.getElementById('na') as HTMLInputElement)?.checked ?? true
-                    try { await addVariant.mutateAsync({ value, sku, isActive }) } catch(e:any){ alert(e?.message || 'خطا در افزودن تنوع') }
-                  }}>افزودن تنوع</button>
+                  <PermissionGate permission={CatalogPermissionKeys.ProductsVariantsCreate}>
+                    <button className="btn" onClick={async ()=>{
+                      const value = (document.getElementById('nv') as HTMLInputElement)?.value || ''
+                      const sku = (document.getElementById('ns') as HTMLInputElement)?.value || ''
+                      const isActive = (document.getElementById('na') as HTMLInputElement)?.checked ?? true
+                      try { await addVariant.mutateAsync({ value, sku, isActive }) } catch(e:any){ alert(e?.message || 'خطا در افزودن تنوع') }
+                    }}>افزودن تنوع</button>
+                  </PermissionGate>
                 </div>
               </div>
             </div>
@@ -225,68 +252,80 @@ export function ProductDetailPage() {
                 <div className="col-span-2 font-mono">{p.key}</div>
                 <div className="col-span-3 truncate">{p.valueString ?? ''}</div>
                 <div className="flex items-center gap-2">
-                  <button className="btn-red px-2 py-1" onClick={async ()=>{
-                    if (!confirm('حذف شود؟')) return
-                    try { await api.deleteProperty(product.id, p.id); await qc.invalidateQueries({ queryKey: ['products','detail', product.id] }); alert('حذف شد') } catch(e:any){ alert(e?.message || 'خطا در حذف') }
-                  }}>حذف</button>
+                  <PermissionGate permission={CatalogPermissionKeys.ProductsPropertiesDelete}>
+                    <button className="btn-red px-2 py-1" onClick={async ()=>{
+                      if (!confirm('حذف شود؟')) return
+                      try { await api.deleteProperty(product.id, p.id); await qc.invalidateQueries({ queryKey: ['products','detail', product.id] }); alert('حذف شد') } catch(e:any){ alert(e?.message || 'خطا در حذف') }
+                    }}>حذف</button>
+                  </PermissionGate>
                 </div>
               </div>
             ))}
           </div>
           <div className="pt-2">
             <h4 className="font-semibold">افزودن ویژگی جدید</h4>
-            <PropertiesEditor value={[]} onChange={async (items)=>{
-              try {
-                for (const it of items) {
-                  if (it.key.trim()) await api.upsertProductProperty(product.id, { key: it.key.trim(), valueString: it.value })
-                }
-                await qc.invalidateQueries({ queryKey: ['products','detail', product.id] });
-                alert('ذخیره شد')
-              } catch(e:any){ alert(e?.message || 'خطا در افزودن ویژگی') }
-            }} />
+            <PermissionGate permission={CatalogPermissionKeys.ProductsPropertiesCreate}>
+              <PropertiesEditor value={[]} onChange={async (items)=>{
+                try {
+                  for (const it of items) {
+                    if (it.key.trim()) await api.upsertProductProperty(product.id, { key: it.key.trim(), valueString: it.value })
+                  }
+                  await qc.invalidateQueries({ queryKey: ['products','detail', product.id] });
+                  alert('ذخیره شد')
+                } catch(e:any){ alert(e?.message || 'خطا در افزودن ویژگی') }
+              }} />
+            </PermissionGate>
           </div>
 
           <div className="pt-4 space-y-2">
             <h3 className="font-semibold">دسته‌بندی محصول</h3>
-            <CategoryMultiSelect
-              value={categoryIds.length ? categoryIds : product.categories.map(c=>c.categoryId)}
-              onChange={setCategoryIds}
-              primaryId={primaryCatId}
-              onSetPrimary={async (cid) => {
+            <PermissionGate anyPermissions={[CatalogPermissionKeys.ProductsCategoriesEdit, CatalogPermissionKeys.ProductsCategoriesPrimaryEdit]}>
+              <CategoryMultiSelect
+                value={categoryIds.length ? categoryIds : product.categories.map(c=>c.categoryId)}
+                onChange={setCategoryIds}
+                primaryId={primaryCatId}
+                onSetPrimary={async (cid) => {
+                  try {
+                    setPrimaryCatId(cid)
+                    // اطمینان از لینک بودن دسته و برگ بودن لیست باقی‌مانده
+                    const baseIds = (categoryIds.length ? categoryIds : product.categories.map(c=>c.categoryId))
+                    const ensured = baseIds.includes(cid) ? baseIds : [...baseIds, cid]
+                    const leafSet = new Set((leafCats ?? []).map(c => c.id))
+                    const ids = ensured.filter(id => leafSet.has(id) || id === cid)
+                    setCategoryIds(ids)
+                    // فراخوانی اختصاصی برای تنظیم primary در سرور
+                    await api.setPrimaryCategory(product.id, cid)
+                    await qc.invalidateQueries({ queryKey: ['products','detail', product.id] })
+                    alert('Saved')
+                  } catch (e:any) {
+                    alert(e?.message || 'Failed to set primary')
+                  }
+                }}
+              />
+            </PermissionGate>
+            <PermissionGate permission={CatalogPermissionKeys.ProductsCategoriesEdit}>
+              <button className="btn" onClick={async ()=>{
+                const leafSet = new Set((leafCats ?? []).map(c => c.id))
+                const baseIds = (categoryIds.length ? categoryIds : product.categories.map(c=>c.categoryId))
+                const ids = baseIds.filter(id => leafSet.has(id))
                 try {
-                  setPrimaryCatId(cid)
-                  // اطمینان از لینک بودن دسته و برگ بودن لیست باقی‌مانده
-                  const baseIds = (categoryIds.length ? categoryIds : product.categories.map(c=>c.categoryId))
-                  const ensured = baseIds.includes(cid) ? baseIds : [...baseIds, cid]
-                  const leafSet = new Set((leafCats ?? []).map(c => c.id))
-                  const ids = ensured.filter(id => leafSet.has(id) || id === cid)
-                  setCategoryIds(ids)
-                  // فراخوانی اختصاصی برای تنظیم primary در سرور
-                  await api.setPrimaryCategory(product.id, cid)
-                  await qc.invalidateQueries({ queryKey: ['products','detail', product.id] })
-                  alert('Saved')
+                  await setCats.mutateAsync({ categoryIds: ids, primaryCategoryId: primaryCatId || undefined })
+                  alert("Saved")
                 } catch (e:any) {
-                  alert(e?.message || 'Failed to set primary')
+                  alert(e?.message || 'Failed to update categories')
                 }
-              }}
-            />
-            <button className="btn" onClick={async ()=>{
-              const leafSet = new Set((leafCats ?? []).map(c => c.id))
-              const baseIds = (categoryIds.length ? categoryIds : product.categories.map(c=>c.categoryId))
-              const ids = baseIds.filter(id => leafSet.has(id))
-              try {
-                await setCats.mutateAsync({ categoryIds: ids, primaryCategoryId: primaryCatId || undefined })
-                alert("Saved")
-              } catch (e:any) {
-                alert(e?.message || 'Failed to update categories')
-              }
-            }}>ذخیره دسته‌ها</button>
+              }}>ذخیره دسته‌ها</button>
+            </PermissionGate>
           </div>
         </div>
       </div>
 
-      <SeoEditor product={product} />
-      <ProductStoresEditor product={product} />
+      <PermissionGate permission={CatalogPermissionKeys.ProductsSeoEdit}>
+        <SeoEditor product={product} />
+      </PermissionGate>
+      <PermissionGate permission={CatalogPermissionKeys.ProductsStoresManage}>
+        <ProductStoresEditor product={product} />
+      </PermissionGate>
     </div>
   )
 }

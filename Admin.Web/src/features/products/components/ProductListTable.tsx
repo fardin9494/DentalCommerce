@@ -4,6 +4,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toPublicMediaUrl } from '../../../lib/api/client'
 import type { ProductListItem } from '../types'
 import { formatJalaliDate } from '../../../shared/utils/date'
+import { PermissionGate } from '@/app/permissions'
+import { CatalogPermissionKeys } from '@/app/catalogPermissionKeys'
 
 type Props = {
   items: ProductListItem[]
@@ -38,15 +40,36 @@ export function ProductListTable({ items }: Props) {
               <td className="p-2">{renderStatus(p.status)}</td>
               <td className="p-2 whitespace-nowrap">{formatJalaliDate(p.createdAt)}</td>
               <td className="p-2">
-                <Link to={`/products/${p.id}`} className="btn">جزئیات</Link>
+                <PermissionGate permission={CatalogPermissionKeys.ProductsView}>
+                  <Link to={`/products/${p.id}`} className="btn">جزئیات</Link>
+                </PermissionGate>
+
                 {p.status === 'Active' ? (
-                  <button className="btn-red" onClick={async ()=>{
-                    try { await api.hideProduct(p.id); await qc.invalidateQueries({ queryKey: ['products','list'] }); alert('مخفی شد') } catch(e:any){ alert(e?.message || 'خطا در مخفی‌سازی') }
-                  }}>مخفی کردن</button>
+                  <PermissionGate permission={CatalogPermissionKeys.ProductsHide}>
+                    <button className="btn-red" onClick={async () => {
+                      try {
+                        await api.hideProduct(p.id)
+                        await qc.invalidateQueries({ queryKey: ['products', 'list'] })
+                        alert('مخفی شد')
+                      } catch (e: unknown) {
+                        const err = e as { message?: string }
+                        alert(err?.message || 'خطا در مخفی‌سازی')
+                      }
+                    }}>مخفی کردن</button>
+                  </PermissionGate>
                 ) : (
-                  <button className="btn-green" onClick={async ()=>{
-                    try { await api.activateProduct(p.id); await qc.invalidateQueries({ queryKey: ['products','list'] }); alert('فعال شد') } catch(e:any){ alert(e?.message || 'خطا در فعال‌سازی') }
-                  }}>فعال‌سازی</button>
+                  <PermissionGate permission={CatalogPermissionKeys.ProductsActivate}>
+                    <button className="btn-green" onClick={async () => {
+                      try {
+                        await api.activateProduct(p.id)
+                        await qc.invalidateQueries({ queryKey: ['products', 'list'] })
+                        alert('فعال شد')
+                      } catch (e: unknown) {
+                        const err = e as { message?: string }
+                        alert(err?.message || 'خطا در فعال‌سازی')
+                      }
+                    }}>فعال‌سازی</button>
+                  </PermissionGate>
                 )}
               </td>
             </tr>

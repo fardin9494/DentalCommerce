@@ -3,6 +3,8 @@ import { PageHeader } from '../../../shared/components/PageHeader'
 import { Spinner } from '../../../shared/components/Spinner'
 import { useStores, useCreateStore, useRenameStore, useSetStoreDomain } from '../../products/queries'
 import { swalPrompt, swalToastSuccess, swalToastError } from '../../../shared/utils/swal'
+import { PermissionGate } from '@/app/permissions'
+import { CatalogPermissionKeys } from '@/app/catalogPermissionKeys'
 
 export function StoresPage() {
   const { data: stores, isLoading, isError, error } = useStores()
@@ -34,16 +36,20 @@ export function StoresPage() {
                       <td className="p-2">{s.name}</td>
                       <td className="p-2">{s.domain || '-'}</td>
                       <td className="p-2 store-actions">
-                        <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
-                          const name = await swalPrompt({ title: 'ویرایش نام فروشگاه', defaultValue: s.name, required: true, confirmText: 'ذخیره', cancelText: 'لغو' })
-                          if (!name) return
-                          try { await rename.mutateAsync({ id: s.id, name }); swalToastSuccess('نام فروشگاه بروزرسانی شد') } catch (e:any) { swalToastError(e?.message || 'خطا در تغییر نام فروشگاه') }
-                        }}>تغییر نام</button>
-                        <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
-                          const domain = await swalPrompt({ title: 'دامنه فروشگاه (اختیاری)', defaultValue: s.domain || '', confirmText: 'ذخیره', cancelText: 'لغو' })
-                          if (domain === null) return
-                          try { await setDomain.mutateAsync({ id: s.id, domain: (domain || '').trim() || null }); swalToastSuccess('دامنه بروزرسانی شد') } catch (e:any) { swalToastError(e?.message || 'خطا در ثبت دامنه') }
-                        }}>تغییر وبسایت</button>
+                        <PermissionGate permission={CatalogPermissionKeys.StoresRename}>
+                          <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
+                            const name = await swalPrompt({ title: 'ویرایش نام فروشگاه', defaultValue: s.name, required: true, confirmText: 'ذخیره', cancelText: 'لغو' })
+                            if (!name) return
+                            try { await rename.mutateAsync({ id: s.id, name }); swalToastSuccess('نام فروشگاه بروزرسانی شد') } catch (e:any) { swalToastError(e?.message || 'خطا در تغییر نام فروشگاه') }
+                          }}>تغییر نام</button>
+                        </PermissionGate>
+                        <PermissionGate permission={CatalogPermissionKeys.StoresDomainEdit}>
+                          <button className="btn-secondary px-3 py-1.5 rounded" onClick={async () => {
+                            const domain = await swalPrompt({ title: 'دامنه فروشگاه (اختیاری)', defaultValue: s.domain || '', confirmText: 'ذخیره', cancelText: 'لغو' })
+                            if (domain === null) return
+                            try { await setDomain.mutateAsync({ id: s.id, domain: (domain || '').trim() || null }); swalToastSuccess('دامنه بروزرسانی شد') } catch (e:any) { swalToastError(e?.message || 'خطا در ثبت دامنه') }
+                          }}>تغییر وبسایت</button>
+                        </PermissionGate>
                       </td>
                     </tr>
                   ))}
@@ -54,16 +60,17 @@ export function StoresPage() {
         </div>
         <div className="card p-4">
           <h3 className="font-semibold mb-3">ایجاد فروشگاه</h3>
-          <form className="space-y-3" onSubmit={async (e) => {
-            e.preventDefault();
-            try {
-              await create.mutateAsync({ name: form.name, domain: form.domain || null })
-              setForm({ name: '', domain: '' })
-              swalToastSuccess('فروشگاه ایجاد شد')
-            } catch (err:any) {
-              swalToastError(err?.message || 'ایجاد فروشگاه ناموفق بود')
-            }
-          }}>
+          <PermissionGate permission={CatalogPermissionKeys.StoresCreate}>
+            <form className="space-y-3" onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                await create.mutateAsync({ name: form.name, domain: form.domain || null })
+                setForm({ name: '', domain: '' })
+                swalToastSuccess('فروشگاه ایجاد شد')
+              } catch (err:any) {
+                swalToastError(err?.message || 'ایجاد فروشگاه ناموفق بود')
+              }
+            }}>
             <div>
               <label className="label">نام</label>
               <input className="input" value={form.name} onChange={e=>setForm(f=>({ ...f, name: e.target.value }))} />
@@ -73,7 +80,8 @@ export function StoresPage() {
               <input className="input" value={form.domain} onChange={e=>setForm(f=>({ ...f, domain: e.target.value }))} />
             </div>
             <button type="submit" className="btn">ایجاد</button>
-          </form>
+            </form>
+          </PermissionGate>
         </div>
       </div>
     </div>

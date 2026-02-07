@@ -10,11 +10,14 @@ import {
   useLeafCategoriesWithProducts,
 } from '../../products/queries'
 import { swalConfirm, swalPrompt, swalToastError, swalToastSuccess } from '../../../shared/utils/swal'
+import { PermissionGate, useCatalogPermissions } from '@/app/permissions'
+import { CatalogPermissionKeys } from '@/app/catalogPermissionKeys'
 
 type FlatNode = { id: string; name: string; slug: string; parentId?: string | null; depth: number }
 type TreeNode = FlatNode & { children: TreeNode[] }
 
 export function CategoriesPage() {
+  const { can } = useCatalogPermissions()
   const { data: nodes, isLoading } = useCategories()
   const create = useCreateCategory()
   const rename = useRenameCategory()
@@ -80,6 +83,10 @@ export function CategoriesPage() {
                 className="mb-2 p-2 border rounded bg-gray-50 text-xs text-gray-700"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={async (e) => {
+                  if (!can(CatalogPermissionKeys.CategoriesMove)) {
+                    swalToastError('دسترسی ندارید.')
+                    return
+                  }
                   e.preventDefault()
                   const from = dragId.current
                   dragId.current = null
@@ -107,6 +114,7 @@ export function CategoriesPage() {
 
               <CategoryTree
                 nodes={tree}
+                canRename={can(CatalogPermissionKeys.CategoriesRename)}
                 isExpanded={isExpanded}
                 onToggle={(id) => setExpanded((s) => ({ ...s, [id]: !isExpanded(id) }))}
                 onRename={async (id, prev) => {
@@ -130,6 +138,10 @@ export function CategoriesPage() {
                 }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={async (targetId: string) => {
+                  if (!can(CatalogPermissionKeys.CategoriesMove)) {
+                    swalToastError('دسترسی ندارید.')
+                    return
+                  }
                   // جلوگیری از دراپ روی برگ‌هایی که محصول دارند
                   if (blockedTargets.has(targetId)) {
                     swalToastError('نمی‌توانید درون دسته‌ای که محصول دارد، زیر‌دسته اضافه کنید')
@@ -167,7 +179,8 @@ export function CategoriesPage() {
         {/* فرم ایجاد دسته */}
         <div className="card p-4">
           <h3 className="font-semibold mb-3">ایجاد دسته</h3>
-          <form
+          <PermissionGate permission={CatalogPermissionKeys.CategoriesCreate}>
+            <form
             className="space-y-3"
             onSubmit={async (e) => {
               e.preventDefault()
@@ -205,15 +218,17 @@ export function CategoriesPage() {
               </div>
             </div>
             <button type="submit" className="btn">ایجاد</button>
-          </form>
+            </form>
+          </PermissionGate>
         </div>
       </div>
     </div>
   )
 }
 
-function CategoryTree({ nodes, isExpanded, onToggle, onRename, onDragStart, onDragOver, onDrop }: {
+function CategoryTree({ nodes, canRename, isExpanded, onToggle, onRename, onDragStart, onDragOver, onDrop }: {
   nodes: TreeNode[]
+  canRename: boolean
   isExpanded: (id: string) => boolean
   onToggle: (id: string) => void
   onRename: (id: string, node: { name: string; slug: string }) => void
@@ -246,9 +261,11 @@ function CategoryTree({ nodes, isExpanded, onToggle, onRename, onDragStart, onDr
                 <span className="text-xs text-gray-500"> ({n.slug})</span>
               </span>
               <div className="flex items-center gap-2">
-                <button className="btn-secondary px-2 py-1 rounded" onClick={() => onRename(n.id, { name: n.name, slug: n.slug })}>
-                  ویرایش
-                </button>
+                {canRename && (
+                  <button className="btn-secondary px-2 py-1 rounded" onClick={() => onRename(n.id, { name: n.name, slug: n.slug })}>
+                    ویرایش
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -256,6 +273,7 @@ function CategoryTree({ nodes, isExpanded, onToggle, onRename, onDragStart, onDr
             <div className="pr-6 mt-1">
               <CategoryTree
                 nodes={n.children}
+                canRename={canRename}
                 isExpanded={isExpanded}
                 onToggle={onToggle}
                 onRename={onRename}

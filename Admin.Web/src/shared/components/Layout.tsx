@@ -1,10 +1,12 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { LoginPage } from '../../app/LoginPage'
 import { useAdminAuth } from '../../app/auth'
+import { PermissionGate } from '@/app/permissions'
+import { CatalogPermissionKeys } from '@/app/catalogPermissionKeys'
 
 export function Layout() {
   const loc = useLocation()
-  const { token } = useAdminAuth()
+  const { token, logout } = useAdminAuth()
 
   if (!token) {
     return <LoginPage />
@@ -16,11 +18,22 @@ export function Layout() {
         <div className="container-std flex items-center justify-between h-14">
           <Link to="/" className="font-semibold">Admin.Web</Link>
           <nav className="flex items-center gap-4 text-sm">
-            <Link to="/products" className={navCls(loc.pathname.startsWith('/products'))}>محصولات</Link>
-            <Link to="/brands" className={navCls(loc.pathname.startsWith('/brands'))}>برندها</Link>
-            <Link to="/categories" className={navCls(loc.pathname.startsWith('/categories'))}>دسته‌ها</Link>
-            <Link to="/stores" className={navCls(loc.pathname.startsWith('/stores'))}>فروشگاه ها</Link>
-            <Link to="/countries" className={navCls(loc.pathname.startsWith('/countries'))}>کشور ها</Link>
+            <PermissionGate permission={CatalogPermissionKeys.ProductsView}>
+              <Link to="/products" className={navCls(loc.pathname.startsWith('/products'))}>محصولات</Link>
+            </PermissionGate>
+            <PermissionGate permission={CatalogPermissionKeys.BrandsView}>
+              <Link to="/brands" className={navCls(loc.pathname.startsWith('/brands'))}>برندها</Link>
+            </PermissionGate>
+            <PermissionGate permission={CatalogPermissionKeys.CategoriesTreeView}>
+              <Link to="/categories" className={navCls(loc.pathname.startsWith('/categories'))}>دسته‌ها</Link>
+            </PermissionGate>
+            <PermissionGate permission={CatalogPermissionKeys.StoresView}>
+              <Link to="/stores" className={navCls(loc.pathname.startsWith('/stores'))}>فروشگاه‌ها</Link>
+            </PermissionGate>
+            <PermissionGate permission={CatalogPermissionKeys.CountriesView}>
+              <Link to="/countries" className={navCls(loc.pathname.startsWith('/countries'))}>کشورها</Link>
+            </PermissionGate>
+            <button className="btn-secondary px-3 py-1.5 rounded" onClick={logout}>خروج</button>
           </nav>
         </div>
       </header>

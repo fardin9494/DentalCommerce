@@ -6,7 +6,7 @@ export function useProducts(params: api.ListParams) {
   return useQuery({
     queryKey: ['products', 'list', params],
     queryFn: () => api.listProducts(params),
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData,
   })
 }
 
