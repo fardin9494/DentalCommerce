@@ -53,6 +53,20 @@ type CatalogPermissionDto = {
   items: PermissionItem[]
 }
 
+type PricingPermissionDto = {
+  userId: string
+  isSuperAdmin: boolean
+  uiPolicy: 'Hide' | 'Disable'
+  items: PermissionItem[]
+}
+
+type SalesPermissionDto = {
+  userId: string
+  isSuperAdmin: boolean
+  uiPolicy: 'Hide' | 'Disable'
+  items: PermissionItem[]
+}
+
 type UserSummary = {
   userId: string
   phoneNumber: string
@@ -81,6 +95,8 @@ export function IdentityUserDetailsPage() {
   const [audit, setAudit] = useState<AuditList | null>(null)
   const [inventoryPermissions, setInventoryPermissions] = useState<InventoryPermissionDto | null>(null)
   const [catalogPermissions, setCatalogPermissions] = useState<CatalogPermissionDto | null>(null)
+  const [pricingPermissions, setPricingPermissions] = useState<PricingPermissionDto | null>(null)
+  const [salesPermissions, setSalesPermissions] = useState<SalesPermissionDto | null>(null)
   const [busy, setBusy] = useState(false)
   const [banReason, setBanReason] = useState('')
   const [banUntil, setBanUntil] = useState('')
@@ -94,10 +110,14 @@ export function IdentityUserDetailsPage() {
       const auditRes = await fetchJson<AuditList>(`/admin/users/${id}/audit`)
       const inventoryPermRes = await fetchJson<InventoryPermissionDto>(`/admin/users/${id}/permissions/inventory`)
       const catalogPermRes = await fetchJson<CatalogPermissionDto>(`/admin/users/${id}/permissions/catalog`)
+      const pricingPermRes = await fetchJson<PricingPermissionDto>(`/admin/users/${id}/permissions/pricing`)
+      const salesPermRes = await fetchJson<SalesPermissionDto>(`/admin/users/${id}/permissions/sales`)
       setData(res)
       setAudit(auditRes)
       setInventoryPermissions(inventoryPermRes)
       setCatalogPermissions(catalogPermRes)
+      setPricingPermissions(pricingPermRes)
+      setSalesPermissions(salesPermRes)
       setBanReason(res.user.banReason || '')
       setBanUntil(res.user.banUntilUtc ? toLocalInput(res.user.banUntilUtc) : '')
     } catch (err: any) {
@@ -199,6 +219,18 @@ export function IdentityUserDetailsPage() {
     setCatalogPermissions({ ...catalogPermissions, items })
   }
 
+  function updatePricingPermission(key: string, granted: boolean) {
+    if (!pricingPermissions) return
+    const items = pricingPermissions.items.map(p => (p.key === key ? { ...p, granted } : p))
+    setPricingPermissions({ ...pricingPermissions, items })
+  }
+
+  function updateSalesPermission(key: string, granted: boolean) {
+    if (!salesPermissions) return
+    const items = salesPermissions.items.map(p => (p.key === key ? { ...p, granted } : p))
+    setSalesPermissions({ ...salesPermissions, items })
+  }
+
   async function saveInventoryPermissions() {
     if (!id || !inventoryPermissions) return
     setBusy(true)
@@ -232,6 +264,44 @@ export function IdentityUserDetailsPage() {
       toast.success('Catalog permissions saved')
     } catch (err: any) {
       toast.error(err?.message || 'Error while saving catalog permissions')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function savePricingPermissions() {
+    if (!id || !pricingPermissions) return
+    setBusy(true)
+    try {
+      await fetchJson<void>(`/admin/users/${id}/permissions/pricing`, {
+        method: 'POST',
+        json: {
+          uiPolicy: pricingPermissions.uiPolicy,
+          permissions: pricingPermissions.items.map(p => ({ key: p.key, granted: p.granted })),
+        },
+      })
+      toast.success('دسترسی‌های Pricing ذخیره شد')
+    } catch (err: any) {
+      toast.error(err?.message || 'خطا در ذخیره دسترسی‌های Pricing')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveSalesPermissions() {
+    if (!id || !salesPermissions) return
+    setBusy(true)
+    try {
+      await fetchJson<void>(`/admin/users/${id}/permissions/sales`, {
+        method: 'POST',
+        json: {
+          uiPolicy: salesPermissions.uiPolicy,
+          permissions: salesPermissions.items.map(p => ({ key: p.key, granted: p.granted })),
+        },
+      })
+      toast.success('دسترسی‌های Sales ذخیره شد')
+    } catch (err: any) {
+      toast.error(err?.message || 'خطا در ذخیره دسترسی‌های Sales')
     } finally {
       setBusy(false)
     }
@@ -428,6 +498,98 @@ export function IdentityUserDetailsPage() {
           </div>
         ) : (
           <div className="text-xs text-gray-500">Loading catalog permissions...</div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold">دسترسی‌های پرایسینگ</h2>
+          <button className="btn-ghost" onClick={savePricingPermissions} disabled={busy || pricingPermissions?.isSuperAdmin}>ذخیره</button>
+        </div>
+        {pricingPermissions ? (
+          <div className="space-y-3 text-sm">
+            {pricingPermissions.isSuperAdmin && (
+              <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
+                این کاربر ادمین مادر است و همه دسترسی‌های پرایسینگ را دارد.
+              </div>
+            )}
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-gray-500">سیاست UI:</span>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="uiPolicyPricing"
+                  checked={pricingPermissions.uiPolicy === 'Hide'}
+                  onChange={() => setPricingPermissions({ ...pricingPermissions, uiPolicy: 'Hide' })}
+                  disabled={pricingPermissions.isSuperAdmin}
+                />
+                مخفی‌سازی دکمه‌ها
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="uiPolicyPricing"
+                  checked={pricingPermissions.uiPolicy === 'Disable'}
+                  onChange={() => setPricingPermissions({ ...pricingPermissions, uiPolicy: 'Disable' })}
+                  disabled={pricingPermissions.isSuperAdmin}
+                />
+                قفل‌کردن دکمه‌ها
+              </label>
+            </div>
+            <PermissionToggleList
+              items={pricingPermissions.items}
+              disabled={pricingPermissions.isSuperAdmin}
+              onChange={updatePricingPermission}
+            />
+          </div>
+        ) : (
+          <div className="text-xs text-gray-500">در حال دریافت دسترسی‌های پرایسینگ…</div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold">دسترسی‌های Sales</h2>
+          <button className="btn-ghost" onClick={saveSalesPermissions} disabled={busy || salesPermissions?.isSuperAdmin}>ذخیره</button>
+        </div>
+        {salesPermissions ? (
+          <div className="space-y-3 text-sm">
+            {salesPermissions.isSuperAdmin && (
+              <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
+                این کاربر ادمین مادر است و همه دسترسی‌های Sales را دارد.
+              </div>
+            )}
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-gray-500">سیاست UI:</span>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="uiPolicySales"
+                  checked={salesPermissions.uiPolicy === 'Hide'}
+                  onChange={() => setSalesPermissions({ ...salesPermissions, uiPolicy: 'Hide' })}
+                  disabled={salesPermissions.isSuperAdmin}
+                />
+                مخفی‌سازی دکمه‌ها
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="uiPolicySales"
+                  checked={salesPermissions.uiPolicy === 'Disable'}
+                  onChange={() => setSalesPermissions({ ...salesPermissions, uiPolicy: 'Disable' })}
+                  disabled={salesPermissions.isSuperAdmin}
+                />
+                قفل‌کردن دکمه‌ها
+              </label>
+            </div>
+            <PermissionToggleList
+              items={salesPermissions.items}
+              disabled={salesPermissions.isSuperAdmin}
+              onChange={updateSalesPermission}
+            />
+          </div>
+        ) : (
+          <div className="text-xs text-gray-500">در حال دریافت دسترسی‌های Sales…</div>
         )}
       </div>
 

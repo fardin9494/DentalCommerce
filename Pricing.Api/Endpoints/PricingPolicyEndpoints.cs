@@ -1,4 +1,5 @@
 using MediatR;
+using Pricing.Api.Permissions;
 using Pricing.Application.Features.Policies;
 using Pricing.Domain.Common;
 
@@ -14,19 +15,19 @@ public static class PricingPolicyEndpoints
         {
             var result = await mediator.Send(new GetPricingPoliciesQuery());
             return Results.Ok(result);
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.PoliciesListView);
 
         policies.MapGet("/", async (Guid? siteId, IMediator mediator) =>
         {
             var result = await mediator.Send(new GetPricingPolicyQuery(siteId));
             return result is null ? Results.NotFound() : Results.Ok(result);
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.PoliciesView);
 
         policies.MapPut("/", async (UpsertPricingPolicyBody body, IMediator mediator) =>
         {
             var id = await mediator.Send(new UpsertPricingPolicyCommand(body.SiteId, body.DefaultStackingMode));
             return Results.Ok(new { id });
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.PoliciesEdit);
 
         return group;
     }

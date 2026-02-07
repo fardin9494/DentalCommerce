@@ -4,6 +4,8 @@ import { fetchJson, fetchJsonWithBase } from '@/lib/api/client'
 import { CATALOG_API_BASE, INVENTORY_API_BASE } from '@/app/env'
 import { useToast } from '@/shared/components/toast/ToastProvider'
 import { formatDate, formatNumber } from '@/shared/utils/date'
+import { useSalesPermissions } from '@/app/permissions'
+import { SalesPermissionKeys } from '@/app/salesPermissionKeys'
 
 type OrderLine = {
   skuId: string
@@ -122,6 +124,21 @@ type OrderNote = {
 export function OrderDetailsPage() {
   const { id } = useParams()
   const toast = useToast()
+  const { can } = useSalesPermissions()
+  const canTimelineView = can(SalesPermissionKeys.OrdersTimelineView)
+  const canNotesView = can(SalesPermissionKeys.OrdersNotesView)
+  const canNotesAdd = can(SalesPermissionKeys.OrdersNotesAdd)
+  const canRefundsView = can(SalesPermissionKeys.RefundsView)
+  const canRefundsRequest = can(SalesPermissionKeys.RefundsRequest)
+  const canRefundsApprove = can(SalesPermissionKeys.RefundsApprove)
+  const canRefundsReject = can(SalesPermissionKeys.RefundsReject)
+  const canRefundsComplete = can(SalesPermissionKeys.RefundsComplete)
+  const canOrdersShip = can(SalesPermissionKeys.OrdersShip)
+  const canOrdersDeliver = can(SalesPermissionKeys.OrdersDeliver)
+  const canOrdersReturn = can(SalesPermissionKeys.OrdersReturn)
+  const canOrdersRefund = can(SalesPermissionKeys.OrdersRefund)
+  const canOrdersCancel = can(SalesPermissionKeys.OrdersCancel)
+  const canOrdersCancelLines = can(SalesPermissionKeys.OrdersCancelLines)
   const [order, setOrder] = useState<OrderDetail | null>(null)
   const [reservations, setReservations] = useState<ReservationItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -196,7 +213,11 @@ export function OrderDetailsPage() {
   }, [id, toast])
 
   const loadTimeline = async () => {
-    if (!id) return
+    if (!id || !canTimelineView) {
+      setTimeline([])
+      setTimelineError(null)
+      return
+    }
     setTimelineError(null)
     try {
       const res = await fetchJson<TimelineItem[]>(`/sales/orders/${id}/timeline`)
@@ -210,10 +231,14 @@ export function OrderDetailsPage() {
   useEffect(() => {
     if (!id) return
     loadTimeline()
-  }, [id])
+  }, [id, canTimelineView])
 
   const loadNotes = async () => {
-    if (!id) return
+    if (!id || !canNotesView) {
+      setNotes([])
+      setNotesError(null)
+      return
+    }
     setNotesLoading(true)
     setNotesError(null)
     try {
@@ -230,10 +255,14 @@ export function OrderDetailsPage() {
   useEffect(() => {
     if (!id) return
     loadNotes()
-  }, [id])
+  }, [id, canNotesView])
 
   const loadRefunds = async () => {
-    if (!id) return
+    if (!id || !canRefundsView) {
+      setRefunds([])
+      setRefundsError(null)
+      return
+    }
     setRefundsLoading(true)
     setRefundsError(null)
     try {
@@ -250,9 +279,13 @@ export function OrderDetailsPage() {
   useEffect(() => {
     if (!id) return
     loadRefunds()
-  }, [id])
+  }, [id, canRefundsView])
 
   const handleAddNote = async () => {
+    if (!canNotesAdd) {
+      toast.error('شما دسترسی افزودن یادداشت را ندارید.')
+      return
+    }
     if (!id || !newNote.trim()) return
     setAddingNote(true)
     try {
@@ -356,18 +389,23 @@ export function OrderDetailsPage() {
     return () => { ignore = true }
   }, [order?.lines])
 
-  const canShip = order?.status === 'Placed'
-  const canDeliver = order?.status === 'Shipped'
-  const canReturn = order?.status === 'Delivered'
-  const canRefund = order?.status === 'Returned' || order?.status === 'Delivered' || order?.status === 'Cancelled'
-  const canCancel = order?.status === 'Draft' || order?.status === 'Placed'
-  const canEditShipFields = order?.status === 'Placed'
-  const canEditReturnFields = order?.status === 'Delivered'
-  const canEditRefundFields = order?.status === 'Returned' || order?.status === 'Delivered' || order?.status === 'Cancelled'
-  const canEditLines = order?.status === 'Draft' || order?.status === 'Placed'
+  const canShip = canOrdersShip && order?.status === 'Placed'
+  const canDeliver = canOrdersDeliver && order?.status === 'Shipped'
+  const canReturn = canOrdersReturn && order?.status === 'Delivered'
+  const canRefund = canOrdersRefund && (order?.status === 'Returned' || order?.status === 'Delivered' || order?.status === 'Cancelled')
+  const canCancel = canOrdersCancel && (order?.status === 'Draft' || order?.status === 'Placed')
+  const canEditShipFields = canShip
+  const canEditReturnFields = canReturn
+  const canEditRefundFields = canRefund
+  const canEditLines = canOrdersCancelLines && (order?.status === 'Draft' || order?.status === 'Placed')
 
   const handleAction = async (action: 'ship' | 'deliver' | 'return' | 'refund' | 'cancel') => {
     if (!id) return
+    if (action === 'ship' && !canOrdersShip) return toast.error('شما دسترسی ارسال سفارش را ندارید.')
+    if (action === 'deliver' && !canOrdersDeliver) return toast.error('شما دسترسی تحویل سفارش را ندارید.')
+    if (action === 'return' && !canOrdersReturn) return toast.error('شما دسترسی مرجوعی سفارش را ندارید.')
+    if (action === 'refund' && !canOrdersRefund) return toast.error('شما دسترسی Refund سفارش را ندارید.')
+    if (action === 'cancel' && !canOrdersCancel) return toast.error('شما دسترسی لغو سفارش را ندارید.')
     try {
       if (action === 'ship') {
         await fetchJson(`/sales/orders/${id}/ship`, { json: { carrier, trackingCode, note: actionNote || null } })
@@ -395,6 +433,10 @@ export function OrderDetailsPage() {
   }
 
   const handlePartialCancel = async () => {
+    if (!canOrdersCancelLines) {
+      toast.error('شما دسترسی لغو جزئی سفارش را ندارید.')
+      return
+    }
     if (!id || !order) return
     if (!partialLineKey) {
       toast.error('آیتم را انتخاب کنید.')
@@ -445,6 +487,10 @@ export function OrderDetailsPage() {
   }
 
   const handleApproveRefund = async (refundId: string) => {
+    if (!canRefundsApprove) {
+      toast.error('شما دسترسی تایید بازپرداخت را ندارید.')
+      return
+    }
     setRefundActionLoading(refundId)
     try {
       await fetchJson(`/sales/refunds/${refundId}/approve`, {
@@ -460,6 +506,10 @@ export function OrderDetailsPage() {
   }
 
   const handleRejectRefund = async (refundId: string) => {
+    if (!canRefundsReject) {
+      toast.error('شما دسترسی رد بازپرداخت را ندارید.')
+      return
+    }
     const reason = refundRejectReasons[refundId]
     if (!reason || reason.trim().length === 0) {
       toast.error('دلیل رد را وارد کنید.')
@@ -480,6 +530,10 @@ export function OrderDetailsPage() {
   }
 
   const handleCompleteRefund = async (refundId: string) => {
+    if (!canRefundsComplete) {
+      toast.error('شما دسترسی تکمیل بازپرداخت را ندارید.')
+      return
+    }
     setRefundActionLoading(refundId)
     try {
       await fetchJson(`/sales/refunds/${refundId}/complete`, {
@@ -1027,6 +1081,7 @@ export function OrderDetailsPage() {
           </div>
 
           {/* Notes */}
+          {(canNotesView || canNotesAdd) && (
           <div className="card p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1093,7 +1148,7 @@ export function OrderDetailsPage() {
                 <button
                   className="btn flex items-center gap-2 w-full md:w-auto"
                   onClick={handleAddNote}
-                  disabled={!newNote.trim() || addingNote}
+                  disabled={!canNotesAdd || !newNote.trim() || addingNote}
                 >
                   {addingNote ? (
                     <>
@@ -1178,8 +1233,10 @@ export function OrderDetailsPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* Refunds */}
+          {canRefundsView && (
           <div className="card p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1264,14 +1321,14 @@ export function OrderDetailsPage() {
                           <button
                             className="btn w-full"
                             onClick={() => handleApproveRefund(refund.id)}
-                            disabled={refundActionLoading === refund.id}
+                            disabled={!canRefundsApprove || refundActionLoading === refund.id}
                           >
                             تایید
                           </button>
                           <button
                             className="btn-secondary w-full"
                             onClick={() => handleRejectRefund(refund.id)}
-                            disabled={refundActionLoading === refund.id}
+                            disabled={!canRefundsReject || refundActionLoading === refund.id}
                           >
                             رد
                           </button>
@@ -1294,7 +1351,7 @@ export function OrderDetailsPage() {
                           <button
                             className="btn w-full"
                             onClick={() => handleCompleteRefund(refund.id)}
-                            disabled={refundActionLoading === refund.id}
+                            disabled={!canRefundsComplete || refundActionLoading === refund.id}
                           >
                             تکمیل بازپرداخت
                           </button>
@@ -1306,8 +1363,10 @@ export function OrderDetailsPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* Timeline */}
+          {canTimelineView && (
           <div className="card p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
               <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1378,6 +1437,7 @@ export function OrderDetailsPage() {
               )})}
             </div>
           </div>
+          )}
         </>
       )}
     </div>

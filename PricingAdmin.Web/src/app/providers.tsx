@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ToastProvider } from '../shared/components/toast/ToastProvider'
 import { ConfirmProvider } from '../shared/components/confirm/ConfirmProvider'
 import { AdminAuthProvider } from './auth'
+import { PricingPermissionsProvider } from './permissions'
 
 export function AppProviders({ children }: PropsWithChildren) {
   const [client] = useState(() => new QueryClient({
@@ -18,11 +19,13 @@ export function AppProviders({ children }: PropsWithChildren) {
   return (
     <QueryClientProvider client={client}>
       <AdminAuthProvider>
-        <ToastProvider>
-          <ConfirmProvider>
-            {children}
-          </ConfirmProvider>
-        </ToastProvider>
+        <PricingPermissionsProvider>
+          <ToastProvider>
+            <ConfirmProvider>
+              {children}
+            </ConfirmProvider>
+          </ToastProvider>
+        </PricingPermissionsProvider>
       </AdminAuthProvider>
     </QueryClientProvider>
   )

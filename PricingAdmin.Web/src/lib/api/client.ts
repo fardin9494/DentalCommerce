@@ -52,26 +52,44 @@ export async function fetchJsonWithBase<T>(base: string, path: string, opts: Opt
   }
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
+  const method = opts.method ?? (opts.json !== undefined ? 'POST' : undefined)
+  const shouldSendBody = method !== 'GET' && method !== 'HEAD'
+
   const res = await fetch(`${base}${path}`.replace(/\/$/, ''), {
     ...opts,
+    method,
     headers,
-    body: opts.json !== undefined ? JSON.stringify(opts.json) : opts.body,
+    body: shouldSendBody ? (opts.json !== undefined ? JSON.stringify(opts.json) : opts.body) : undefined,
   })
 
   const isJson = res.headers.get('content-type')?.includes('application/json')
   if (!res.ok) {
+    if (res.status === 401) {
+      const err: ApiError = { status: res.status, message: 'نیاز به ورود مجدد دارید.', details: null }
+      throw err
+    }
+    if (res.status === 403) {
+      const err: ApiError = { status: res.status, message: 'دسترسی ندارید.', details: null }
+      throw err
+    }
+
     let message = res.statusText
     let details: unknown
     try {
       if (isJson) {
         const data = await res.json()
-        message = data.message || data.error || message
+        message = data.detail || data.message || data.error || data.title || message
         details = data
       } else {
         message = await res.text()
       }
     } catch {}
-    const err: ApiError = { status: res.status, message, details }
+
+    const errorMessage = details && typeof details === 'object' && 'error' in details
+      ? String((details as { error: unknown }).error)
+      : message
+
+    const err: ApiError = { status: res.status, message: errorMessage, details }
     throw err
   }
 

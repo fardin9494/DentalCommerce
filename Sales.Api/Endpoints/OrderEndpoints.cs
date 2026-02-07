@@ -1,4 +1,5 @@
 using MediatR;
+using Sales.Api.Permissions;
 using Sales.Application.Features.Orders.Commands;
 using Sales.Application.Features.Orders.Queries;
 using AddOrderNoteRequest = Sales.Application.Features.Orders.Commands.AddOrderNoteRequest;
@@ -24,19 +25,19 @@ public static class OrderEndpoints
         {
             var result = await mediator.Send(new CreateOrderCommand(request));
             return Results.Ok(result);
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersCreate);
 
         group.MapGet("/orders/{id:guid}", async (Guid id, IMediator mediator) =>
         {
             var result = await mediator.Send(new GetOrderByIdQuery(id));
             return result is null ? Results.NotFound() : Results.Ok(result);
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersDetailView);
 
         group.MapGet("/orders/{id:guid}/timeline", async (Guid id, IMediator mediator) =>
         {
             var result = await mediator.Send(new GetOrderTimelineQuery(id));
             return Results.Ok(result);
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersTimelineView);
 
         group.MapPost("/orders/{id:guid}/ship", async (Guid id, ShipOrderRequest body, IMediator mediator) =>
         {
@@ -47,7 +48,7 @@ public static class OrderEndpoints
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersShip);
 
         group.MapPost("/orders/{id:guid}/deliver", async (Guid id, DeliverOrderRequest body, IMediator mediator) =>
         {
@@ -58,7 +59,7 @@ public static class OrderEndpoints
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersDeliver);
 
         group.MapPost("/orders/{id:guid}/return", async (Guid id, ReturnOrderRequest body, IMediator mediator) =>
         {
@@ -69,7 +70,7 @@ public static class OrderEndpoints
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersReturn);
 
         group.MapPost("/orders/{id:guid}/refund", async (Guid id, RefundOrderRequest body, IMediator mediator) =>
         {
@@ -80,7 +81,7 @@ public static class OrderEndpoints
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersRefund);
 
         group.MapPost("/orders/{id:guid}/retry-payment", async (Guid id, IMediator mediator) =>
         {
@@ -91,7 +92,7 @@ public static class OrderEndpoints
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersRetryPayment);
 
         group.MapPost("/orders/{id:guid}/cancel", async (Guid id, CancelOrderRequest body, IMediator mediator) =>
         {
@@ -102,7 +103,7 @@ public static class OrderEndpoints
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersCancel);
 
         group.MapPost("/orders/{id:guid}/cancel-lines", async (Guid id, CancelOrderLinesRequest body, IMediator mediator) =>
         {
@@ -113,7 +114,7 @@ public static class OrderEndpoints
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersCancelLines);
 
         group.MapPost("/orders/{id:guid}/refunds", async (Guid id, RequestRefundRequest body, IMediator mediator) =>
         {
@@ -124,7 +125,7 @@ public static class OrderEndpoints
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.RefundsRequest);
 
         group.MapGet("/orders", async (
             Guid? siteId,
@@ -147,7 +148,7 @@ public static class OrderEndpoints
                 Page: page ?? 1,
                 PageSize: pageSize ?? 20));
             return Results.Ok(result);
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersView);
 
         group.MapGet("/orders/{id:guid}/notes", async (
             Guid id,
@@ -156,13 +157,13 @@ public static class OrderEndpoints
         {
             var result = await mediator.Send(new GetOrderNotesQuery(id, includeInternal ?? true));
             return Results.Ok(result);
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersNotesView);
 
         group.MapGet("/orders/{id:guid}/refunds", async (Guid id, IMediator mediator) =>
         {
             var result = await mediator.Send(new GetOrderRefundsQuery(id));
             return Results.Ok(result);
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.RefundsView);
 
         group.MapPost("/orders/{id:guid}/notes", async (
             Guid id,
@@ -176,7 +177,7 @@ public static class OrderEndpoints
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.OrdersNotesAdd);
 
         group.MapPost("/refunds/{id:guid}/approve", async (Guid id, ApproveRefundRequest body, IMediator mediator) =>
         {
@@ -187,7 +188,7 @@ public static class OrderEndpoints
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.RefundsApprove);
 
         group.MapPost("/refunds/{id:guid}/reject", async (Guid id, RejectRefundRequest body, IMediator mediator) =>
         {
@@ -198,7 +199,7 @@ public static class OrderEndpoints
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.RefundsReject);
 
         group.MapPost("/refunds/{id:guid}/complete", async (Guid id, CompleteRefundRequest body, IMediator mediator) =>
         {
@@ -209,7 +210,7 @@ public static class OrderEndpoints
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { message = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { message = ex.Message }); }
-        });
+        }).RequireSalesPermission(SalesPermissionKeys.RefundsComplete);
 
         return group;
     }

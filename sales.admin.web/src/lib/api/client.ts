@@ -51,13 +51,16 @@ export async function fetchJsonWithBase<T>(base: string, path: string, opts: Opt
     try {
       if (isJson) {
         const data = await res.json()
-        message = data.message || data.error || message
+        message = data.detail || data.message || data.error || data.title || message
         details = data
       } else {
         message = await res.text()
       }
     } catch {}
-    const err: ApiError = { status: res.status, message, details }
+    const errorMessage = details && typeof details === 'object' && 'error' in details
+      ? String((details as { error: unknown }).error)
+      : message
+    const err: ApiError = { status: res.status, message: errorMessage, details }
     throw err
   }
 

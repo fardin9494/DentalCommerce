@@ -1,4 +1,5 @@
 using MediatR;
+using Pricing.Api.Permissions;
 using Pricing.Application.Features.PriceLists;
 
 namespace Pricing.Api.Endpoints;
@@ -13,31 +14,31 @@ public static class PriceListEndpoints
         {
             var result = await mediator.Send(new ListPriceListsQuery());
             return Results.Ok(result);
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.PriceListsView);
 
         lists.MapGet("/{id:guid}", async (Guid id, IMediator mediator) =>
         {
             var result = await mediator.Send(new GetPriceListByIdQuery(id));
             return result is null ? Results.NotFound() : Results.Ok(result);
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.PriceListsDetailView);
 
         lists.MapPost("/", async (CreatePriceListCommand cmd, IMediator mediator) =>
         {
             var id = await mediator.Send(cmd);
             return Results.Created($"/api/pricing/pricelists/{id}", new { id });
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.PriceListsCreate);
 
         lists.MapPut("/{id:guid}", async (Guid id, UpdatePriceListBody body, IMediator mediator) =>
         {
             await mediator.Send(new UpdatePriceListCommand(id, body.Name, body.Currency, body.ValidFrom, body.ValidTo, body.IsActive));
             return Results.NoContent();
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.PriceListsEdit);
 
         lists.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) =>
         {
             await mediator.Send(new DeletePriceListCommand(id));
             return Results.NoContent();
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.PriceListsDelete);
 
         return group;
     }

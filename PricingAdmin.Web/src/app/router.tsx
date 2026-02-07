@@ -12,6 +12,8 @@ import { BulkOperationsPage } from '../features/pricing/routes/BulkOperationsPag
 import { ProductPricingPage } from '../features/pricing/routes/ProductPricingPage'
 import { PricingHomePage } from '../features/pricing/routes/PricingHomePage'
 import { PricingReportPage } from '../features/pricing/routes/PricingReportPage'
+import { PermissionGate } from './permissions'
+import { PricingPermissionKeys } from './pricingPermissionKeys'
 
 const router = createBrowserRouter([
   {
@@ -21,16 +23,93 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/pricing/home" replace /> },
       { path: 'pricing/home', element: <PricingHomePage /> },
-      { path: 'pricing/policies', element: <PricingPolicyPage /> },
-      { path: 'pricing/pricelists', element: <PriceListsPage /> },
-      { path: 'pricing/pricelists/:id', element: <PriceListDetailPage /> },
-      { path: 'pricing/overrides', element: <PriceOverridesPage /> },
-      { path: 'pricing/campaigns', element: <CampaignsPage /> },
-      { path: 'pricing/coupons', element: <CouponsPage /> },
-      { path: 'pricing/bulk', element: <BulkOperationsPage /> },
-      { path: 'pricing/quote', element: <QuotePreviewPage /> },
-      { path: 'pricing/product', element: <ProductPricingPage /> },
-      { path: 'pricing/report', element: <PricingReportPage /> },
+      {
+        path: 'pricing/policies',
+        element: (
+          <PermissionGate anyPermissions={[PricingPermissionKeys.PoliciesListView, PricingPermissionKeys.PoliciesView, PricingPermissionKeys.PoliciesEdit]}>
+            <PricingPolicyPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'pricing/pricelists',
+        element: (
+          <PermissionGate permission={PricingPermissionKeys.PriceListsView}>
+            <PriceListsPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'pricing/pricelists/:id',
+        element: (
+          <PermissionGate permission={PricingPermissionKeys.PriceListsDetailView}>
+            <PriceListDetailPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'pricing/overrides',
+        element: (
+          <PermissionGate permission={PricingPermissionKeys.OverridesView}>
+            <PriceOverridesPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'pricing/campaigns',
+        element: (
+          <PermissionGate permission={PricingPermissionKeys.CampaignsView}>
+            <CampaignsPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'pricing/coupons',
+        element: (
+          <PermissionGate permission={PricingPermissionKeys.CouponsView}>
+            <CouponsPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'pricing/bulk',
+        element: (
+          <PermissionGate anyPermissions={[PricingPermissionKeys.BulkPricesUpdate, PricingPermissionKeys.BulkCampaignsCategoryCreate]}>
+            <BulkOperationsPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'pricing/quote',
+        element: (
+          <PermissionGate permission={PricingPermissionKeys.QuotesCreate}>
+            <QuotePreviewPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'pricing/product',
+        element: (
+          <PermissionGate anyPermissions={[
+            PricingPermissionKeys.PriceListsView,
+            PricingPermissionKeys.PriceListsEdit,
+            PricingPermissionKeys.OverridesView,
+            PricingPermissionKeys.OverridesCreate,
+            PricingPermissionKeys.CampaignsView,
+            PricingPermissionKeys.CampaignsCreate,
+          ]}>
+            <ProductPricingPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'pricing/report',
+        element: (
+          <PermissionGate anyPermissions={[PricingPermissionKeys.PriceListsView, PricingPermissionKeys.OverridesView, PricingPermissionKeys.CampaignsView]}>
+            <PricingReportPage />
+          </PermissionGate>
+        ),
+      },
     ],
   },
 ])

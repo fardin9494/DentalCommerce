@@ -1,10 +1,12 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { LoginPage } from '../../app/LoginPage'
 import { useAdminAuth } from '../../app/auth'
+import { PermissionGate } from '@/app/permissions'
+import { SalesPermissionKeys } from '@/app/salesPermissionKeys'
 
 export function Layout() {
   const loc = useLocation()
-  const { token } = useAdminAuth()
+  const { token, logout } = useAdminAuth()
 
   if (!token) {
     return <LoginPage />
@@ -16,9 +18,22 @@ export function Layout() {
         <div className="container-std flex items-center justify-between h-14">
           <Link to="/" className="font-semibold">مدیریت فروش</Link>
           <nav className="flex items-center gap-4 text-sm">
-            <Link to="/sales/orders" className={navCls(loc.pathname.startsWith('/sales/orders'))}>سفارش‌ها</Link>
-            <Link to="/sales/reports" className={navCls(loc.pathname.startsWith('/sales/reports'))}>گزارش‌ها</Link>
+            <PermissionGate permission={SalesPermissionKeys.OrdersView}>
+              <Link to="/sales/orders" className={navCls(loc.pathname.startsWith('/sales/orders'))}>سفارش‌ها</Link>
+            </PermissionGate>
+            <PermissionGate anyPermissions={[
+              SalesPermissionKeys.ReportsDailyView,
+              SalesPermissionKeys.ReportsMonthlyView,
+              SalesPermissionKeys.ReportsBySiteView,
+              SalesPermissionKeys.ReportsByProductView,
+              SalesPermissionKeys.ReportsByCustomerView,
+            ]}>
+              <Link to="/sales/reports" className={navCls(loc.pathname.startsWith('/sales/reports'))}>گزارش‌ها</Link>
+            </PermissionGate>
             <Link to="/sales/test" className={navCls(loc.pathname.startsWith('/sales/test'))}>تست سناریو خرید</Link>
+            <button onClick={logout} className="px-3 py-1.5 rounded-md hover:bg-gray-100 text-sm">
+              خروج
+            </button>
           </nav>
         </div>
       </header>

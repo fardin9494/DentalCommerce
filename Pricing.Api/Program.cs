@@ -1,8 +1,12 @@
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Pricing.Api.Endpoints;
+using Pricing.Api.Infrastructure;
+using Pricing.Api.Permissions;
 using Pricing.Application.Abstractions;
 using Pricing.Application.Common.Behaviors;
 using Pricing.Application.Markers;
@@ -11,7 +15,6 @@ using Pricing.Infrastructure.Gateways;
 using Pricing.Infrastructure.Persistence;
 using Pricing.Infrastructure.Persistence.Converters;
 using Pricing.Infrastructure.Transactions;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
 using Pricing.Api;
@@ -50,8 +53,7 @@ builder.Services.AddScoped<PricingEngine>();
 var catalogApiUrl = builder.Configuration["CatalogApiUrl"]
     ?? throw new InvalidOperationException("CatalogApiUrl is not configured in appsettings.json");
 var catalogApiToken = builder.Configuration["CatalogApi:ServiceToken"]
-    ?? builder.Configuration["CatalogApi:Password"]
-    ?? throw new InvalidOperationException("CatalogApi:ServiceToken or CatalogApi:Password is not configured in appsettings.json");
+    ?? throw new InvalidOperationException("CatalogApi:ServiceToken is not configured in appsettings.json");
 
 builder.Services.AddHttpClient("CatalogApi", client =>
 {
@@ -59,16 +61,17 @@ builder.Services.AddHttpClient("CatalogApi", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestHeaders.Add("Accept", "application/json");
     client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", catalogApiToken);
-});
+}).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
 
 builder.Services.AddScoped<ICatalogPricingGateway, CatalogApiGateway>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddTransient<ForwardAuthorizationHeaderHandler>();
 
 // Inventory API gateway
 var inventoryApiUrl = builder.Configuration["InventoryApiUrl"]
     ?? throw new InvalidOperationException("InventoryApiUrl is not configured in appsettings.json");
 var inventoryApiToken = builder.Configuration["InventoryApi:ServiceToken"]
-    ?? builder.Configuration["InventoryApi:Password"]
-    ?? throw new InvalidOperationException("InventoryApi:ServiceToken or InventoryApi:Password is not configured in appsettings.json");
+    ?? throw new InvalidOperationException("InventoryApi:ServiceToken is not configured in appsettings.json");
 
 builder.Services.AddHttpClient("InventoryApi", client =>
 {
@@ -76,9 +79,50 @@ builder.Services.AddHttpClient("InventoryApi", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestHeaders.Add("Accept", "application/json");
     client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", inventoryApiToken);
-});
+}).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
 
 builder.Services.AddScoped<IInventoryBatchInfoGateway, InventoryApiGateway>();
+
+// Identity API + permissions
+var identityApiUrl = builder.Configuration["IdentityApiUrl"]
+    ?? throw new InvalidOperationException("IdentityApiUrl is not configured in appsettings.json");
+
+builder.Services.AddHttpClient("IdentityApi", client =>
+{
+    client.BaseAddress = new Uri(identityApiUrl);
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IPricingPermissionChecker, PricingPermissionChecker>();
+
+// JWT auth (issued by Identity)
+var jwtIssuer = builder.Configuration["Jwt:Issuer"]
+    ?? throw new InvalidOperationException("Jwt:Issuer is not configured in appsettings.json");
+var jwtAudience = builder.Configuration["Jwt:Audience"]
+    ?? throw new InvalidOperationException("Jwt:Audience is not configured in appsettings.json");
+var jwtSigningKey = builder.Configuration["Jwt:SigningKey"]
+    ?? throw new InvalidOperationException("Jwt:SigningKey is not configured in appsettings.json");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(opt =>
+    {
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSigningKey));
+        opt.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = key,
+            ClockSkew = TimeSpan.FromSeconds(15)
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -99,7 +143,16 @@ builder.Services.AddCors(opt =>
     {
         if (builder.Environment.IsDevelopment())
         {
-            p.WithOrigins("http://localhost:5173", "https://localhost:5173")
+            p.WithOrigins(
+                "http://localhost:5173",
+                "https://localhost:5173",
+                "http://localhost:5174",
+                "https://localhost:5174",
+                "http://localhost:5175",
+                "https://localhost:5175",
+                "http://localhost:5176",
+                "https://localhost:5176"
+            )
              .AllowAnyHeader()
              .AllowAnyMethod()
              .AllowCredentials();
@@ -125,75 +178,8 @@ if (app.Environment.IsDevelopment())
 // Run CORS before the admin gate so even 401 responses carry the headers
 app.UseCors(AdminCorsPolicy);
 
-// Simple shared-password gate for admin APIs (/api/pricing/*).
-// Service:Token allows internal services to call Pricing API.
-var adminPassword = app.Configuration["Admin:Password"];
-var adminPasswordHashHex = app.Configuration["Admin:PasswordHash"];
-var serviceToken = app.Configuration["Service:Token"]; // Service-to-service token
-byte[]? adminPasswordHash = null;
-if (!string.IsNullOrWhiteSpace(adminPasswordHashHex))
-{
-    adminPasswordHash = Convert.FromHexString(adminPasswordHashHex);
-}
-
-if (!string.IsNullOrWhiteSpace(adminPassword) || adminPasswordHash is not null || !string.IsNullOrWhiteSpace(serviceToken))
-{
-    app.Use(async (ctx, next) =>
-    {
-        // Allow CORS preflight without auth
-        if (HttpMethods.IsOptions(ctx.Request.Method))
-        {
-            await next();
-            return;
-        }
-
-        if (ctx.Request.Path.StartsWithSegments("/api/pricing"))
-        {
-            if (!ctx.Request.Headers.TryGetValue("Authorization", out var authHeader))
-            {
-                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                await ctx.Response.WriteAsync("Unauthorized");
-                return;
-            }
-
-            const string prefix = "Bearer ";
-            var auth = authHeader.ToString();
-            if (!auth.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                await ctx.Response.WriteAsync("Unauthorized");
-                return;
-            }
-
-            var token = auth[prefix.Length..].Trim();
-            var ok = false;
-
-            if (!string.IsNullOrWhiteSpace(serviceToken) && string.Equals(token, serviceToken, StringComparison.Ordinal))
-            {
-                ok = true;
-            }
-            else if (adminPasswordHash is not null)
-            {
-                var bytes = Encoding.UTF8.GetBytes(token);
-                var hash = SHA256.HashData(bytes);
-                ok = CryptographicOperations.FixedTimeEquals(hash, adminPasswordHash);
-            }
-            else if (!string.IsNullOrWhiteSpace(adminPassword))
-            {
-                ok = string.Equals(token, adminPassword, StringComparison.Ordinal);
-            }
-
-            if (!ok)
-            {
-                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                await ctx.Response.WriteAsync("Unauthorized");
-                return;
-            }
-        }
-
-        await next();
-    });
-}
+app.UseAuthentication();
+app.UseAuthorization();
 
 var env = app.Services.GetRequiredService<IHostEnvironment>();
 var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("GlobalException");
@@ -245,8 +231,9 @@ app.Use(async (ctx, next) =>
     }
 });
 
-var pricing = app.MapGroup("/api/pricing").DisableAntiforgery();
-pricing.MapGet("/auth/check", () => Results.NoContent());
+var pricing = app.MapGroup("/api/pricing")
+    .RequireAuthorization()
+    .DisableAntiforgery();
 
 pricing.MapQuoteEndpoints();
 pricing.MapPriceListEndpoints();

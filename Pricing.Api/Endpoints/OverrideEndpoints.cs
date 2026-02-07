@@ -1,4 +1,5 @@
 using MediatR;
+using Pricing.Api.Permissions;
 using Pricing.Application.Features.Overrides;
 using Pricing.Domain.Overrides;
 
@@ -14,19 +15,19 @@ public static class OverrideEndpoints
         {
             var result = await mediator.Send(new ListPriceOverridesQuery(scopeType, scopeId, skuId));
             return Results.Ok(result);
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.OverridesView);
 
         overrides.MapGet("/{id:guid}", async (Guid id, IMediator mediator) =>
         {
             var result = await mediator.Send(new GetPriceOverrideByIdQuery(id));
             return result is null ? Results.NotFound() : Results.Ok(result);
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.OverridesDetailView);
 
         overrides.MapPost("/", async (CreatePriceOverrideCommand cmd, IMediator mediator) =>
         {
             var id = await mediator.Send(cmd);
             return Results.Created($"/api/pricing/overrides/{id}", new { id });
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.OverridesCreate);
 
         overrides.MapPut("/{id:guid}", async (Guid id, UpdatePriceOverrideBody body, IMediator mediator) =>
         {
@@ -40,13 +41,13 @@ public static class OverrideEndpoints
                 body.Priority,
                 body.StackingGroup));
             return Results.NoContent();
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.OverridesEdit);
 
         overrides.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) =>
         {
             await mediator.Send(new DeletePriceOverrideCommand(id));
             return Results.NoContent();
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.OverridesDelete);
 
         return group;
     }

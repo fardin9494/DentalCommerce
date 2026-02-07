@@ -1,4 +1,5 @@
 using MediatR;
+using Pricing.Api.Permissions;
 using Pricing.Application.Features.Bulk.Commands;
 
 namespace Pricing.Api.Endpoints;
@@ -13,13 +14,13 @@ public static class BulkEndpoints
         {
             var updated = await mediator.Send(cmd);
             return Results.Ok(new { updated });
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.BulkPricesUpdate);
 
         bulk.MapPost("/campaigns/category", async (BulkCreateCategoryCampaignCommand cmd, IMediator mediator) =>
         {
             var created = await mediator.Send(cmd);
             return Results.Ok(new { created });
-        });
+        }).RequirePricingPermission(PricingPermissionKeys.BulkCampaignsCategoryCreate);
 
         return group;
     }

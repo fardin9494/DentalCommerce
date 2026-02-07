@@ -62,6 +62,30 @@ public static class AdminEndpoints
             return Results.NoContent();
         });
 
+        admin.MapGet("/users/{id:guid}/permissions/pricing", async (Guid id, IMediator mediator) =>
+        {
+            var result = await mediator.Send(new GetPricingPermissionsQuery(id));
+            return Results.Ok(result);
+        });
+
+        admin.MapPost("/users/{id:guid}/permissions/pricing", async (Guid id, UpdatePricingPermissionsRequest body, IMediator mediator) =>
+        {
+            await mediator.Send(new UpdatePricingPermissionsCommand(id, body));
+            return Results.NoContent();
+        });
+
+        admin.MapGet("/users/{id:guid}/permissions/sales", async (Guid id, IMediator mediator) =>
+        {
+            var result = await mediator.Send(new GetSalesPermissionsQuery(id));
+            return Results.Ok(result);
+        });
+
+        admin.MapPost("/users/{id:guid}/permissions/sales", async (Guid id, UpdateSalesPermissionsRequest body, IMediator mediator) =>
+        {
+            await mediator.Send(new UpdateSalesPermissionsCommand(id, body));
+            return Results.NoContent();
+        });
+
         admin.MapPost("/users/{id:guid}/ban", async (Guid id, BanUserRequest body, IMediator mediator) =>
         {
             await mediator.Send(new BanUserCommand(id, body));

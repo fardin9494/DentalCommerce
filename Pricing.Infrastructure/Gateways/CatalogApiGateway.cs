@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Text.Json;
 using Pricing.Application.Abstractions;
 using Microsoft.Extensions.Logging;
@@ -51,7 +52,18 @@ public sealed class CatalogApiGateway : ICatalogPricingGateway
 
         var tasks = missing.Select(sku => ResolveWithThrottleAsync(sku, ct));
 
-        var resolved = await Task.WhenAll(tasks);
+        (string Sku, CatalogSkuInfo? Info)[] resolved;
+        try
+        {
+            resolved = await Task.WhenAll(tasks);
+        }
+        catch (CatalogAccessDeniedException ex)
+        {
+            throw new InvalidOperationException(
+                "Access to Catalog metadata was denied. Required permissions: Catalog.Products.ResolveBySku and Catalog.Products.View.",
+                ex);
+        }
+
         foreach (var item in resolved)
         {
             if (item.Info is null) continue;
@@ -100,6 +112,8 @@ public sealed class CatalogApiGateway : ICatalogPricingGateway
         {
             var url = $"/api/catalog/products/by-sku?sku={Uri.EscapeDataString(sku)}";
             var response = await _httpClient.GetAsync(url, ct);
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                throw new CatalogAccessDeniedException(response.StatusCode);
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -109,6 +123,10 @@ public sealed class CatalogApiGateway : ICatalogPricingGateway
                 return null;
 
             return await LoadProductDetailsAsync(resolved.ProductId, sku, ct);
+        }
+        catch (CatalogAccessDeniedException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -123,6 +141,8 @@ public sealed class CatalogApiGateway : ICatalogPricingGateway
         {
             var url = $"/api/catalog/products?search={Uri.EscapeDataString(sku)}&page=1&pageSize=10";
             var response = await _httpClient.GetAsync(url, ct);
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                throw new CatalogAccessDeniedException(response.StatusCode);
 
             if (!response.IsSuccessStatusCode)
                 return null;
@@ -148,6 +168,10 @@ public sealed class CatalogApiGateway : ICatalogPricingGateway
 
             return null;
         }
+        catch (CatalogAccessDeniedException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to resolve SKU {SkuId} from Catalog API", sku);
@@ -160,6 +184,8 @@ public sealed class CatalogApiGateway : ICatalogPricingGateway
         try
         {
             var response = await _httpClient.GetAsync($"/api/catalog/products/{productId}", ct);
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                throw new CatalogAccessDeniedException(response.StatusCode);
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -194,6 +220,10 @@ public sealed class CatalogApiGateway : ICatalogPricingGateway
                 Tags: tags,
                 IsBatchSelectable: isBatchSelectable,
                 MinAllowedPrice: minAllowedPrice);
+        }
+        catch (CatalogAccessDeniedException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -251,6 +281,14 @@ public sealed class CatalogApiGateway : ICatalogPricingGateway
     }
 
     private sealed record CacheEntry(CatalogSkuInfo Value, DateTime ExpiresAt);
+
+    private sealed class CatalogAccessDeniedException : Exception
+    {
+        public CatalogAccessDeniedException(HttpStatusCode statusCode)
+            : base($"Catalog API denied access with status {(int)statusCode}.")
+        {
+        }
+    }
 
     private sealed class ProductListResponse
     {

@@ -55,6 +55,20 @@ public static class UserEndpoints
             return Results.Ok(dto);
         });
 
+        me.MapGet("/permissions/pricing", async (HttpContext ctx, IMediator mediator) =>
+        {
+            var userId = ClaimsHelper.GetUserId(ctx.User);
+            var dto = await mediator.Send(new GetPricingPermissionsQuery(userId));
+            return Results.Ok(dto);
+        });
+
+        me.MapGet("/permissions/sales", async (HttpContext ctx, IMediator mediator) =>
+        {
+            var userId = ClaimsHelper.GetUserId(ctx.User);
+            var dto = await mediator.Send(new GetSalesPermissionsQuery(userId));
+            return Results.Ok(dto);
+        });
+
         return group;
     }
 }

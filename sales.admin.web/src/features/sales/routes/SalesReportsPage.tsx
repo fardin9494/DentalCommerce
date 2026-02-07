@@ -3,6 +3,8 @@ import { fetchJson, fetchJsonWithBase } from '@/lib/api/client'
 import { CATALOG_API_BASE } from '@/app/env'
 import { formatDate, formatNumber } from '@/shared/utils/date'
 import { useToast } from '@/shared/components/toast/ToastProvider'
+import { useSalesPermissions } from '@/app/permissions'
+import { SalesPermissionKeys } from '@/app/salesPermissionKeys'
 
 type StoreOption = { id: string; name: string; domain?: string | null }
 
@@ -51,6 +53,12 @@ type CustomerItem = {
 
 export function SalesReportsPage() {
   const toast = useToast()
+  const { can } = useSalesPermissions()
+  const canDaily = can(SalesPermissionKeys.ReportsDailyView)
+  const canMonthly = can(SalesPermissionKeys.ReportsMonthlyView)
+  const canBySite = can(SalesPermissionKeys.ReportsBySiteView)
+  const canByProduct = can(SalesPermissionKeys.ReportsByProductView)
+  const canByCustomer = can(SalesPermissionKeys.ReportsByCustomerView)
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [siteId, setSiteId] = useState('')
@@ -87,15 +95,25 @@ export function SalesReportsPage() {
   }, [fromDate, toDate, siteId, statusFilter])
 
   const loadReports = async () => {
+    if (!canDaily && !canMonthly && !canBySite && !canByProduct && !canByCustomer) {
+      setDaily([])
+      setMonthly([])
+      setBySite([])
+      setByProduct([])
+      setByCustomer([])
+      setHasLoadedOnce(true)
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
       const [d, m, s, p, c] = await Promise.all([
-        fetchJson<DailyItem[]>(`/sales/reports/daily${queryString.withSite}`),
-        fetchJson<MonthlyItem[]>(`/sales/reports/monthly${queryString.withSite}`),
-        fetchJson<SiteItem[]>(`/sales/reports/by-site${queryString.noSite}`),
-        fetchJson<ProductItem[]>(`/sales/reports/by-product${queryString.withSite}`),
-        fetchJson<CustomerItem[]>(`/sales/reports/by-customer${queryString.withSite}`),
+        canDaily ? fetchJson<DailyItem[]>(`/sales/reports/daily${queryString.withSite}`) : Promise.resolve([] as DailyItem[]),
+        canMonthly ? fetchJson<MonthlyItem[]>(`/sales/reports/monthly${queryString.withSite}`) : Promise.resolve([] as MonthlyItem[]),
+        canBySite ? fetchJson<SiteItem[]>(`/sales/reports/by-site${queryString.noSite}`) : Promise.resolve([] as SiteItem[]),
+        canByProduct ? fetchJson<ProductItem[]>(`/sales/reports/by-product${queryString.withSite}`) : Promise.resolve([] as ProductItem[]),
+        canByCustomer ? fetchJson<CustomerItem[]>(`/sales/reports/by-customer${queryString.withSite}`) : Promise.resolve([] as CustomerItem[]),
       ])
       setDaily(d || [])
       setMonthly(m || [])
@@ -118,7 +136,7 @@ export function SalesReportsPage() {
       loadReports()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter])
+  }, [statusFilter, canDaily, canMonthly, canBySite, canByProduct, canByCustomer])
 
   // Load all stores on component mount
   useEffect(() => {
@@ -353,59 +371,69 @@ export function SalesReportsPage() {
         )}
       </div>
 
-      <ReportTable
-        title="گزارش روزانه"
-        headers={['تاریخ', 'تعداد سفارش', 'تعداد آیتم', 'جمع نهایی']}
-        rows={daily.map(d => [
-          formatDate(d.date),
-          formatNumber(d.ordersCount),
-          formatNumber(d.itemsCount),
-          formatNumber(d.finalTotal),
-        ])}
-      />
+      {canDaily && (
+        <ReportTable
+          title="گزارش روزانه"
+          headers={['تاریخ', 'تعداد سفارش', 'تعداد آیتم', 'جمع نهایی']}
+          rows={daily.map(d => [
+            formatDate(d.date),
+            formatNumber(d.ordersCount),
+            formatNumber(d.itemsCount),
+            formatNumber(d.finalTotal),
+          ])}
+        />
+      )}
 
-      <ReportTable
-        title="گزارش ماهانه"
-        headers={['ماه', 'تعداد سفارش', 'تعداد آیتم', 'جمع نهایی']}
-        rows={monthly.map(m => [
-          `${m.year}-${String(m.month).padStart(2, '0')}`,
-          formatNumber(m.ordersCount),
-          formatNumber(m.itemsCount),
-          formatNumber(m.finalTotal),
-        ])}
-      />
+      {canMonthly && (
+        <ReportTable
+          title="گزارش ماهانه"
+          headers={['ماه', 'تعداد سفارش', 'تعداد آیتم', 'جمع نهایی']}
+          rows={monthly.map(m => [
+            `${m.year}-${String(m.month).padStart(2, '0')}`,
+            formatNumber(m.ordersCount),
+            formatNumber(m.itemsCount),
+            formatNumber(m.finalTotal),
+          ])}
+        />
+      )}
 
-      <ReportTable
-        title="فروش به تفکیک سایت"
-        headers={['سایت', 'تعداد سفارش', 'تعداد آیتم', 'جمع نهایی']}
-        rows={bySite.map(s => [
-          s.siteDomain ? `${s.siteName} (${s.siteDomain})` : (s.siteName || s.siteId),
-          formatNumber(s.ordersCount),
-          formatNumber(s.itemsCount),
-          formatNumber(s.finalTotal),
-        ])}
-      />
+      {canBySite && (
+        <ReportTable
+          title="فروش به تفکیک سایت"
+          headers={['سایت', 'تعداد سفارش', 'تعداد آیتم', 'جمع نهایی']}
+          rows={bySite.map(s => [
+            s.siteDomain ? `${s.siteName} (${s.siteDomain})` : (s.siteName || s.siteId),
+            formatNumber(s.ordersCount),
+            formatNumber(s.itemsCount),
+            formatNumber(s.finalTotal),
+          ])}
+        />
+      )}
 
-      <ReportTable
-        title="فروش به تفکیک محصول (SKU)"
-        headers={['SKU', 'تعداد سفارش', 'تعداد', 'درآمد']}
-        rows={byProduct.map(p => [
-          p.skuId,
-          formatNumber(p.ordersCount),
-          formatNumber(p.quantity),
-          formatNumber(p.revenue),
-        ])}
-      />
+      {canByProduct && (
+        <ReportTable
+          title="فروش به تفکیک محصول (SKU)"
+          headers={['SKU', 'تعداد سفارش', 'تعداد', 'درآمد']}
+          rows={byProduct.map(p => [
+            p.skuId,
+            formatNumber(p.ordersCount),
+            formatNumber(p.quantity),
+            formatNumber(p.revenue),
+          ])}
+        />
+      )}
 
-      <ReportTable
-        title="فروش به تفکیک مشتری"
-        headers={['مشتری', 'تعداد سفارش', 'جمع نهایی']}
-        rows={byCustomer.map(c => [
-          c.userId || 'Anonymous',
-          formatNumber(c.ordersCount),
-          formatNumber(c.finalTotal),
-        ])}
-      />
+      {canByCustomer && (
+        <ReportTable
+          title="فروش به تفکیک مشتری"
+          headers={['مشتری', 'تعداد سفارش', 'جمع نهایی']}
+          rows={byCustomer.map(c => [
+            c.userId || 'Anonymous',
+            formatNumber(c.ordersCount),
+            formatNumber(c.finalTotal),
+          ])}
+        />
+      )}
     </div>
   )
 }
